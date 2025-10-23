@@ -169,6 +169,24 @@ The included Agent Skill teaches Claude about:
 - Best practices for console interaction
 - Error handling strategies
 
+### Global Installation (Recommended)
+
+Install the skill globally to use it across all Claude Code projects:
+
+**Quick Install (PowerShell)**:
+```powershell
+# Create directory and copy skill
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\skills\gns3"
+Copy-Item "C:\HOME\1. Scripts\008. GNS3 MCP\skill\SKILL.md" `
+  -Destination "$env:USERPROFILE\.claude\skills\gns3\SKILL.md"
+```
+
+**Status**: ✓ Already installed globally at `C:\Users\mail4\.claude\skills\gns3\SKILL.md`
+
+See [GLOBAL_SKILL_INSTALLATION.md](GLOBAL_SKILL_INSTALLATION.md) for complete installation instructions, troubleshooting, and best practices.
+
+---
+
 See `skill/SKILL.md` for complete documentation.
 
 ## API Reference
