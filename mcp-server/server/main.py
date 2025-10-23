@@ -1579,8 +1579,8 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 # and left alignment with small padding
                 padding = 10
                 svg_inner = re.sub(
-                    r'<text\s+',
-                    f'<text x="{padding}" y="{svg_height // 2}" text-anchor="start" dominant-baseline="central" ',
+                    r'<text(\s)',
+                    f'<text x="{padding}" y="{svg_height // 2}" text-anchor="start" dominant-baseline="central"\\1',
                     svg_inner,
                     count=1
                 )
