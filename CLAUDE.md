@@ -1,0 +1,1 @@
+- update extension version every time when update made. Minor or sub-version, depending on the change

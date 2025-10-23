@@ -65,7 +65,7 @@ class ConsoleManager:
         try:
             # Connect via telnet
             reader, writer = await telnetlib3.open_connection(
-                host, port, encoding='utf-8', errors='replace'
+                host, port, encoding='utf-8'
             )
 
             session = ConsoleSession(

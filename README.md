@@ -209,6 +209,11 @@ Authentication: `Authorization: Bearer <JWT_TOKEN>`
 ├── skill/
 │   ├── SKILL.md                 # Agent skill documentation
 │   └── examples/                # Workflow examples
+├── tests/
+│   ├── test_mcp_server.py       # Automated test suite
+│   ├── simple_console_test.py   # Direct console testing
+│   ├── ALPINE_SETUP_GUIDE.md    # Test device setup guide
+│   └── README.md                # Testing documentation
 ├── data/
 │   ├── dump.pcapng             # Traffic analysis (reference)
 │   └── SESSION.txt             # HTTP session analysis
@@ -218,6 +223,8 @@ Authentication: `Authorization: Bearer <JWT_TOKEN>`
 
 ### Testing
 
+#### Manual Testing
+
 1. Start GNS3 server
 2. Create/open a test project
 3. Run MCP server in dev mode:
@@ -225,6 +232,20 @@ Authentication: `Authorization: Bearer <JWT_TOKEN>`
    mcp dev server/main.py --host YOUR_GNS3_IP --port 80 --username admin --password YOUR_PASSWORD
    ```
 4. Test tools in MCP Inspector
+
+#### Automated Testing
+
+1. Setup test device (see `tests/ALPINE_SETUP_GUIDE.md`)
+2. Run direct console test:
+   ```bash
+   python tests/simple_console_test.py --host YOUR_GNS3_IP --port CONSOLE_PORT
+   ```
+3. Run full MCP test suite:
+   ```bash
+   python tests/test_mcp_server.py --password YOUR_PASSWORD --test-node "Alpine-Test"
+   ```
+
+See `tests/README.md` for complete testing documentation.
 
 ### Adding New Tools
 
