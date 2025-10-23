@@ -1,7 +1,12 @@
-"""GNS3 MCP Server v0.3.0
+"""GNS3 MCP Server v0.3.2
 
 Model Context Protocol server for GNS3 lab automation.
 Provides tools for managing projects, nodes, links, and console access.
+
+Version 0.3.2 - Feature Enhancement:
+- set_node() supports hardware configuration (rename, RAM, CPUs, HDD, adapters)
+- Validation ensures node is stopped when renaming
+- Cache invalidation after node property updates
 
 Version 0.3.0 - Breaking Changes:
 - All tools now return JSON (not formatted strings)
@@ -519,17 +524,29 @@ async def set_node(ctx: Context,
                    y: Optional[int] = None,
                    z: Optional[int] = None,
                    locked: Optional[bool] = None,
-                   ports: Optional[int] = None) -> str:
+                   ports: Optional[int] = None,
+                   name: Optional[str] = None,
+                   ram: Optional[int] = None,
+                   cpus: Optional[int] = None,
+                   hdd_disk_image: Optional[str] = None,
+                   adapters: Optional[int] = None,
+                   console_type: Optional[str] = None) -> str:
     """Configure node properties and/or control node state
 
     Args:
-        node_name: Name of the node
+        node_name: Name of the node to modify
         action: Action to perform (start/stop/suspend/reload/restart)
         x: X coordinate
         y: Y coordinate
         z: Z-order (layer)
         locked: Lock node position
         ports: Number of ports (for ethernet switches)
+        name: New name for the node (requires node to be stopped)
+        ram: RAM in MB (QEMU nodes)
+        cpus: Number of CPUs (QEMU nodes)
+        hdd_disk_image: Path to HDD disk image (QEMU nodes)
+        adapters: Number of network adapters (QEMU nodes)
+        console_type: Console type (telnet, vnc, spice, etc.)
 
     Returns:
         Status message describing what was done
@@ -537,17 +554,35 @@ async def set_node(ctx: Context,
     app: AppContext = ctx.request_context.lifespan_context
 
     if not app.current_project_id:
-        return "No project opened"
+        return json.dumps(ErrorResponse(
+            error="No project opened",
+            details="Use open_project() to open a project first"
+        ).model_dump(), indent=2)
 
     # Find node
     nodes = await app.gns3.get_nodes(app.current_project_id)
     node = next((n for n in nodes if n['name'] == node_name), None)
 
     if not node:
-        return f"Node '{node_name}' not found"
+        return json.dumps(ErrorResponse(
+            error="Node not found",
+            details=f"Node '{node_name}' does not exist in current project"
+        ).model_dump(), indent=2)
 
     node_id = node['node_id']
+    node_status = node.get('status', 'unknown')
     results = []
+
+    # Validate stopped state for properties that require it
+    requires_stopped = []
+    if name is not None:
+        requires_stopped.append('name')
+
+    if requires_stopped and node_status != 'stopped':
+        return json.dumps(ErrorResponse(
+            error="Node must be stopped",
+            details=f"Properties {requires_stopped} can only be changed when node is stopped. Current status: {node_status}. Use set_node(node_name='{node_name}', action='stop') first."
+        ).model_dump(), indent=2)
 
     # Handle property updates
     properties = {}
@@ -559,6 +594,18 @@ async def set_node(ctx: Context,
         properties['z'] = z
     if locked is not None:
         properties['locked'] = locked
+    if name is not None:
+        properties['name'] = name
+    if ram is not None:
+        properties['ram'] = ram
+    if cpus is not None:
+        properties['cpus'] = cpus
+    if hdd_disk_image is not None:
+        properties['hdd_disk_image'] = hdd_disk_image
+    if adapters is not None:
+        properties['adapters'] = adapters
+    if console_type is not None:
+        properties['console_type'] = console_type
     if ports is not None:
         # For ethernet switches, update ports_mapping
         if node['node_type'] == 'ethernet_switch':
@@ -573,12 +620,19 @@ async def set_node(ctx: Context,
     if properties:
         try:
             await app.gns3.update_node(app.current_project_id, node_id, properties)
+
+            # Invalidate cache after node modification
+            await app.cache.invalidate_nodes(app.current_project_id)
+
             prop_list = ", ".join(f"{k}={v}" for k, v in properties.items() if k != 'ports_mapping')
             if 'ports_mapping' in properties:
                 prop_list += f", ports={ports}"
             results.append(f"Updated properties: {prop_list}")
         except Exception as e:
-            return f"Failed to update properties: {str(e)}"
+            return json.dumps(ErrorResponse(
+                error="Failed to update properties",
+                details=str(e)
+            ).model_dump(), indent=2)
 
     # Handle action
     if action:
@@ -624,15 +678,22 @@ async def set_node(ctx: Context,
                 results.append(f"Started {node_name}")
 
             else:
-                return f"Unknown action: {action}. Valid: start, stop, suspend, reload, restart"
+                return json.dumps(ErrorResponse(
+                    error="Unknown action",
+                    details=f"Action '{action}' not recognized. Valid actions: start, stop, suspend, reload, restart"
+                ).model_dump(), indent=2)
 
         except Exception as e:
-            results.append(f"Action failed: {str(e)}")
+            return json.dumps(ErrorResponse(
+                error="Action failed",
+                details=str(e)
+            ).model_dump(), indent=2)
 
     if not results:
-        return f"No changes made to {node_name}"
+        return json.dumps({"message": f"No changes made to {node_name}"}, indent=2)
 
-    return "\n".join(results)
+    # Return success with list of changes
+    return json.dumps({"message": "Node updated successfully", "changes": results}, indent=2)
 
 
 # Console helper function
