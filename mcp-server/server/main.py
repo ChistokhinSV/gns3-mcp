@@ -1549,7 +1549,7 @@ async def export_topology_diagram(ctx: Context, output_path: str,
       .node-stopped {{ fill: #ff9999; }}
       .node-started {{ fill: #99ff99; }}
       .node-suspended {{ fill: #ffff99; }}
-      .node-label {{ text-anchor: start; dominant-baseline: hanging; }}
+      .node-label {{ text-anchor: end; dominant-baseline: central; }}
       .link {{ stroke: #666; stroke-width: 2; fill: none; }}
     </style>
   </defs>
@@ -1774,10 +1774,27 @@ async def export_topology_diagram(ctx: Context, output_path: str,
             # GNS3 stores label offset from node top-left to label box top-left
             label_info = node.get('label', {})
             label_text = label_info.get('text', name)
-            label_x = label_info.get('x', 0)
-            label_y = label_info.get('y', icon_size//2 + 20)
+            label_x_offset = label_info.get('x', 0)
+            label_y_offset = label_info.get('y', icon_size//2 + 20)
             label_rotation = label_info.get('rotation', 0)
             label_style = label_info.get('style', '')
+
+            # Estimate label bounding box dimensions
+            # Extract font size from style, default to 10
+            import re
+            font_size = 10.0
+            if label_style:
+                font_match = re.search(r'font-size:\s*(\d+\.?\d*)', label_style)
+                if font_match:
+                    font_size = float(font_match.group(1))
+
+            # Estimate label box dimensions (rough approximation)
+            estimated_width = len(label_text) * font_size * 0.6
+            estimated_height = font_size * 1.5
+
+            # Position text at right edge and vertical center of bounding box
+            label_x = label_x_offset + estimated_width
+            label_y = label_y_offset + estimated_height / 2
 
             # Parse style string into SVG attributes
             style_attrs = ''
