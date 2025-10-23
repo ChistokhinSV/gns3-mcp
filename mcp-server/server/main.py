@@ -1574,15 +1574,15 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
             # Fix text elements without positioning attributes
             # Add x, y, text-anchor, and dominant-baseline for proper centering
-            if '<text' in svg_inner and 'x=' not in svg_inner:
+            if '<text' in svg_inner and 'x="' not in svg_inner:
                 # Text element without x attribute - add positioning for vertical centering
                 # and left alignment with small padding
                 padding = 10
-                svg_inner = re.sub(
-                    r'<text(\s)',
-                    f'<text x="{padding}" y="{svg_height // 2}" text-anchor="start" dominant-baseline="central"\\1',
-                    svg_inner,
-                    count=1
+                # Insert positioning attributes right after <text tag
+                svg_inner = svg_inner.replace(
+                    '<text',
+                    f'<text x="{padding}" y="{svg_height // 2}" text-anchor="start" dominant-baseline="central"',
+                    1  # Only replace first occurrence
                 )
 
             svg_content += f'''  <g transform="translate({drawing['x']}, {drawing['y']})">
