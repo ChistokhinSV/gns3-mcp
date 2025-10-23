@@ -5,11 +5,14 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
 ## Features
 
 - **Project Management**: List, open GNS3 projects
-- **Node Control**: Start, stop nodes; get detailed status
-- **Console Access**: Connect to device consoles (telnet), send commands, read output
-- **Output Diff Tracking**: Read only new console output since last check
-- **Multi-Session**: Support multiple concurrent console connections
+- **Unified Node Control** (v0.2.0): Single tool for start/stop/restart/configure nodes
+- **Auto-Connect Console** (v0.2.0): Automatic session management by node name
+- **Console Access**: Telnet console with clean output (ANSI stripped, normalized line endings)
+- **Output Diff Tracking**: Read full buffer or only new output since last check
+- **Link Management** (v0.2.0): Batch connect/disconnect network connections
+- **Node Configuration** (v0.2.0): Position, lock, configure switch ports
 - **Desktop Extension**: One-click installation in Claude Desktop
+- **Multi-Session**: Support multiple concurrent console connections
 
 ## Architecture
 
@@ -164,20 +167,26 @@ Based on traffic analysis, typical setup:
 ### Node Operations
 - `list_nodes()` - List all nodes in current project
 - `get_node_details(node_name)` - Get node info (console, status, ports)
-- `start_node(node_name)` - Start a node
-- `stop_node(node_name)` - Stop a node
+- `set_node(node_name, action, x, y, z, locked, ports)` - **[v0.2.0]** Unified node control
+  - Actions: `start`, `stop`, `suspend`, `reload`, `restart`
+  - Properties: position (x, y, z), locked, switch ports
+  - Restart with automatic retry logic (3 attempts × 5 seconds)
 
-### Console Operations
-- `connect_console(node_name)` - Connect to telnet console, returns session_id
-- `send_console(session_id, data)` - Send commands/keystrokes
-- `read_console(session_id)` - Read full console buffer
-- `read_console_diff(session_id)` - Read only new output since last read
-- `disconnect_console(session_id)` - Close console session
-- `list_console_sessions()` - List active sessions
+### Console Operations (Auto-Connect)
+- `send_console(node_name, data)` - **[v0.2.0]** Send commands (auto-connects)
+- `read_console(node_name, diff)` - **[v0.2.0]** Read console output
+  - `diff=False` (default): full buffer
+  - `diff=True`: only new output since last read
+- `disconnect_console(node_name)` - **[v0.2.0]** Close console session
+
+### Link Management
+- `set_connection(connections)` - **[v0.2.0]** Batch connect/disconnect links
+  - Sequential execution with predictable state
+  - Returns completed and failed operations
 
 ## Usage Examples
 
-### Start a Lab
+### Start a Lab (v0.2.0)
 
 ```python
 # List available projects
@@ -190,48 +199,152 @@ open_project("My Network Lab")
 list_nodes()
 
 # Start a router
-start_node("Router1")
+set_node("Router1", action="start")
+
+# Or restart with retry logic
+set_node("Router1", action="restart")
 ```
 
-### Configure Router via Console
+### Configure Router via Console (v0.2.0)
 
 ```python
-# Connect to console
-session_id = connect_console("Router1")  # Returns: session_id
+# Send commands (auto-connects on first use)
+send_console("Router1", "\n")  # Wake up console
+output = read_console("Router1", diff=True)  # Check prompt
 
-# Send commands
-send_console(session_id, "\n")  # Wake up console
-output = read_console_diff(session_id)  # Check prompt
-
-send_console(session_id, "/ip address print\n")
-output = read_console_diff(session_id)  # Read command output
+# Send configuration command
+send_console("Router1", "/ip address print\n")
+output = read_console("Router1", diff=True)  # Read new output only
 
 # Disconnect when done
-disconnect_console(session_id)
+disconnect_console("Router1")
 ```
 
-### Multi-Device Automation
+### Multi-Device Automation (v0.2.0)
 
 ```python
 # Start all routers
 for router in ["R1", "R2", "R3"]:
-    start_node(router)
+    set_node(router, action="start")
 
-# Configure each
-sessions = {}
+# Configure each router
 for router in ["R1", "R2", "R3"]:
-    sessions[router] = connect_console(router)
-    send_console(sessions[router], "configure commands...\n")
+    # Send configuration (auto-connects)
+    send_console(router, "\n")
+    read_console(router, diff=True)  # Check prompt
 
-# Read results
-for router, sid in sessions.items():
-    output = read_console_diff(sid)
+    send_console(router, "configure commands...\n")
+    output = read_console(router, diff=True)
     # Process output...
 
-# Cleanup
-for sid in sessions.values():
-    disconnect_console(sid)
+    # Disconnect when done
+    disconnect_console(router)
 ```
+
+### Manage Network Topology (v0.2.0)
+
+```python
+# Get current links
+links = get_links(project_id)
+
+# Batch link operations
+set_connection([
+    # Disconnect old link
+    {"action": "disconnect", "link_id": "old-link-id"},
+
+    # Connect R1 to Switch1
+    {"action": "connect", "node_a": "R1", "port_a": 0,
+     "node_b": "Switch1", "port_b": 3},
+
+    # Connect R2 to Switch1
+    {"action": "connect", "node_a": "R2", "port_a": 0,
+     "node_b": "Switch1", "port_b": 4}
+])
+```
+
+### Configure Node Properties (v0.2.0)
+
+```python
+# Position and lock node
+set_node("Router1", x=100, y=200, locked=True)
+
+# Configure switch ports
+set_node("Switch1", ports=16)
+
+# Combined: start and position
+set_node("Router1", action="start", x=150, y=300)
+```
+
+## Migration Guide (v0.1.x → v0.2.0)
+
+Version 0.2.0 introduces breaking changes to simplify the API and improve usability.
+
+### Removed Tools
+
+The following tools have been removed or consolidated:
+
+| Removed Tool | Replacement | Notes |
+|-------------|-------------|-------|
+| `connect_console(node_name)` | *(auto-connect)* | No manual connect needed |
+| `read_console_diff(session_id)` | `read_console(node_name, diff=True)` | Merged into single tool |
+| `list_console_sessions()` | *(removed)* | Sessions managed automatically |
+| `start_node(node_name)` | `set_node(node_name, action="start")` | Unified control |
+| `stop_node(node_name)` | `set_node(node_name, action="stop")` | Unified control |
+
+### Updated Tool Signatures
+
+**Console Operations:**
+```python
+# OLD (v0.1.x)
+session_id = connect_console("Router1")
+send_console(session_id, "command\n")
+output = read_console_diff(session_id)
+disconnect_console(session_id)
+
+# NEW (v0.2.0)
+send_console("Router1", "command\n")  # Auto-connects
+output = read_console("Router1", diff=True)
+disconnect_console("Router1")
+```
+
+**Node Control:**
+```python
+# OLD (v0.1.x)
+start_node("Router1")
+stop_node("Router1")
+
+# NEW (v0.2.0)
+set_node("Router1", action="start")
+set_node("Router1", action="stop")
+set_node("Router1", action="restart")  # New: with retry logic
+```
+
+### New Features
+
+**Link Management:**
+```python
+# Batch connect/disconnect operations
+set_connection([
+    {"action": "disconnect", "link_id": "abc123"},
+    {"action": "connect", "node_a": "R1", "port_a": 0,
+     "node_b": "R2", "port_b": 1}
+])
+```
+
+**Node Configuration:**
+```python
+# Position, lock, and configure nodes
+set_node("Router1", x=100, y=200, locked=True)
+set_node("Switch1", ports=16)
+```
+
+### Benefits
+
+- **Simpler API**: No session_id tracking needed
+- **Auto-connect**: Console operations "just work"
+- **Unified control**: Single tool for all node operations
+- **Batch operations**: Change multiple links atomically
+- **Retry logic**: Built-in restart with polling
 
 ## Agent Skill
 
@@ -266,17 +379,28 @@ See `skill/SKILL.md` for complete documentation.
 
 ### GNS3 API v3 Endpoints (Confirmed)
 
-Based on actual traffic analysis:
+Based on actual traffic analysis and implementation:
 
+**Authentication:**
 - `POST /v3/access/users/authenticate` - JWT authentication
+- Header: `Authorization: Bearer <JWT_TOKEN>`
+
+**Projects:**
 - `GET /v3/projects` - List projects
 - `POST /v3/projects/{id}/open` - Open project
+
+**Nodes:**
 - `GET /v3/projects/{id}/nodes` - List nodes
-- `GET /v3/projects/{id}/links` - List links
 - `POST /v3/projects/{id}/nodes/{node_id}/start` - Start node
 - `POST /v3/projects/{id}/nodes/{node_id}/stop` - Stop node
+- `POST /v3/projects/{id}/nodes/{node_id}/suspend` - Suspend node *(v0.2.0)*
+- `POST /v3/projects/{id}/nodes/{node_id}/reload` - Reload node *(v0.2.0)*
+- `PUT /v3/projects/{id}/nodes/{node_id}` - Update node properties *(v0.2.0)*
 
-Authentication: `Authorization: Bearer <JWT_TOKEN>`
+**Links:**
+- `GET /v3/projects/{id}/links` - List links
+- `POST /v3/projects/{id}/links` - Create link *(v0.2.0)*
+- `DELETE /v3/projects/{id}/links/{link_id}` - Delete link *(v0.2.0)*
 
 ### Console Access
 
