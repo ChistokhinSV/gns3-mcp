@@ -1477,10 +1477,11 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
             for node in nodes:
                 x, y = node['x'], node['y']
-                min_x = min(min_x, x - 256)  # Node icon half-width
-                max_x = max(max_x, x + 256)
-                min_y = min(min_y, y - 256)
-                max_y = max(max_y, y + 256)
+                # Account for hexagon node size (60px radius) + label below (+80px)
+                min_x = min(min_x, x - 80)
+                max_x = max(max_x, x + 80)
+                min_y = min(min_y, y - 80)
+                max_y = max(max_y, y + 100)  # Extra space for label below
 
             for drawing in drawings:
                 # Parse SVG to get dimensions (basic parsing)
@@ -1559,12 +1560,24 @@ async def export_topology_diagram(ctx: Context, output_path: str,
             status = node['status']
             name = node['name']
 
-            # Node as rectangle with status color
+            # Node size to match GNS3 visual representation
+            node_size = 60  # Radius for hexagon approximation
             status_class = f"node-{status}"
 
+            # Draw hexagon (approximated with polygon) to match MikroTik icon
+            # Hexagon points: 6 vertices around center
+            import math
+            hex_points = []
+            for i in range(6):
+                angle = math.pi / 3 * i - math.pi / 2  # Start from top
+                px = node_size * math.cos(angle)
+                py = node_size * math.sin(angle)
+                hex_points.append(f"{px:.1f},{py:.1f}")
+            hex_path = " ".join(hex_points)
+
             svg_content += f'''  <g transform="translate({x}, {y})">
-    <rect class="node {status_class}" x="-40" y="-30" width="80" height="60" rx="5"/>
-    <text class="node-label" x="0" y="5">{name}</text>
+    <polygon class="node {status_class}" points="{hex_path}"/>
+    <text class="node-label" x="0" y="{node_size + 20}">{name}</text>
   </g>
 '''
 
