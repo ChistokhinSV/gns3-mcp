@@ -3,7 +3,7 @@
     "gns3-lab": {
       "command": "python",
       "args": [
-        "mcp-server/server/main.py",
+        "./mcp-server/server/main.py",
         "--host",
         "${GNS3_HOST}",
         "--port",
@@ -14,7 +14,7 @@
         "${GNS3_PASSWORD}"
       ],
       "env": {
-        "PYTHONPATH": "mcp-server/lib;mcp-server/server"
+        "PYTHONPATH": "./mcp-server/lib;./mcp-server/server"
       }
     }
   }
