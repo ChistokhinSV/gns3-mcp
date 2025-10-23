@@ -10,24 +10,18 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## ⚠️ Current Work: v0.2.0 Tools Refactoring (IN PROGRESS)
+## Current Version: v0.2.1
 
-**Status:** Major refactoring in progress - see `TODOS.md` for detailed status
+**Latest Release:** v0.2.1 - Link Discovery
+- Added `get_links()` tool for topology discovery
+- Enhanced `set_connection()` with workflow guidance
+- Fixed documentation examples
 
-**Completed:**
-- ✅ Phase 1: Added new GNS3Client methods (update_node, reload_node, suspend_node, create_link, delete_link)
-- ✅ Phase 2: Enhanced ConsoleManager with node_name tracking and convenience methods
-
-**In Progress:**
-- 🔄 Phase 3: Rewriting main.py MCP tools (console tools → set_node → set_connection)
-
-**Breaking Changes in v0.2.0:**
+**Previous:** v0.2.0 - Major Refactoring (Breaking Changes)
 - Console tools now use `node_name` instead of `session_id` (auto-connect)
 - `start_node` + `stop_node` → unified `set_node` tool
-- New `set_connection` tool for link management
+- Added `set_connection` tool for link management
 - Removed: `connect_console`, `read_console_diff`, `list_console_sessions`
-
-**See `TODOS.md` for complete progress tracking and implementation details.**
 
 ## Version Management
 
@@ -39,14 +33,20 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 
 **Version Synchronization:**
 - Server code and desktop extension (.mcpb) must have the **same version**
-- Always update manifest.json AND rebuild .mcpb after version changes
+- Desktop extension is **automatically rebuilt** by git pre-commit hook
 - If versions mismatch, Claude Desktop may use outdated code
 
 **Steps to update version:**
 1. Edit `mcp-server/manifest.json` - update `"version"` field
-2. Rebuild extension: `cd mcp-server && npx @anthropic-ai/mcpb pack`
-3. Verify version in output: `gns3-mcp@X.Y.Z`
+2. Commit your changes - pre-commit hook automatically rebuilds .mcpb
+3. Verify version in build output: `gns3-mcp@X.Y.Z`
 4. Reinstall in Claude Desktop (double-click .mcpb)
+
+**Pre-commit Hook:**
+- Located at `.git/hooks/pre-commit` (and `.bat` for Windows)
+- Automatically detects changes to `mcp-server/server/` or `manifest.json`
+- Rebuilds desktop extension and adds to commit
+- Aborts commit if build fails
 
 ## File Structure
 
@@ -88,9 +88,9 @@ cat mcp-server/server/console_manager.py
 **After editing:**
 1. Test locally first (see Testing section)
 2. Update version in manifest.json (increment appropriately)
-3. Repackage extension: `cd mcp-server && npx @anthropic-ai/mcpb pack`
-4. Verify version in build output matches manifest
-5. Reinstall and test in Claude Desktop
+3. Commit changes - pre-commit hook automatically rebuilds extension
+4. Verify version in hook output: `gns3-mcp@X.Y.Z`
+5. Reinstall and test in Claude Desktop (double-click .mcpb)
 
 ### 2. Testing
 
@@ -456,3 +456,4 @@ git status
 git add . && git commit -m "feat: description"
 ```
 - use https://apiv3.gns3.net/ as a source of documentation for GNS3 v3 api
+- rebuild desktop extensions after finishing modifications of the tools and skills
