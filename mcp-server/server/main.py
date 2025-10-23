@@ -1646,6 +1646,62 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
                 svg_content += f'  <line class="link" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>\n'
 
+        # Add port status indicators
+        svg_content += '\n  <!-- Port Status Indicators -->\n'
+        import math
+
+        for link in links:
+            node_a_id = link['nodes'][0]['node_id']
+            node_b_id = link['nodes'][1]['node_id']
+            link_suspended = link.get('suspend', False)
+
+            if node_a_id in node_map and node_b_id in node_map:
+                node_a = node_map[node_a_id]
+                node_b = node_map[node_b_id]
+
+                # Get node statuses
+                status_a = node_a['status']
+                status_b = node_b['status']
+
+                # Calculate indicator colors
+                # Green if node started and link not suspended, else red
+                color_a = "#00cc00" if (status_a == "started" and not link_suspended) else "#cc0000"
+                color_b = "#00cc00" if (status_b == "started" and not link_suspended) else "#cc0000"
+
+                # Get icon sizes
+                icon_size_a = node_icon_sizes.get(node_a_id, 58)
+                icon_size_b = node_icon_sizes.get(node_b_id, 58)
+
+                # Node centers
+                cx_a = node_a['x'] + icon_size_a // 2
+                cy_a = node_a['y'] + icon_size_a // 2
+                cx_b = node_b['x'] + icon_size_b // 2
+                cy_b = node_b['y'] + icon_size_b // 2
+
+                # Calculate indicator positions on link line
+                # Distance from center: icon_size/2 + 15px
+                dx = cx_b - cx_a
+                dy = cy_b - cy_a
+                length = math.sqrt(dx*dx + dy*dy)
+
+                if length > 0:
+                    unit_x = dx / length
+                    unit_y = dy / length
+
+                    # Indicator for node A side
+                    offset_a = icon_size_a // 2 + 15
+                    ind_ax = cx_a + unit_x * offset_a
+                    ind_ay = cy_a + unit_y * offset_a
+
+                    # Indicator for node B side
+                    offset_b = icon_size_b // 2 + 15
+                    ind_bx = cx_b - unit_x * offset_b  # Negative because going from B toward A
+                    ind_by = cy_b - unit_y * offset_b
+
+                    # Render indicators (4px radius, no border)
+                    svg_content += f'  <circle cx="{ind_ax}" cy="{ind_ay}" r="4" fill="{color_a}"/>\n'
+                    svg_content += f'  <circle cx="{ind_bx}" cy="{ind_by}" r="4" fill="{color_b}"/>\n'
+
         # Add nodes with actual icons
         svg_content += '\n  <!-- Nodes -->\n'
         import base64
