@@ -25,7 +25,7 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
 
 ## Installation
 
-### Option 1: Claude Desktop Extension (Recommended)
+### Claude Desktop
 
 1. **Package the extension**:
    ```bash
@@ -34,7 +34,7 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
    ```
 
 2. **Install in Claude Desktop**:
-   - Double-click the generated `.mcpb` file
+   - Double-click the generated `mcp-server.mcpb` file
    - Configure GNS3 connection details in the UI
    - Click Install
 
@@ -42,7 +42,67 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
    - Copy `skill/` folder to `~/.claude/skills/gns3-lab-automation/`
    - Restart Claude Desktop
 
-### Option 2: Development Setup
+### Claude Code
+
+#### Option 1: Project-Scoped (Recommended)
+
+1. **Ensure `.mcp.json` exists** in project root:
+   ```json
+   {
+     "mcpServers": {
+       "gns3-lab": {
+         "command": "python",
+         "args": [
+           "mcp-server/server/main.py",
+           "--host", "${GNS3_HOST}",
+           "--port", "${GNS3_PORT}",
+           "--username", "${GNS3_USER}",
+           "--password", "${GNS3_PASSWORD}"
+         ],
+         "env": {
+           "PYTHONPATH": "mcp-server/lib;mcp-server/server"
+         }
+       }
+     }
+   }
+   ```
+
+2. **Configure environment** - Create `.env` file:
+   ```bash
+   GNS3_USER=admin
+   GNS3_PASSWORD=your-password
+   GNS3_HOST=192.168.1.20
+   GNS3_PORT=80
+   ```
+
+3. **Restart Claude Code** - Server auto-loads from `.mcp.json`
+
+4. **Verify**:
+   ```bash
+   claude mcp list
+   ```
+
+#### Option 2: Global Installation
+
+Install server globally for use across all projects:
+
+**Windows (PowerShell)**:
+```powershell
+claude mcp add --transport stdio gns3-lab --scope user -- `
+  python "C:\HOME\1. Scripts\008. GNS3 MCP\mcp-server\server\main.py" `
+  --host 192.168.1.20 --port 80 --username admin --password YOUR_PASSWORD
+```
+
+**Linux/Mac (Bash)**:
+```bash
+claude mcp add --transport stdio gns3-lab --scope user -- \
+  python /path/to/mcp-server/server/main.py \
+  --host 192.168.1.20 --port 80 --username admin --password YOUR_PASSWORD
+```
+
+**Note**: Global installation requires hardcoded credentials. For team environments, prefer project-scoped with `.env`.
+
+### Development Setup
 
 1. **Create virtual environment**:
    ```bash

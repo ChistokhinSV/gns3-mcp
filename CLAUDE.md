@@ -115,11 +115,33 @@ npx @anthropic-ai/mcpb validate manifest.json
 
 ### 4. Installation
 
+#### Claude Desktop
+
 **To install/update in Claude Desktop:**
 1. Close Claude Desktop completely
 2. Double-click `mcp-server.mcpb`
 3. Restart Claude Desktop
 4. Check logs: `C:\Users\mail4\AppData\Roaming\Claude\logs\mcp-server-GNS3 Lab Controller.log`
+
+#### Claude Code
+
+**Project-scoped installation (included):**
+- `.mcp.json` already configured in project root
+- `.env` file contains credentials (gitignored)
+- Server auto-loads when working in project directory
+- Verify: `claude mcp list` (should show `gns3-lab`)
+
+**Global installation (optional):**
+```powershell
+claude mcp add --transport stdio gns3-lab --scope user -- `
+  python "C:\HOME\1. Scripts\008. GNS3 MCP\mcp-server\server\main.py" `
+  --host 192.168.1.20 --port 80 --username admin --password YOUR_PASSWORD
+```
+
+**Key differences:**
+- Claude Desktop: `.mcpb` package (user-wide)
+- Claude Code: `.mcp.json` config (project-scoped) or `claude mcp add` (user-scoped)
+- Both use same Python server code
 
 ## Common Tasks
 
