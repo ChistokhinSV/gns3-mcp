@@ -1147,7 +1147,7 @@ async def list_templates(ctx: Context) -> str:
                 name=t['name'],
                 category=t.get('category', 'default'),
                 node_type=t.get('template_type'),
-                compute_id=t.get('compute_id', 'local'),
+                compute_id=t.get('compute_id') or 'local',
                 builtin=t.get('builtin', False),
                 symbol=t.get('symbol')
             )

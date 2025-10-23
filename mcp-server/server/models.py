@@ -240,7 +240,7 @@ class TemplateInfo(BaseModel):
     name: str
     category: str
     node_type: Optional[str] = None
-    compute_id: str = "local"
+    compute_id: Optional[str] = "local"
     builtin: bool = False
     symbol: Optional[str] = None
 
