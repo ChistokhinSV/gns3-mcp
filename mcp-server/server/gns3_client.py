@@ -206,6 +206,81 @@ class GNS3Client:
         except Exception as e:
             raise RuntimeError(f"Failed to delete link {link_id}: {self._extract_error(e)}") from e
 
+    async def delete_node(self, project_id: str, node_id: str) -> None:
+        """DELETE /v3/projects/{id}/nodes/{node_id} - delete a node"""
+        response = await self.client.delete(
+            f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}",
+            headers=self._headers()
+        )
+        response.raise_for_status()
+
+    async def get_templates(self) -> List[Dict[str, Any]]:
+        """GET /v3/templates - list all templates"""
+        response = await self.client.get(
+            f"{self.base_url}/v3/templates",
+            headers=self._headers()
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def get_template(self, template_id: str) -> Dict[str, Any]:
+        """GET /v3/templates/{id} - get template details"""
+        response = await self.client.get(
+            f"{self.base_url}/v3/templates/{template_id}",
+            headers=self._headers()
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def create_node_from_template(self, project_id: str, template_id: str,
+                                       payload: Dict[str, Any]) -> Dict[str, Any]:
+        """POST /v3/projects/{id}/templates/{template_id} - create node from template"""
+        response = await self.client.post(
+            f"{self.base_url}/v3/projects/{project_id}/templates/{template_id}",
+            headers=self._headers(),
+            json=payload
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def get_drawings(self, project_id: str) -> List[Dict[str, Any]]:
+        """GET /v3/projects/{id}/drawings - list all drawings"""
+        response = await self.client.get(
+            f"{self.base_url}/v3/projects/{project_id}/drawings",
+            headers=self._headers()
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def create_drawing(self, project_id: str, drawing_data: Dict[str, Any]) -> Dict[str, Any]:
+        """POST /v3/projects/{id}/drawings - create a drawing"""
+        response = await self.client.post(
+            f"{self.base_url}/v3/projects/{project_id}/drawings",
+            headers=self._headers(),
+            json=drawing_data
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def update_drawing(self, project_id: str, drawing_id: str,
+                            drawing_data: Dict[str, Any]) -> Dict[str, Any]:
+        """PUT /v3/projects/{id}/drawings/{drawing_id} - update a drawing"""
+        response = await self.client.put(
+            f"{self.base_url}/v3/projects/{project_id}/drawings/{drawing_id}",
+            headers=self._headers(),
+            json=drawing_data
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def delete_drawing(self, project_id: str, drawing_id: str) -> None:
+        """DELETE /v3/projects/{id}/drawings/{drawing_id} - delete a drawing"""
+        response = await self.client.delete(
+            f"{self.base_url}/v3/projects/{project_id}/drawings/{drawing_id}",
+            headers=self._headers()
+        )
+        response.raise_for_status()
+
     async def get_version(self) -> Dict[str, Any]:
         """GET /v3/version - get GNS3 server version"""
         response = await self.client.get(

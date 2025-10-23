@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Control and automate GNS3 network labs through Claude with type-safe operations",
-  "long_description": "Version 0.3.2: Enhanced set_node with hardware configuration (rename, RAM, CPUs, HDD image, adapters, console type). Version 0.3.1 bugfix: Fixed validation error when nodes have None console_type. Version 0.3.0 features: Type-safe Pydantic models, two-phase link validation prevents partial topology changes, performance caching (10× faster batch ops), multi-adapter support, detailed error messages. BREAKING CHANGES: All tools return JSON, set_connection requires adapter parameters. Features: project/node/link management, auto-connecting consoles, port availability validation, corrupted link detection. Supports GNS3 v3 API with telnet console access.",
+  "long_description": "Version 0.4.0: Node creation from templates, node deletion, drawing objects (rectangles, text, shapes). NEW TOOLS: delete_node, list_templates, create_node, list_drawings, create_rectangle, create_text. Version 0.3.2: Enhanced set_node with hardware configuration (rename, RAM, CPUs, HDD image, adapters, console type). Version 0.3.0: Type-safe Pydantic models, two-phase link validation, performance caching, multi-adapter support. Features: project/node/link management, auto-connecting consoles, template-based node creation, colored rectangles and formatted text labels. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -100,6 +100,30 @@
     {
       "name": "set_connection",
       "description": "Batch manage network connections with two-phase validation (requires adapters)"
+    },
+    {
+      "name": "delete_node",
+      "description": "Delete a node from the current project"
+    },
+    {
+      "name": "list_templates",
+      "description": "List all available GNS3 templates (returns JSON array of TemplateInfo)"
+    },
+    {
+      "name": "create_node",
+      "description": "Create a new node from a template at specified coordinates"
+    },
+    {
+      "name": "list_drawings",
+      "description": "List all drawing objects in current project (returns JSON array of DrawingInfo)"
+    },
+    {
+      "name": "create_rectangle",
+      "description": "Create a colored rectangle drawing with customizable fill and border"
+    },
+    {
+      "name": "create_text",
+      "description": "Create a text label with formatting (bold, font size, color)"
     }
   ],
   "compatibility": {

@@ -232,6 +232,56 @@ class OperationResult(BaseModel):
         }
 
 
+# Template Models
+
+class TemplateInfo(BaseModel):
+    """GNS3 Template information"""
+    template_id: str
+    name: str
+    category: str
+    node_type: Optional[str] = None
+    compute_id: str = "local"
+    builtin: bool = False
+    symbol: Optional[str] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "template_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                "name": "Ethernet switch",
+                "category": "switch",
+                "node_type": "ethernet_switch",
+                "builtin": True
+            }
+        }
+
+
+# Drawing Models
+
+class DrawingInfo(BaseModel):
+    """GNS3 Drawing object information"""
+    drawing_id: str
+    project_id: str
+    x: int
+    y: int
+    z: int = 0
+    rotation: int = 0
+    svg: str
+    locked: bool = False
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "drawing_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                "project_id": "proj-123",
+                "x": 100,
+                "y": 200,
+                "z": 0,
+                "svg": "<svg>...</svg>"
+            }
+        }
+
+
 # Console Models
 
 class ConsoleStatus(BaseModel):

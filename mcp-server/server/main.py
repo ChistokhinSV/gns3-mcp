@@ -1,18 +1,21 @@
-"""GNS3 MCP Server v0.3.2
+"""GNS3 MCP Server v0.4.0
 
 Model Context Protocol server for GNS3 lab automation.
-Provides tools for managing projects, nodes, links, and console access.
+Provides tools for managing projects, nodes, links, console access, and drawings.
 
-Version 0.3.2 - Feature Enhancement:
+Version 0.4.0 - Node Creation & Drawing Objects:
+- NEW: delete_node() - Delete nodes from project
+- NEW: list_templates() - List available GNS3 templates
+- NEW: create_node() - Create nodes from templates
+- NEW: list_drawings() - List drawing objects (rectangles, text, shapes)
+- NEW: create_rectangle() - Create colored rectangles with customizable borders
+- NEW: create_text() - Create formatted text labels (bold, font size, color)
+
+Version 0.3.2 - Hardware Configuration:
 - set_node() supports hardware configuration (rename, RAM, CPUs, HDD, adapters)
-- Validation ensures node is stopped when renaming
-- Cache invalidation after node property updates
 
-Version 0.3.0 - Breaking Changes:
-- All tools now return JSON (not formatted strings)
-- set_connection() requires adapter_a and adapter_b parameters
-- Two-phase validation prevents partial topology changes
-- Data caching for improved performance
+Version 0.3.0 - Type Safety & Caching:
+- Type-safe Pydantic models, two-phase validation, performance caching
 """
 
 import argparse
@@ -35,6 +38,7 @@ from models import (
     ConnectOperation, DisconnectOperation,
     CompletedOperation, FailedOperation, OperationResult,
     ConsoleStatus, ErrorResponse,
+    TemplateInfo, DrawingInfo,
     validate_connection_operations
 )
 
@@ -45,6 +49,42 @@ logging.basicConfig(
     datefmt='%H:%M:%S %d.%m.%Y'
 )
 logger = logging.getLogger(__name__)
+
+
+# SVG Generation Helpers
+
+def create_rectangle_svg(width: int, height: int, fill: str = "#ffffff",
+                        border: str = "#000000", border_width: int = 2) -> str:
+    """Generate SVG for a rectangle"""
+    return f'''<svg height="{height}" width="{width}">
+  <rect fill="{fill}" fill-opacity="1.0" height="{height}" width="{width}"
+        stroke="{border}" stroke-width="{border_width}" />
+</svg>'''
+
+
+def create_text_svg(text: str, font_size: int = 10, font_weight: str = "normal",
+                   font_family: str = "TypeWriter", color: str = "#000000") -> str:
+    """Generate SVG for text"""
+    # Escape XML special characters
+    text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    return f'''<svg height="{font_size + 2}" width="{len(text) * font_size}">
+  <text fill="{color}" fill-opacity="1.0" font-family="{font_family}"
+        font-size="{font_size}" font-weight="{font_weight}">
+    {text}
+  </text>
+</svg>'''
+
+
+def create_ellipse_svg(rx: int, ry: int, fill: str = "#ffffff",
+                      border: str = "#000000", border_width: int = 2) -> str:
+    """Generate SVG for an ellipse"""
+    width = rx * 2
+    height = ry * 2
+    return f'''<svg height="{height}" width="{width}">
+  <ellipse cx="{rx}" cy="{ry}" fill="{fill}" fill-opacity="1.0"
+           rx="{rx}" ry="{ry}" stroke="{border}" stroke-width="{border_width}" />
+</svg>'''
 
 
 @dataclass
@@ -1046,6 +1086,263 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
     except Exception as e:
         return json.dumps(ErrorResponse(
             error="Failed to manage connections",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
+@mcp.tool()
+async def delete_node(ctx: Context, node_name: str) -> str:
+    """Delete a node from the current project
+
+    Args:
+        node_name: Name of the node to delete
+
+    Returns:
+        JSON confirmation message
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    try:
+        nodes = await app.gns3.get_nodes(app.current_project_id)
+        node = next((n for n in nodes if n['name'] == node_name), None)
+
+        if not node:
+            return json.dumps(ErrorResponse(
+                error="Node not found",
+                details=f"Node '{node_name}' does not exist"
+            ).model_dump(), indent=2)
+
+        await app.gns3.delete_node(app.current_project_id, node['node_id'])
+        await app.cache.invalidate_nodes(app.current_project_id)
+        await app.cache.invalidate_links(app.current_project_id)
+
+        return json.dumps({"message": f"Node '{node_name}' deleted successfully"}, indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to delete node",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
+@mcp.tool()
+async def list_templates(ctx: Context) -> str:
+    """List all available GNS3 templates
+
+    Returns:
+        JSON array of TemplateInfo objects
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    try:
+        templates = await app.gns3.get_templates()
+
+        template_models = [
+            TemplateInfo(
+                template_id=t['template_id'],
+                name=t['name'],
+                category=t.get('category', 'default'),
+                node_type=t.get('template_type'),
+                compute_id=t.get('compute_id', 'local'),
+                builtin=t.get('builtin', False),
+                symbol=t.get('symbol')
+            )
+            for t in templates
+        ]
+
+        return json.dumps([t.model_dump() for t in template_models], indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to list templates",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
+@mcp.tool()
+async def create_node(ctx: Context, template_name: str, x: int, y: int,
+                     node_name: Optional[str] = None, compute_id: str = "local") -> str:
+    """Create a new node from a template
+
+    Args:
+        template_name: Name of the template to use
+        x: X coordinate position
+        y: Y coordinate position
+        node_name: Optional custom name for the node
+        compute_id: Compute ID (default: "local")
+
+    Returns:
+        JSON with created NodeInfo
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    try:
+        templates = await app.gns3.get_templates()
+        template = next((t for t in templates if t['name'] == template_name), None)
+
+        if not template:
+            return json.dumps(ErrorResponse(
+                error="Template not found",
+                details=f"Template '{template_name}' not found. Use list_templates() to see available templates."
+            ).model_dump(), indent=2)
+
+        payload = {"x": x, "y": y, "compute_id": compute_id}
+        if node_name:
+            payload["name"] = node_name
+
+        result = await app.gns3.create_node_from_template(
+            app.current_project_id, template['template_id'], payload
+        )
+
+        await app.cache.invalidate_nodes(app.current_project_id)
+
+        return json.dumps({"message": "Node created successfully", "node": result}, indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to create node",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
+@mcp.tool()
+async def list_drawings(ctx: Context) -> str:
+    """List all drawing objects in the current project
+
+    Returns:
+        JSON array of DrawingInfo objects
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    try:
+        drawings = await app.gns3.get_drawings(app.current_project_id)
+
+        drawing_models = [
+            DrawingInfo(
+                drawing_id=d['drawing_id'],
+                project_id=d['project_id'],
+                x=d['x'],
+                y=d['y'],
+                z=d.get('z', 0),
+                rotation=d.get('rotation', 0),
+                svg=d['svg'],
+                locked=d.get('locked', False)
+            )
+            for d in drawings
+        ]
+
+        return json.dumps([d.model_dump() for d in drawing_models], indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to list drawings",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
+@mcp.tool()
+async def create_rectangle(ctx: Context, x: int, y: int, width: int, height: int,
+                          fill_color: str = "#ffffff", border_color: str = "#000000",
+                          border_width: int = 2, z: int = 0) -> str:
+    """Create a colored rectangle drawing
+
+    Args:
+        x: X coordinate
+        y: Y coordinate
+        width: Rectangle width
+        height: Rectangle height
+        fill_color: Fill color (hex or name, default: white)
+        border_color: Border color (default: black)
+        border_width: Border width in pixels (default: 2)
+        z: Z-order/layer (default: 0 - behind nodes)
+
+    Returns:
+        JSON with created drawing info
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    try:
+        svg = create_rectangle_svg(width, height, fill_color, border_color, border_width)
+
+        drawing_data = {
+            "x": x,
+            "y": y,
+            "z": z,
+            "svg": svg,
+            "rotation": 0
+        }
+
+        result = await app.gns3.create_drawing(app.current_project_id, drawing_data)
+
+        return json.dumps({"message": "Rectangle created successfully", "drawing": result}, indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to create rectangle",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
+@mcp.tool()
+async def create_text(ctx: Context, text: str, x: int, y: int,
+                     font_size: int = 10, font_weight: str = "normal",
+                     font_family: str = "TypeWriter", color: str = "#000000",
+                     z: int = 1) -> str:
+    """Create a text label with formatting
+
+    Args:
+        text: Text content
+        x: X coordinate
+        y: Y coordinate
+        font_size: Font size in points (default: 10)
+        font_weight: Font weight - "normal" or "bold" (default: normal)
+        font_family: Font family (default: "TypeWriter")
+        color: Text color (hex or name, default: black)
+        z: Z-order/layer (default: 1 - in front of shapes)
+
+    Returns:
+        JSON with created drawing info
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    try:
+        svg = create_text_svg(text, font_size, font_weight, font_family, color)
+
+        drawing_data = {
+            "x": x,
+            "y": y,
+            "z": z,
+            "svg": svg,
+            "rotation": 0
+        }
+
+        result = await app.gns3.create_drawing(app.current_project_id, drawing_data)
+
+        return json.dumps({"message": "Text created successfully", "drawing": result}, indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to create text",
             details=str(e)
         ).model_dump(), indent=2)
 
