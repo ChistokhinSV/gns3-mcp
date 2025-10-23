@@ -18,9 +18,16 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - **New feature**: Increment minor version (0.1.2 → 0.2.0)
 - **Breaking change**: Increment major version (0.2.0 → 1.0.0)
 
-**Files to update:**
-1. `mcp-server/manifest.json` - `"version"` field
-2. After version change, always repackage: `npx @anthropic-ai/mcpb pack`
+**Version Synchronization:**
+- Server code and desktop extension (.mcpb) must have the **same version**
+- Always update manifest.json AND rebuild .mcpb after version changes
+- If versions mismatch, Claude Desktop may use outdated code
+
+**Steps to update version:**
+1. Edit `mcp-server/manifest.json` - update `"version"` field
+2. Rebuild extension: `cd mcp-server && npx @anthropic-ai/mcpb pack`
+3. Verify version in output: `gns3-mcp@X.Y.Z`
+4. Reinstall in Claude Desktop (double-click .mcpb)
 
 ## File Structure
 
@@ -61,9 +68,10 @@ cat mcp-server/server/console_manager.py
 
 **After editing:**
 1. Test locally first (see Testing section)
-2. Update version in manifest.json
-3. Repackage extension
-4. Test installed extension
+2. Update version in manifest.json (increment appropriately)
+3. Repackage extension: `cd mcp-server && npx @anthropic-ai/mcpb pack`
+4. Verify version in build output matches manifest
+5. Reinstall and test in Claude Desktop
 
 ### 2. Testing
 
@@ -305,12 +313,14 @@ Before considering a change complete:
 
 - [ ] Code changes tested locally
 - [ ] Unit tests pass (`python tests/test_mcp_console.py`)
-- [ ] Integration test passes (manual test in Claude Desktop)
 - [ ] Version updated in manifest.json
-- [ ] Extension repackaged (.mcpb file)
+- [ ] Extension repackaged: `npx @anthropic-ai/mcpb pack`
+- [ ] Version in build output matches manifest
+- [ ] Extension reinstalled in Claude Desktop
+- [ ] Integration test passes (manual test in Claude Desktop)
+- [ ] No errors in Claude Desktop logs
 - [ ] Documentation updated if needed
 - [ ] Changes committed to git
-- [ ] No errors in Claude Desktop logs
 
 ## Performance Considerations
 
