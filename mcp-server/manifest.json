@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Control and automate GNS3 network labs through Claude",
-  "long_description": "This desktop extension provides comprehensive control over GNS3 network simulation labs. Manage projects, start/stop nodes, access device consoles, and automate complex network topology operations. Supports GNS3 v3 API with telnet console access for router configuration and troubleshooting.",
+  "long_description": "This desktop extension provides comprehensive control over GNS3 network simulation labs. Features unified node control, auto-connecting console sessions, batch link management, and node positioning. Supports GNS3 v3 API with telnet console access for router configuration and troubleshooting. Version 0.2.0 introduces breaking changes for simplified API and improved usability.",
   "author": {
     "name": "GNS3 MCP Contributors",
     "email": "noreply@example.com"
@@ -74,36 +74,24 @@
       "description": "Get detailed information about a specific node"
     },
     {
-      "name": "start_node",
-      "description": "Start a node in the current project"
-    },
-    {
-      "name": "stop_node",
-      "description": "Stop a node in the current project"
-    },
-    {
-      "name": "connect_console",
-      "description": "Connect to a node's telnet console and return session ID"
+      "name": "set_node",
+      "description": "Configure node properties and/or control node state (start/stop/suspend/reload/restart, position, lock, ports)"
     },
     {
       "name": "send_console",
-      "description": "Send commands or keystrokes to a console session"
+      "description": "Send commands to a node's console (auto-connects if needed)"
     },
     {
       "name": "read_console",
-      "description": "Read current console output buffer"
-    },
-    {
-      "name": "read_console_diff",
-      "description": "Read only new console output since last read"
+      "description": "Read console output (full buffer or diff mode for new output only)"
     },
     {
       "name": "disconnect_console",
-      "description": "Disconnect from a console session"
+      "description": "Disconnect from a node's console session"
     },
     {
-      "name": "list_console_sessions",
-      "description": "List all active console sessions"
+      "name": "set_connection",
+      "description": "Manage network connections in batch (connect/disconnect links between nodes)"
     }
   ],
   "compatibility": {

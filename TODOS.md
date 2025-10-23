@@ -79,13 +79,17 @@ None - Moving to Phase 4
 - ✅ Added "Node Positioning & Configuration" section (set_node)
 - ✅ Updated Automation Tips with new recommendations
 
-### Pending Phases
+#### ✅ Phase 6: Update README and Migration Guide (COMPLETED)
+**Files:** `README.md`
 
-#### ⏳ Phase 6: Update README and Migration Guide
-**Files: `README.md`, `CLAUDE.md`**
-- Update tool examples
-- Add migration guide (old → new tool names)
-- Update quick reference
+**Updates made:**
+- ✅ Updated Features section with v0.2.0 highlights
+- ✅ Updated Available MCP Tools with new signatures
+- ✅ Updated all Usage Examples to v0.2.0 syntax
+- ✅ Added comprehensive Migration Guide (v0.1.x → v0.2.0)
+- ✅ Updated API Reference with new endpoints
+
+### Pending Phases
 
 #### ⏳ Phase 7: Version Update and Testing
 - Update version: 0.1.4 → 0.2.0 (breaking changes)
