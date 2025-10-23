@@ -51,10 +51,11 @@ GNS3 uses a specific coordinate system for positioning elements:
 - Example: Node at (100, 100) with PNG icon has center at (139, 139)
 
 **Label Positioning:**
-- Node labels are stored as **offsets from the node center**
-- GNS3 API returns: `label: {x: -10, y: 25, text: "Router1", rotation: 0}`
-- This means label is 10px left and 25px down from node center
-- Actual position: `(node_x + icon_size/2 + label_x, node_y + icon_size/2 + label_y)`
+- Node labels are stored as **offsets from node top-left to label box top-left**
+- GNS3 API returns: `label: {x: -10, y: -25, text: "Router1", rotation: 0, style: "..."}`
+- The offset (x, y) represents: node_top_left → label_box_top_left
+- Label box contains text that is **right-aligned and vertically centered** within the box
+- Text alignment: `text-anchor: end; dominant-baseline: central`
 
 **Link Connections:**
 - Links connect to the **center** of nodes, not the top-left corner
@@ -72,7 +73,31 @@ GNS3 uses a specific coordinate system for positioning elements:
 - Use `export_topology_diagram()` to create SVG/PNG screenshots
 - Renders nodes with actual icons, links, drawings, and labels
 - All positioning respects the coordinate system above
-- Output includes visual status indicators (started/stopped nodes)
+- Output includes:
+  - Visual status indicators on nodes (started=green, stopped=red)
+  - Port status indicators on links (active=green circles, shutdown=red circles)
+  - Preserved fonts and styling from GNS3
+
+**Layout Best Practices:**
+- **Minimum spacing** to avoid overlaps:
+  - Horizontal: 150-200px between node icons
+  - Vertical: 100-150px between node icons
+  - Site rectangles: 250-350px wide, 200-300px tall
+  - Padding around elements: 50px minimum
+- **Site organization**:
+  - Place background rectangles at z=0 (behind nodes)
+  - Place site labels at z=1 (in front of rectangles)
+  - Position site labels 30px above rectangle top edge
+  - Center nodes within site rectangles for clean layout
+- **Node positioning**:
+  - PNG icons (78×78): Need more spacing than SVG icons (58×58)
+  - Account for label width when positioning adjacent nodes
+  - Estimated label width: `text_length * font_size * 0.6`
+- **Connection planning**:
+  - Consider link paths when positioning nodes
+  - Avoid crossing links where possible for clarity
+  - Star topologies: Central node with radial connections
+  - Mesh topologies: Triangular or grid layouts work best
 
 ## Common Workflows
 
