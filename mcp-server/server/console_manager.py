@@ -146,11 +146,7 @@ class ConsoleManager:
             return False
 
         try:
-            # Convert bare \n to \r\n for telnet compatibility
-            # But don't convert if \r\n already present
-            if '\r\n' not in data and '\n' in data:
-                data = data.replace('\n', '\r\n')
-
+            # Send data as-is - telnetlib3 handles line endings
             session.writer.write(data)
             await session.writer.drain()
             session.update_activity()

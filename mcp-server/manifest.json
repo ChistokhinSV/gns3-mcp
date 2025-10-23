@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Control and automate GNS3 network labs through Claude",
   "long_description": "This desktop extension provides comprehensive control over GNS3 network simulation labs. Manage projects, start/stop nodes, access device consoles, and automate complex network topology operations. Supports GNS3 v3 API with telnet console access for router configuration and troubleshooting.",
   "author": {
