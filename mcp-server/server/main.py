@@ -1549,7 +1549,7 @@ async def export_topology_diagram(ctx: Context, output_path: str,
       .node-stopped {{ fill: #ff9999; }}
       .node-started {{ fill: #99ff99; }}
       .node-suspended {{ fill: #ffff99; }}
-      .node-label {{ font-family: Arial, sans-serif; font-size: 12px; text-anchor: middle; }}
+      .node-label {{ font-family: Arial, sans-serif; font-size: 12px; text-anchor: start; dominant-baseline: hanging; }}
       .link {{ stroke: #666; stroke-width: 2; fill: none; }}
     </style>
   </defs>
