@@ -1,0 +1,108 @@
+{
+  "manifest_version": "0.1",
+  "name": "gns3-mcp",
+  "display_name": "GNS3 Lab Controller",
+  "version": "0.1.0",
+  "description": "Control and automate GNS3 network labs through Claude",
+  "long_description": "This desktop extension provides comprehensive control over GNS3 network simulation labs. Manage projects, start/stop nodes, access device consoles, and automate complex network topology operations. Supports GNS3 v3 API with telnet console access for router configuration and troubleshooting.",
+  "author": {
+    "name": "GNS3 MCP Contributors",
+    "email": "noreply@example.com"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "server/main.py",
+    "mcp_config": {
+      "command": "python",
+      "args": [
+        "${__dirname}/server/main.py",
+        "--host=${user_config.gns3_host}",
+        "--port=${user_config.gns3_port}",
+        "--username=${user_config.username}",
+        "--password=${user_config.password}"
+      ],
+      "env": {
+        "PYTHONPATH": "${__dirname}/server"
+      }
+    }
+  },
+  "user_config": {
+    "gns3_host": {
+      "type": "string",
+      "description": "GNS3 server hostname or IP address",
+      "default": "localhost",
+      "required": true
+    },
+    "gns3_port": {
+      "type": "number",
+      "description": "GNS3 server API port",
+      "default": 80,
+      "required": true
+    },
+    "username": {
+      "type": "string",
+      "description": "GNS3 username",
+      "default": "admin",
+      "required": true
+    },
+    "password": {
+      "type": "string",
+      "description": "GNS3 password",
+      "secret": true,
+      "required": true
+    }
+  },
+  "tools": [
+    {
+      "name": "list_projects",
+      "description": "List all GNS3 projects with their status (opened/closed)"
+    },
+    {
+      "name": "open_project",
+      "description": "Open a GNS3 project by name"
+    },
+    {
+      "name": "list_nodes",
+      "description": "List all nodes in the current project with status and console info"
+    },
+    {
+      "name": "get_node_details",
+      "description": "Get detailed information about a specific node"
+    },
+    {
+      "name": "start_node",
+      "description": "Start a node in the current project"
+    },
+    {
+      "name": "stop_node",
+      "description": "Stop a node in the current project"
+    },
+    {
+      "name": "connect_console",
+      "description": "Connect to a node's telnet console and return session ID"
+    },
+    {
+      "name": "send_console",
+      "description": "Send commands or keystrokes to a console session"
+    },
+    {
+      "name": "read_console",
+      "description": "Read current console output buffer"
+    },
+    {
+      "name": "read_console_diff",
+      "description": "Read only new console output since last read"
+    },
+    {
+      "name": "disconnect_console",
+      "description": "Disconnect from a console session"
+    },
+    {
+      "name": "list_console_sessions",
+      "description": "List all active console sessions"
+    }
+  ],
+  "requirements": {
+    "python": ">=3.10"
+  }
+}
