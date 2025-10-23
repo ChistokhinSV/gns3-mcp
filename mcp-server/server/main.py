@@ -1,7 +1,7 @@
 """GNS3 MCP Server
 
 Model Context Protocol server for GNS3 lab automation.
-Provides tools for managing projects, nodes, and console access.
+Provides tools for managing projects, nodes, links, and console access.
 """
 
 import argparse
