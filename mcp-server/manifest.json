@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Control and automate GNS3 network labs through Claude with type-safe operations",
-  "long_description": "Version 0.3.0 major refactoring: Type-safe Pydantic models, two-phase link validation prevents partial topology changes, performance caching (10× faster batch ops), multi-adapter support, detailed error messages. BREAKING CHANGES: All tools return JSON, set_connection requires adapter parameters. Features: project/node/link management, auto-connecting consoles, port availability validation, corrupted link detection. Supports GNS3 v3 API with telnet console access.",
+  "long_description": "Version 0.3.1 bugfix: Fixed validation error when nodes have None console_type. Version 0.3.0 features: Type-safe Pydantic models, two-phase link validation prevents partial topology changes, performance caching (10× faster batch ops), multi-adapter support, detailed error messages. BREAKING CHANGES: All tools return JSON, set_connection requires adapter parameters. Features: project/node/link management, auto-connecting consoles, port availability validation, corrupted link detection. Supports GNS3 v3 API with telnet console access.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"

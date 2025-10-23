@@ -47,7 +47,7 @@ class NodeInfo(BaseModel):
     name: str
     node_type: str
     status: Literal["started", "stopped", "suspended"]
-    console_type: str
+    console_type: Optional[str] = None
     console: Optional[int] = None
     console_host: Optional[str] = None
     compute_id: str = "local"
