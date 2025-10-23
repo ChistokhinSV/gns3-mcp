@@ -185,11 +185,27 @@ async def get_node_details(ctx: Context, node_name: str) -> str:
 
 
 @mcp.tool()
-async def start_node(ctx: Context, node_name: str) -> str:
-    """Start a node in the current project
+async def set_node(ctx: Context,
+                   node_name: str,
+                   action: Optional[str] = None,
+                   x: Optional[int] = None,
+                   y: Optional[int] = None,
+                   z: Optional[int] = None,
+                   locked: Optional[bool] = None,
+                   ports: Optional[int] = None) -> str:
+    """Configure node properties and/or control node state
 
     Args:
-        node_name: Name of the node to start
+        node_name: Name of the node
+        action: Action to perform (start/stop/suspend/reload/restart)
+        x: X coordinate
+        y: Y coordinate
+        z: Z-order (layer)
+        locked: Lock node position
+        ports: Number of ports (for ethernet switches)
+
+    Returns:
+        Status message describing what was done
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -203,39 +219,93 @@ async def start_node(ctx: Context, node_name: str) -> str:
     if not node:
         return f"Node '{node_name}' not found"
 
-    if node['status'] == 'started':
-        return f"Node '{node_name}' is already started"
+    node_id = node['node_id']
+    results = []
 
-    # Start it
-    result = await app.gns3.start_node(app.current_project_id, node['node_id'])
-    return f"Started {node_name} - status: {result.get('status', 'unknown')}"
+    # Handle property updates
+    properties = {}
+    if x is not None:
+        properties['x'] = x
+    if y is not None:
+        properties['y'] = y
+    if z is not None:
+        properties['z'] = z
+    if locked is not None:
+        properties['locked'] = locked
+    if ports is not None:
+        # For ethernet switches, update ports_mapping
+        if node['node_type'] == 'ethernet_switch':
+            ports_mapping = [
+                {"name": f"Ethernet{i}", "port_number": i, "type": "access", "vlan": 1}
+                for i in range(ports)
+            ]
+            properties['ports_mapping'] = ports_mapping
+        else:
+            results.append(f"Warning: Port configuration only supported for ethernet switches")
 
+    if properties:
+        try:
+            await app.gns3.update_node(app.current_project_id, node_id, properties)
+            prop_list = ", ".join(f"{k}={v}" for k, v in properties.items() if k != 'ports_mapping')
+            if 'ports_mapping' in properties:
+                prop_list += f", ports={ports}"
+            results.append(f"Updated properties: {prop_list}")
+        except Exception as e:
+            return f"Failed to update properties: {str(e)}"
 
-@mcp.tool()
-async def stop_node(ctx: Context, node_name: str) -> str:
-    """Stop a node in the current project
+    # Handle action
+    if action:
+        action = action.lower()
+        try:
+            if action == 'start':
+                await app.gns3.start_node(app.current_project_id, node_id)
+                results.append(f"Started {node_name}")
 
-    Args:
-        node_name: Name of the node to stop
-    """
-    app: AppContext = ctx.request_context.lifespan_context
+            elif action == 'stop':
+                await app.gns3.stop_node(app.current_project_id, node_id)
+                results.append(f"Stopped {node_name}")
 
-    if not app.current_project_id:
-        return "No project opened"
+            elif action == 'suspend':
+                await app.gns3.suspend_node(app.current_project_id, node_id)
+                results.append(f"Suspended {node_name}")
 
-    # Find node
-    nodes = await app.gns3.get_nodes(app.current_project_id)
-    node = next((n for n in nodes if n['name'] == node_name), None)
+            elif action == 'reload':
+                await app.gns3.reload_node(app.current_project_id, node_id)
+                results.append(f"Reloaded {node_name}")
 
-    if not node:
-        return f"Node '{node_name}' not found"
+            elif action == 'restart':
+                # Stop node
+                await app.gns3.stop_node(app.current_project_id, node_id)
+                results.append(f"Stopped {node_name}")
 
-    if node['status'] == 'stopped':
-        return f"Node '{node_name}' is already stopped"
+                # Wait for node to stop with retries
+                stopped = False
+                for attempt in range(3):
+                    await asyncio.sleep(5)
+                    nodes = await app.gns3.get_nodes(app.current_project_id)
+                    current_node = next((n for n in nodes if n['node_id'] == node_id), None)
+                    if current_node and current_node['status'] == 'stopped':
+                        stopped = True
+                        break
+                    results.append(f"Retry {attempt + 1}/3: Waiting for stop...")
 
-    # Stop it
-    result = await app.gns3.stop_node(app.current_project_id, node['node_id'])
-    return f"Stopped {node_name} - status: {result.get('status', 'unknown')}"
+                if not stopped:
+                    results.append(f"Warning: Node may not have stopped completely")
+
+                # Start node
+                await app.gns3.start_node(app.current_project_id, node_id)
+                results.append(f"Started {node_name}")
+
+            else:
+                return f"Unknown action: {action}. Valid: start, stop, suspend, reload, restart"
+
+        except Exception as e:
+            results.append(f"Action failed: {str(e)}")
+
+    if not results:
+        return f"No changes made to {node_name}"
+
+    return "\n".join(results)
 
 
 # Console helper function
