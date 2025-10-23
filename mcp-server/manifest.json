@@ -22,7 +22,7 @@
         "--password=${user_config.password}"
       ],
       "env": {
-        "PYTHONPATH": "${__dirname}/server"
+        "PYTHONPATH": "${__dirname}/lib${path_separator}${__dirname}/server"
       }
     }
   },
