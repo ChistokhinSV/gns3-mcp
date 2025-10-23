@@ -29,26 +29,30 @@
   "user_config": {
     "gns3_host": {
       "type": "string",
+      "title": "GNS3 Server Host",
       "description": "GNS3 server hostname or IP address",
       "default": "localhost",
       "required": true
     },
     "gns3_port": {
       "type": "number",
+      "title": "GNS3 Server Port",
       "description": "GNS3 server API port",
       "default": 80,
       "required": true
     },
     "username": {
       "type": "string",
+      "title": "Username",
       "description": "GNS3 username",
       "default": "admin",
       "required": true
     },
     "password": {
       "type": "string",
+      "title": "Password",
       "description": "GNS3 password",
-      "secret": true,
+      "sensitive": true,
       "required": true
     }
   },
@@ -102,7 +106,10 @@
       "description": "List all active console sessions"
     }
   ],
-  "requirements": {
-    "python": ">=3.10"
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "python": ">=3.10"
+    }
   }
 }
