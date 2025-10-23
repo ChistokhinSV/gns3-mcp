@@ -61,6 +61,13 @@ class NodeInfo(BaseModel):
     label: Optional[Dict[str, Any]] = None
     symbol: Optional[str] = None
 
+    # Hardware properties (QEMU nodes)
+    ram: Optional[int] = None
+    cpus: Optional[int] = None
+    adapters: Optional[int] = None
+    hdd_disk_image: Optional[str] = None
+    hda_disk_image: Optional[str] = None
+
     class Config:
         json_schema_extra = {
             "example": {

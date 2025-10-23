@@ -316,8 +316,10 @@ async def list_nodes(ctx: Context, force_refresh: bool = False) -> str:
         )
 
         # Convert to NodeInfo models
-        node_models = [
-            NodeInfo(
+        node_models = []
+        for n in nodes:
+            props = n.get('properties', {})
+            node_models.append(NodeInfo(
                 node_id=n['node_id'],
                 name=n['name'],
                 node_type=n['node_type'],
@@ -332,10 +334,14 @@ async def list_nodes(ctx: Context, force_refresh: bool = False) -> str:
                 locked=n.get('locked', False),
                 ports=n.get('ports'),
                 label=n.get('label'),
-                symbol=n.get('symbol')
-            )
-            for n in nodes
-        ]
+                symbol=n.get('symbol'),
+                # Hardware properties
+                ram=props.get('ram'),
+                cpus=props.get('cpus'),
+                adapters=props.get('adapters'),
+                hdd_disk_image=props.get('hdd_disk_image'),
+                hda_disk_image=props.get('hda_disk_image')
+            ))
 
         return json.dumps([n.model_dump() for n in node_models], indent=2)
 
@@ -380,6 +386,9 @@ async def get_node_details(ctx: Context, node_name: str, force_refresh: bool = F
                 details=f"No node named '{node_name}' in current project. Use list_nodes() to see available nodes."
             ).model_dump(), indent=2)
 
+        # Extract hardware properties from nested 'properties' object
+        props = node.get('properties', {})
+
         # Convert to NodeInfo model
         node_info = NodeInfo(
             node_id=node['node_id'],
@@ -396,7 +405,13 @@ async def get_node_details(ctx: Context, node_name: str, force_refresh: bool = F
             locked=node.get('locked', False),
             ports=node.get('ports'),
             label=node.get('label'),
-            symbol=node.get('symbol')
+            symbol=node.get('symbol'),
+            # Hardware properties
+            ram=props.get('ram'),
+            cpus=props.get('cpus'),
+            adapters=props.get('adapters'),
+            hdd_disk_image=props.get('hdd_disk_image'),
+            hda_disk_image=props.get('hda_disk_image')
         )
 
         return json.dumps(node_info.model_dump(), indent=2)
@@ -585,49 +600,78 @@ async def set_node(ctx: Context,
         ).model_dump(), indent=2)
 
     # Handle property updates
-    properties = {}
+    # Separate top-level properties from hardware properties
+    update_payload = {}
+    hardware_props = {}
+
+    # Top-level properties
     if x is not None:
-        properties['x'] = x
+        update_payload['x'] = x
     if y is not None:
-        properties['y'] = y
+        update_payload['y'] = y
     if z is not None:
-        properties['z'] = z
+        update_payload['z'] = z
     if locked is not None:
-        properties['locked'] = locked
+        update_payload['locked'] = locked
     if name is not None:
-        properties['name'] = name
+        update_payload['name'] = name
+
+    # Hardware properties (nested in 'properties' object for QEMU nodes)
     if ram is not None:
-        properties['ram'] = ram
+        hardware_props['ram'] = ram
     if cpus is not None:
-        properties['cpus'] = cpus
+        hardware_props['cpus'] = cpus
     if hdd_disk_image is not None:
-        properties['hdd_disk_image'] = hdd_disk_image
+        hardware_props['hdd_disk_image'] = hdd_disk_image
     if adapters is not None:
-        properties['adapters'] = adapters
+        hardware_props['adapters'] = adapters
     if console_type is not None:
-        properties['console_type'] = console_type
+        hardware_props['console_type'] = console_type
+
+    # Special handling for ethernet switches
     if ports is not None:
-        # For ethernet switches, update ports_mapping
         if node['node_type'] == 'ethernet_switch':
             ports_mapping = [
                 {"name": f"Ethernet{i}", "port_number": i, "type": "access", "vlan": 1}
                 for i in range(ports)
             ]
-            properties['ports_mapping'] = ports_mapping
+            hardware_props['ports_mapping'] = ports_mapping
         else:
             results.append(f"Warning: Port configuration only supported for ethernet switches")
 
-    if properties:
+    # Wrap hardware properties in 'properties' object for QEMU nodes
+    if hardware_props and node['node_type'] == 'qemu':
+        update_payload['properties'] = hardware_props
+    elif hardware_props:
+        # For non-QEMU nodes, merge directly
+        update_payload.update(hardware_props)
+
+    if update_payload:
         try:
-            await app.gns3.update_node(app.current_project_id, node_id, properties)
+            await app.gns3.update_node(app.current_project_id, node_id, update_payload)
 
             # Invalidate cache after node modification
             await app.cache.invalidate_nodes(app.current_project_id)
 
-            prop_list = ", ".join(f"{k}={v}" for k, v in properties.items() if k != 'ports_mapping')
-            if 'ports_mapping' in properties:
-                prop_list += f", ports={ports}"
-            results.append(f"Updated properties: {prop_list}")
+            # Build change summary
+            changes = []
+            if name is not None:
+                changes.append(f"name={name}")
+            if x is not None or y is not None or z is not None:
+                pos_parts = []
+                if x is not None: pos_parts.append(f"x={x}")
+                if y is not None: pos_parts.append(f"y={y}")
+                if z is not None: pos_parts.append(f"z={z}")
+                changes.append(", ".join(pos_parts))
+            if locked is not None:
+                changes.append(f"locked={locked}")
+            for k, v in hardware_props.items():
+                if k != 'ports_mapping':
+                    changes.append(f"{k}={v}")
+            if 'ports_mapping' in hardware_props:
+                changes.append(f"ports={ports}")
+
+            results.append(f"Updated: {', '.join(changes)}")
         except Exception as e:
             return json.dumps(ErrorResponse(
                 error="Failed to update properties",
