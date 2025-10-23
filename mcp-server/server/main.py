@@ -1477,12 +1477,32 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
             for node in nodes:
                 x, y = node['x'], node['y']
-                # Account for icon size (100px) + label below (+30px)
-                icon_size = 100
+                symbol = node.get('symbol', '')
+
+                # Determine icon size: PNG = 78×78, SVG = 58×58
+                if symbol and symbol.lower().endswith('.png'):
+                    icon_size = 78
+                else:
+                    icon_size = 58
+
+                # Get label position to account for it in bounds
+                label_info = node.get('label', {})
+                label_x = label_info.get('x', 0)
+                label_y = label_info.get('y', icon_size // 2 + 20)
+
+                # Account for node icon (centered at x,y)
                 min_x = min(min_x, x - icon_size // 2)
                 max_x = max(max_x, x + icon_size // 2)
                 min_y = min(min_y, y - icon_size // 2)
-                max_y = max(max_y, y + icon_size // 2 + 30)  # Extra space for label below
+                max_y = max(max_y, y + icon_size // 2)
+
+                # Account for label position (relative to node center)
+                label_abs_x = x + label_x
+                label_abs_y = y + label_y
+                min_x = min(min_x, label_abs_x - 50)  # Approximate text width
+                max_x = max(max_x, label_abs_x + 50)
+                min_y = min(min_y, label_abs_y - 10)  # Approximate text height
+                max_y = max(max_y, label_abs_y + 10)
 
             for drawing in drawings:
                 # Parse SVG to get dimensions (basic parsing)
@@ -1564,8 +1584,12 @@ async def export_topology_diagram(ctx: Context, output_path: str,
             name = node['name']
             symbol = node.get('symbol', '')
 
-            # GNS3 standard node icon size (visual representation)
-            icon_size = 100  # Width/height in pixels
+            # Determine icon size based on symbol type
+            # PNG images: 78×78, SVG/internal icons: 58×58
+            if symbol and symbol.lower().endswith('.png'):
+                icon_size = 78
+            else:
+                icon_size = 58
 
             # Fetch actual icon if available
             icon_data = None
