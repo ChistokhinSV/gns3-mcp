@@ -46,28 +46,23 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
 
 #### Option 1: Project-Scoped (Recommended)
 
-1. **Ensure `.mcp.json` exists** in project root:
+This project includes a pre-configured setup that automatically loads credentials from `.env`.
+
+1. **Configuration files** (already included):
+
+   `.mcp.json`:
    ```json
    {
      "mcpServers": {
        "gns3-lab": {
          "command": "python",
-         "args": [
-           "mcp-server/server/main.py",
-           "--host", "${GNS3_HOST}",
-           "--port", "${GNS3_PORT}",
-           "--username", "${GNS3_USER}",
-           "--password", "${GNS3_PASSWORD}"
-         ],
-         "env": {
-           "PYTHONPATH": "mcp-server/lib;mcp-server/server"
-         }
+         "args": ["./mcp-server/start_mcp.py"]
        }
      }
    }
    ```
 
-2. **Configure environment** - Create `.env` file:
+   `.env` (create this file):
    ```bash
    GNS3_USER=admin
    GNS3_PASSWORD=your-password
@@ -75,12 +70,20 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
    GNS3_PORT=80
    ```
 
-3. **Restart Claude Code** - Server auto-loads from `.mcp.json`
+2. **Wrapper script** (`mcp-server/start_mcp.py`):
+   - Automatically loads credentials from `.env`
+   - Sets up Python paths for dependencies
+   - No manual PYTHONPATH configuration needed
 
-4. **Verify**:
+3. **Start Claude Code** in project directory - Server auto-loads
+
+4. **Verify installation**:
    ```bash
-   claude mcp list
+   claude mcp get gns3-lab
    ```
+   Should show: `Status: ✓ Connected`
+
+5. **Start new conversation** to access MCP tools (tools load at conversation start)
 
 #### Option 2: Global Installation
 
@@ -89,18 +92,28 @@ Install server globally for use across all projects:
 **Windows (PowerShell)**:
 ```powershell
 claude mcp add --transport stdio gns3-lab --scope user -- `
-  python "C:\HOME\1. Scripts\008. GNS3 MCP\mcp-server\server\main.py" `
-  --host 192.168.1.20 --port 80 --username admin --password YOUR_PASSWORD
+  python "C:\path\to\project\mcp-server\start_mcp.py"
 ```
 
 **Linux/Mac (Bash)**:
 ```bash
 claude mcp add --transport stdio gns3-lab --scope user -- \
-  python /path/to/mcp-server/server/main.py \
-  --host 192.168.1.20 --port 80 --username admin --password YOUR_PASSWORD
+  python /path/to/project/mcp-server/start_mcp.py
 ```
 
-**Note**: Global installation requires hardcoded credentials. For team environments, prefer project-scoped with `.env`.
+**Note**: Global installation reads from the same `.env` file in the project directory.
+
+#### Troubleshooting
+
+**Server not connecting:**
+1. Check `.env` file exists with correct credentials
+2. Verify server: `python mcp-server/start_mcp.py` (should connect to GNS3)
+3. Check status: `claude mcp get gns3-lab`
+
+**Tools not available:**
+- MCP tools load at conversation start
+- Start a new conversation after configuring the server
+- Old conversations won't have access to newly added servers
 
 ### Development Setup
 

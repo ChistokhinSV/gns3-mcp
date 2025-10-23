@@ -125,22 +125,35 @@ npx @anthropic-ai/mcpb validate manifest.json
 
 #### Claude Code
 
-**Project-scoped installation (included):**
-- `.mcp.json` already configured in project root
-- `.env` file contains credentials (gitignored)
-- Server auto-loads when working in project directory
-- Verify: `claude mcp list` (should show `gns3-lab`)
+**Project-scoped installation (recommended):**
+
+Configuration files:
+- `.mcp.json` - MCP server configuration (committed to git)
+- `.env` - Credentials (gitignored)
+- `mcp-server/start_mcp.py` - Wrapper script that loads .env
+
+The wrapper script automatically:
+1. Loads environment variables from `.env`
+2. Adds `mcp-server/lib` and `mcp-server/server` to Python path
+3. Starts the MCP server with credentials from environment
+
+**Verify installation:**
+```bash
+claude mcp get gns3-lab
+# Should show: Status: ✓ Connected
+```
+
+**Important:** MCP tools load at conversation start. After configuring the server, start a new conversation to access the tools.
 
 **Global installation (optional):**
 ```powershell
 claude mcp add --transport stdio gns3-lab --scope user -- `
-  python "C:\HOME\1. Scripts\008. GNS3 MCP\mcp-server\server\main.py" `
-  --host 192.168.1.20 --port 80 --username admin --password YOUR_PASSWORD
+  python "C:\HOME\1. Scripts\008. GNS3 MCP\mcp-server\start_mcp.py"
 ```
 
 **Key differences:**
-- Claude Desktop: `.mcpb` package (user-wide)
-- Claude Code: `.mcp.json` config (project-scoped) or `claude mcp add` (user-scoped)
+- Claude Desktop: `.mcpb` package (user-wide), manual credential config
+- Claude Code: `.mcp.json` + wrapper script (project-scoped), auto-loads .env
 - Both use same Python server code
 
 ## Common Tasks
