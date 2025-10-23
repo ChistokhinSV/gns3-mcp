@@ -19,8 +19,17 @@ logger = logging.getLogger(__name__)
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 def strip_ansi(text: str) -> str:
-    """Remove ANSI escape codes from text"""
-    return ANSI_ESCAPE.sub('', text)
+    """Remove ANSI escape codes and normalize line endings"""
+    # Remove ANSI escape codes
+    text = ANSI_ESCAPE.sub('', text)
+
+    # Normalize line endings: convert \r\n and \r to \n
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+
+    # Remove excessive blank lines (more than 2 consecutive newlines)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
+    return text
 
 MAX_BUFFER_SIZE = 10 * 1024 * 1024  # 10MB per session
 SESSION_TIMEOUT = 1800  # 30 minutes
