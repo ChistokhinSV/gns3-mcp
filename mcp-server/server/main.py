@@ -407,6 +407,119 @@ async def disconnect_console(ctx: Context, node_name: str) -> str:
     return "Disconnected successfully" if success else "No active session for this node"
 
 
+@mcp.tool()
+async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str:
+    """Manage network connections (links) in batch
+
+    Executes connection operations sequentially. If an operation fails,
+    returns status showing what completed and what failed.
+
+    Args:
+        connections: List of connection operations to perform.
+            Each operation is a dict with:
+            - action: "connect" or "disconnect"
+            - For disconnect: {"action": "disconnect", "link_id": "abc123"}
+            - For connect: {"action": "connect", "node_a": "R1", "port_a": 0,
+                           "node_b": "R2", "port_b": 1}
+
+    Returns:
+        JSON string with completed and failed operations
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    if not app.current_project_id:
+        return json.dumps({"error": "No project opened"})
+
+    completed = []
+    failed = None
+
+    # Execute operations sequentially
+    for idx, conn in enumerate(connections):
+        action = conn.get("action", "").lower()
+
+        try:
+            if action == "disconnect":
+                # Disconnect operation
+                link_id = conn.get("link_id")
+                if not link_id:
+                    raise ValueError("Missing link_id for disconnect operation")
+
+                await app.gns3.delete_link(app.current_project_id, link_id)
+                completed.append({
+                    "index": idx,
+                    "action": "disconnect",
+                    "link_id": link_id
+                })
+
+            elif action == "connect":
+                # Connect operation
+                node_a_name = conn.get("node_a")
+                node_b_name = conn.get("node_b")
+                port_a = conn.get("port_a")
+                port_b = conn.get("port_b")
+
+                if not all([node_a_name, node_b_name, port_a is not None, port_b is not None]):
+                    raise ValueError("Missing required fields for connect operation (node_a, node_b, port_a, port_b)")
+
+                # Find nodes
+                nodes = await app.gns3.get_nodes(app.current_project_id)
+                node_a = next((n for n in nodes if n['name'] == node_a_name), None)
+                node_b = next((n for n in nodes if n['name'] == node_b_name), None)
+
+                if not node_a:
+                    raise ValueError(f"Node '{node_a_name}' not found")
+                if not node_b:
+                    raise ValueError(f"Node '{node_b_name}' not found")
+
+                # Create link specification
+                # Using port_number as per API research (will verify in Phase 4)
+                link_spec = {
+                    "nodes": [
+                        {
+                            "node_id": node_a["node_id"],
+                            "adapter_number": 0,  # Default adapter
+                            "port_number": port_a
+                        },
+                        {
+                            "node_id": node_b["node_id"],
+                            "adapter_number": 0,  # Default adapter
+                            "port_number": port_b
+                        }
+                    ]
+                }
+
+                result = await app.gns3.create_link(app.current_project_id, link_spec)
+                completed.append({
+                    "index": idx,
+                    "action": "connect",
+                    "link_id": result.get("link_id"),
+                    "node_a": node_a_name,
+                    "port_a": port_a,
+                    "node_b": node_b_name,
+                    "port_b": port_b
+                })
+
+            else:
+                raise ValueError(f"Unknown action: {action}. Valid actions: connect, disconnect")
+
+        except Exception as e:
+            # Operation failed - record it and stop
+            failed = {
+                "index": idx,
+                "action": action,
+                "operation": conn,
+                "reason": str(e)
+            }
+            break
+
+    # Build result
+    result = {"completed": completed}
+    if failed:
+        result["failed"] = failed
+
+    return json.dumps(result, indent=2)
+
+
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="GNS3 MCP Server")

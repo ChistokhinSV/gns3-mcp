@@ -27,27 +27,31 @@
 
 ### In Progress
 
-#### 🔄 Phase 3: Rewrite main.py MCP Tools (IN PROGRESS)
-**Status:** Imports updated, ready to rewrite tools
+None - Moving to Phase 4
 
-**Changes to make:**
+### Completed Phases (continued)
 
-1. **Console Tools (Next)**
+#### ✅ Phase 3: Rewrite main.py MCP Tools (COMPLETED)
+**Status:** All tool rewrites complete
+
+**Changes made:**
+
+1. **Console Tools** ✅
    - ✅ Added json and typing imports to main.py
-   - ⏳ Update `send_console(node_name, data)` - auto-connect
-   - ⏳ Update `read_console(node_name, diff=False)` - merge with read_console_diff
-   - ⏳ Update `disconnect_console(node_name)`
-   - ⏳ Remove: `connect_console`, `read_console_diff`, `list_console_sessions`
+   - ✅ Updated `send_console(node_name, data)` - auto-connect
+   - ✅ Updated `read_console(node_name, diff=False)` - merged read_console_diff
+   - ✅ Updated `disconnect_console(node_name)`
+   - ✅ Removed: `connect_console`, `read_console_diff`, `list_console_sessions`
 
-2. **Node Control Tools**
-   - ⏳ Create `set_node(node_name, action, x, y, z, locked, ports)`
-   - ⏳ Implement restart logic: 3 retries × 5s = 15s max
-   - ⏳ Remove: `start_node`, `stop_node`
+2. **Node Control Tools** ✅
+   - ✅ Created `set_node(node_name, action, x, y, z, locked, ports)`
+   - ✅ Implemented restart logic: 3 retries × 5s = 15s max
+   - ✅ Removed: `start_node`, `stop_node`
 
-3. **Connection Management Tools**
-   - ⏳ Create `set_connection(connections)` for batch link operations
-   - ⏳ Sequential execution with predictable state
-   - ⏳ Return: `{"completed": [...], "failed": {...}}`
+3. **Connection Management Tools** ✅
+   - ✅ Created `set_connection(connections)` for batch link operations
+   - ✅ Sequential execution with predictable state
+   - ✅ Returns: `{"completed": [...], "failed": {...}}`
 
 ### Pending Phases
 

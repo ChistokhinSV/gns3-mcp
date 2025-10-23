@@ -9,5 +9,9 @@
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "gns3-lab"
+  ],
+  "enableAllProjectMcpServers": true
 }
