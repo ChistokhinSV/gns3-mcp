@@ -1562,8 +1562,28 @@ async def export_topology_diagram(ctx: Context, output_path: str,
             # Extract SVG content (remove outer svg tags)
             svg = drawing['svg']
             import re
+
+            # Extract SVG dimensions
+            width_match = re.search(r'width="(\d+)"', svg)
+            height_match = re.search(r'height="(\d+)"', svg)
+            svg_width = int(width_match.group(1)) if width_match else 100
+            svg_height = int(height_match.group(1)) if height_match else 100
+
             svg_inner = re.sub(r'<svg[^>]*>', '', svg)
             svg_inner = re.sub(r'</svg>', '', svg_inner)
+
+            # Fix text elements without positioning attributes
+            # Add x, y, text-anchor, and dominant-baseline for proper centering
+            if '<text' in svg_inner and 'x=' not in svg_inner:
+                # Text element without x attribute - add positioning for vertical centering
+                # and left alignment with small padding
+                padding = 10
+                svg_inner = re.sub(
+                    r'<text\s+',
+                    f'<text x="{padding}" y="{svg_height // 2}" text-anchor="start" dominant-baseline="central" ',
+                    svg_inner,
+                    count=1
+                )
 
             svg_content += f'''  <g transform="translate({drawing['x']}, {drawing['y']})">
     {svg_inner}
