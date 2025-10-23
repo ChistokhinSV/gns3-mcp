@@ -38,6 +38,42 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 - Sessions are managed automatically by node name
 - Session timeout: 30 minutes of inactivity
 
+### Coordinate System and Topology Layout
+
+GNS3 uses a specific coordinate system for positioning elements:
+
+**Node Positioning:**
+- Node coordinates (x, y) represent the **top-left corner** of the node icon
+- Icon sizes:
+  - **PNG images**: 78×78 pixels (custom device icons)
+  - **SVG/internal icons**: 58×58 pixels (built-in icons)
+- Node center is at `(x + icon_size/2, y + icon_size/2)`
+- Example: Node at (100, 100) with PNG icon has center at (139, 139)
+
+**Label Positioning:**
+- Node labels are stored as **offsets from the node center**
+- GNS3 API returns: `label: {x: -10, y: 25, text: "Router1", rotation: 0}`
+- This means label is 10px left and 25px down from node center
+- Actual position: `(node_x + icon_size/2 + label_x, node_y + icon_size/2 + label_y)`
+
+**Link Connections:**
+- Links connect to the **center** of nodes, not the top-left corner
+- Connection point: `(node_x + icon_size/2, node_y + icon_size/2)`
+- When using `set_connection()`, specify which adapter and port on each node
+
+**Drawing Objects (Rectangles, Text, Ellipses):**
+- All drawing coordinates (x, y) represent the **top-left corner** of bounding box
+- Rectangle at (100, 100) with 200×100 size: top-left at (100, 100), bottom-right at (300, 200)
+- Ellipse at (100, 100) with rx=50, ry=30: bounding box top-left at (100, 100), center at (150, 130)
+- Text at (100, 100): starts rendering from that point
+- Z-order: 0 = behind nodes (backgrounds), 1 = in front of nodes (labels)
+
+**Topology Export:**
+- Use `export_topology_diagram()` to create SVG/PNG screenshots
+- Renders nodes with actual icons, links, drawings, and labels
+- All positioning respects the coordinate system above
+- Output includes visual status indicators (started/stopped nodes)
+
 ## Common Workflows
 
 ### Starting a Lab Environment

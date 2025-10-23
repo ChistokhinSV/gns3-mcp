@@ -1177,10 +1177,13 @@ async def create_node(ctx: Context, template_name: str, x: int, y: int,
 
     Args:
         template_name: Name of the template to use
-        x: X coordinate position
-        y: Y coordinate position
+        x: X coordinate position (top-left corner of node icon)
+        y: Y coordinate position (top-left corner of node icon)
         node_name: Optional custom name for the node
         compute_id: Compute ID (default: "local")
+
+    Note: Coordinates represent the top-left corner of the node icon.
+    Icon sizes are PNG: 78×78, SVG/internal: 58×58.
 
     Returns:
         JSON with created NodeInfo
@@ -1266,8 +1269,8 @@ async def create_rectangle(ctx: Context, x: int, y: int, width: int, height: int
     """Create a colored rectangle drawing
 
     Args:
-        x: X coordinate
-        y: Y coordinate
+        x: X coordinate (top-left corner)
+        y: Y coordinate (top-left corner)
         width: Rectangle width
         height: Rectangle height
         fill_color: Fill color (hex or name, default: white)
@@ -1315,8 +1318,8 @@ async def create_text(ctx: Context, text: str, x: int, y: int,
 
     Args:
         text: Text content
-        x: X coordinate
-        y: Y coordinate
+        x: X coordinate (top-left corner of text)
+        y: Y coordinate (top-left corner of text)
         font_size: Font size in points (default: 10)
         font_weight: Font weight - "normal" or "bold" (default: normal)
         font_family: Font family (default: "TypeWriter")
@@ -1388,14 +1391,17 @@ async def create_ellipse(ctx: Context, x: int, y: int, rx: int, ry: int,
     """Create an ellipse/circle drawing
 
     Args:
-        x: X coordinate (center)
-        y: Y coordinate (center)
+        x: X coordinate (top-left corner of bounding box)
+        y: Y coordinate (top-left corner of bounding box)
         rx: Horizontal radius
         ry: Vertical radius (use same as rx for a circle)
         fill_color: Fill color (hex or name, default: white)
         border_color: Border color (default: black)
         border_width: Border width in pixels (default: 2)
         z: Z-order/layer (default: 0 - behind nodes)
+
+    Note: The ellipse center will be at (x + rx, y + ry). For a circle
+    with radius 50 at position (100, 100), the center is at (150, 150).
 
     Returns:
         JSON with created drawing info
@@ -1439,6 +1445,13 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
     Creates a visual diagram of the current topology including nodes, links,
     and drawings with status indicators.
+
+    GNS3 Coordinate System:
+    - Node positions (x, y): Top-left corner of icon
+    - Node icon sizes: PNG images = 78×78, SVG/internal icons = 58×58
+    - Label positions: Stored as offsets from node center in GNS3
+    - Link connections: Connect to node centers (x + icon_size/2, y + icon_size/2)
+    - Drawing positions (x, y): Top-left corner
 
     Args:
         output_path: Base path for output files (without extension)
