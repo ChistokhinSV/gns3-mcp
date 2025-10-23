@@ -185,6 +185,57 @@ async def get_node_details(ctx: Context, node_name: str) -> str:
 
 
 @mcp.tool()
+async def get_links(ctx: Context) -> str:
+    """List all network links in the current project
+
+    Returns link details including link IDs (needed for disconnect),
+    connected nodes, ports, and link type. Use this before set_connection()
+    to check current topology and find link IDs for disconnection.
+
+    Output format: Link [ID]: NodeA port X <-> NodeB port Y (type)
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    if not app.current_project_id:
+        return "No project opened"
+
+    # Get links and nodes
+    links = await app.gns3.get_links(app.current_project_id)
+    nodes = await app.gns3.get_nodes(app.current_project_id)
+
+    # Create node ID to name mapping
+    node_map = {n['node_id']: n['name'] for n in nodes}
+
+    if not links:
+        return "No links in project"
+
+    # Format each link
+    result = []
+    for link in links:
+        link_id = link['link_id']
+        link_type = link.get('link_type', 'unknown')
+
+        # Get node endpoints
+        link_nodes = link.get('nodes', [])
+        if len(link_nodes) >= 2:
+            node_a = link_nodes[0]
+            node_b = link_nodes[1]
+
+            node_a_name = node_map.get(node_a['node_id'], 'Unknown')
+            node_b_name = node_map.get(node_b['node_id'], 'Unknown')
+
+            port_a = node_a.get('port_number', '?')
+            port_b = node_b.get('port_number', '?')
+
+            result.append(
+                f"Link [{link_id}]: {node_a_name} port {port_a} <-> "
+                f"{node_b_name} port {port_b} ({link_type})"
+            )
+
+    return "\n".join(result) if result else "No valid links found"
+
+
+@mcp.tool()
 async def set_node(ctx: Context,
                    node_name: str,
                    action: Optional[str] = None,
@@ -411,8 +462,16 @@ async def disconnect_console(ctx: Context, node_name: str) -> str:
 async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str:
     """Manage network connections (links) in batch
 
+    IMPORTANT: Call get_links() first to check current topology and find link IDs.
+    Ports must be free before connecting - disconnect existing links first if needed.
+
     Executes connection operations sequentially. If an operation fails,
     returns status showing what completed and what failed.
+
+    Workflow:
+        1. Call get_links() to see current topology
+        2. Identify link IDs to disconnect (if needed)
+        3. Call set_connection() with disconnect + connect operations
 
     Args:
         connections: List of connection operations to perform.

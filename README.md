@@ -180,7 +180,11 @@ Based on traffic analysis, typical setup:
 - `disconnect_console(node_name)` - **[v0.2.0]** Close console session
 
 ### Link Management
+- `get_links()` - **[v0.2.1]** List all network links with IDs, nodes, and ports
+  - Shows link IDs needed for disconnection
+  - Displays which ports are in use
 - `set_connection(connections)` - **[v0.2.0]** Batch connect/disconnect links
+  - **Use get_links() first** to check topology
   - Sequential execution with predictable state
   - Returns completed and failed operations
 
@@ -241,18 +245,19 @@ for router in ["R1", "R2", "R3"]:
     disconnect_console(router)
 ```
 
-### Manage Network Topology (v0.2.0)
+### Manage Network Topology (v0.2.1)
 
 ```python
-# Get current links
-links = get_links(project_id)
+# 1. Check current topology
+get_links()
+# Output shows: Link [abc-123]: R1 port 0 <-> NAT1 port 0 (ethernet)
 
-# Batch link operations
+# 2. Batch link operations (disconnect then connect)
 set_connection([
-    # Disconnect old link
-    {"action": "disconnect", "link_id": "old-link-id"},
+    # Disconnect old link (use link_id from get_links output)
+    {"action": "disconnect", "link_id": "abc-123"},
 
-    # Connect R1 to Switch1
+    # Connect R1 to Switch1 (port 0 now free)
     {"action": "connect", "node_a": "R1", "port_a": 0,
      "node_b": "Switch1", "port_b": 3},
 

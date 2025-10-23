@@ -201,19 +201,22 @@ connections = [
 ```
 
 **Best Practices:**
-- Get link IDs from `get_links()` before disconnecting
-- Check port availability with `list_nodes` or existing links
+- **Always** call `get_links()` first to check current topology
+- Get link IDs from output (in brackets) for disconnection
+- Disconnect existing links before connecting to occupied ports
 - Operations stop at first failure for predictable state
 - Adapter 0 is used by default (suitable for most devices)
 
 **Example - Rewire topology:**
 ```python
-# 1. Get current links to find link_id
-links = get_links(project_id)
+# 1. Check current topology
+get_links()
+# Output: Link [abc-123]: R1 port 0 <-> NAT1 port 0 (ethernet)
+#         Link [def-456]: R2 port 0 <-> Switch1 port 1 (ethernet)
 
 # 2. Disconnect old link and create new one
 set_connection([
-    {"action": "disconnect", "link_id": "old-link-id"},
+    {"action": "disconnect", "link_id": "abc-123"},
     {"action": "connect", "node_a": "R1", "port_a": 0,
      "node_b": "Switch1", "port_b": 3}
 ])

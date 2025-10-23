@@ -2,12 +2,12 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Control and automate GNS3 network labs through Claude",
-  "long_description": "This desktop extension provides comprehensive control over GNS3 network simulation labs. Features unified node control, auto-connecting console sessions, batch link management, and node positioning. Supports GNS3 v3 API with telnet console access for router configuration and troubleshooting. Version 0.2.0 introduces breaking changes for simplified API and improved usability.",
+  "long_description": "This desktop extension provides comprehensive control over GNS3 network simulation labs. Features unified node control, auto-connecting console sessions, link discovery and management, and node positioning. Supports GNS3 v3 API with telnet console access for router configuration and troubleshooting. Version 0.2.1 adds get_links tool for topology discovery.",
   "author": {
-    "name": "GNS3 MCP Contributors",
-    "email": "noreply@example.com"
+    "name": "Sergei Chistokhin",
+    "email": "Sergei@Chistokhin.com"
   },
   "server": {
     "type": "python",
@@ -72,6 +72,10 @@
     {
       "name": "get_node_details",
       "description": "Get detailed information about a specific node"
+    },
+    {
+      "name": "get_links",
+      "description": "List all network links with IDs, connected nodes, and ports (use before set_connection)"
     },
     {
       "name": "set_node",
