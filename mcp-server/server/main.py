@@ -1490,13 +1490,13 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 label_x = label_info.get('x', 0)
                 label_y = label_info.get('y', icon_size // 2 + 20)
 
-                # Account for node icon (centered at x,y)
-                min_x = min(min_x, x - icon_size // 2)
-                max_x = max(max_x, x + icon_size // 2)
-                min_y = min(min_y, y - icon_size // 2)
-                max_y = max(max_y, y + icon_size // 2)
+                # Account for node icon (top-left at x,y)
+                min_x = min(min_x, x)
+                max_x = max(max_x, x + icon_size)
+                min_y = min(min_y, y)
+                max_y = max(max_y, y + icon_size)
 
-                # Account for label position (relative to node center)
+                # Account for label position (relative to node top-left)
                 label_abs_x = x + label_x
                 label_abs_y = y + label_y
                 min_x = min(min_x, label_abs_x - 50)  # Approximate text width
@@ -1661,10 +1661,11 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 label_transform = f' transform="rotate({label_rotation} {label_x} {label_y})"'
 
             # Render node with icon or final fallback
+            # Note: GNS3 coordinates are top-left corner of icon
             if icon_data:
                 # Use actual or fallback icon
                 svg_content += f'''  <g transform="translate({x}, {y})">
-    <image href="{icon_data}" x="{-icon_size//2}" y="{-icon_size//2}" width="{icon_size}" height="{icon_size}"/>
+    <image href="{icon_data}" x="0" y="0" width="{icon_size}" height="{icon_size}"/>
     <text class="node-label" x="{label_x}" y="{label_y}"{label_transform}{style_attrs}>{label_text}</text>
   </g>
 '''
@@ -1672,7 +1673,7 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 # Final fallback: colored rectangle with status
                 status_class = f"node-{status}"
                 svg_content += f'''  <g transform="translate({x}, {y})">
-    <rect class="node {status_class}" x="-40" y="-40" width="80" height="80" rx="5"/>
+    <rect class="node {status_class}" x="0" y="0" width="80" height="80" rx="5"/>
     <text class="node-label" x="{label_x}" y="{label_y}"{label_transform}{style_attrs}>{label_text}</text>
   </g>
 '''
