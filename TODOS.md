@@ -53,12 +53,21 @@ None - Moving to Phase 4
    - ✅ Sequential execution with predictable state
    - ✅ Returns: `{"completed": [...], "failed": {...}}`
 
-### Pending Phases
+#### ✅ Phase 4: Test Script for Port Field (COMPLETED)
+**File:** `tests/test_port_field.py`
 
-#### ⏳ Phase 4: Test Script for Port Field
-- Create test to verify `port_number` vs `adapter_number`
-- Test with actual GNS3 links
-- Adjust set_connection if needed
+**Test Results:**
+- ✅ `port_number` field verified and working correctly
+- ✅ Successfully created test link between switches
+- ✅ Confirmed GNS3 API uses both `adapter_number` and `port_number`
+- ✅ No adjustment needed to `set_connection` tool
+
+**Findings:**
+- Existing links in GNS3 use structure: `{'node_id', 'adapter_number', 'port_number', 'label'}`
+- Link creation with `port_number` works as expected
+- Tool correctly avoids port conflicts by checking existing links
+
+### Pending Phases
 
 #### ⏳ Phase 5: Update Skill Documentation
 **File: `skill/SKILL.md`**
