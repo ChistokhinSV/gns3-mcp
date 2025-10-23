@@ -1557,6 +1557,16 @@ async def export_topology_diagram(ctx: Context, output_path: str,
   </g>
 '''
 
+        # Pre-calculate icon sizes for all nodes
+        # PNG images: 78×78, SVG/internal icons: 58×58
+        node_icon_sizes = {}
+        for node in nodes:
+            symbol = node.get('symbol', '')
+            if symbol and symbol.lower().endswith('.png'):
+                node_icon_sizes[node['node_id']] = 78
+            else:
+                node_icon_sizes[node['node_id']] = 58
+
         # Add links
         svg_content += '\n  <!-- Links -->\n'
         node_map = {n['node_id']: n for n in nodes}
@@ -1569,8 +1579,14 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 node_a = node_map[node_a_id]
                 node_b = node_map[node_b_id]
 
-                x1, y1 = node_a['x'], node_a['y']
-                x2, y2 = node_b['x'], node_b['y']
+                # Links connect to center of nodes (offset from top-left by icon_size/2)
+                icon_size_a = node_icon_sizes.get(node_a_id, 58)
+                icon_size_b = node_icon_sizes.get(node_b_id, 58)
+
+                x1 = node_a['x'] + icon_size_a // 2
+                y1 = node_a['y'] + icon_size_a // 2
+                x2 = node_b['x'] + icon_size_b // 2
+                y2 = node_b['y'] + icon_size_b // 2
 
                 svg_content += f'  <line class="link" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>\n'
 
@@ -1643,10 +1659,14 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                         icon_data = None
 
             # Extract label information from GNS3 data
+            # GNS3 stores label positions relative to node center in UI,
+            # but we render nodes with top-left origin, so offset by icon_size/2
             label_info = node.get('label', {})
             label_text = label_info.get('text', name)
-            label_x = label_info.get('x', 0)
-            label_y = label_info.get('y', icon_size//2 + 20)
+            label_x_raw = label_info.get('x', 0)
+            label_y_raw = label_info.get('y', icon_size//2 + 20)
+            label_x = label_x_raw + icon_size // 2
+            label_y = label_y_raw + icon_size // 2
             label_rotation = label_info.get('rotation', 0)
             label_style = label_info.get('style', '')
 
