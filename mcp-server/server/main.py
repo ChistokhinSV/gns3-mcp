@@ -1576,12 +1576,12 @@ async def export_topology_diagram(ctx: Context, output_path: str,
             # Add x, y, text-anchor, and dominant-baseline for proper centering
             if '<text' in svg_inner and 'x="' not in svg_inner:
                 # Text element without x attribute - add positioning for vertical centering
-                # and left alignment with small padding
+                # and right alignment with small padding
                 padding = 10
                 # Insert positioning attributes right after <text tag
                 svg_inner = svg_inner.replace(
                     '<text',
-                    f'<text x="{padding}" y="{svg_height // 2}" text-anchor="start" dominant-baseline="central"',
+                    f'<text x="{svg_width - padding}" y="{svg_height // 2}" text-anchor="end" dominant-baseline="central"',
                     1  # Only replace first occurrence
                 )
 
@@ -1692,14 +1692,11 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                         icon_data = None
 
             # Extract label information from GNS3 data
-            # GNS3 stores label positions relative to node center in UI,
-            # but we render nodes with top-left origin, so offset by icon_size/2
+            # GNS3 stores label offset from node top-left to label box top-left
             label_info = node.get('label', {})
             label_text = label_info.get('text', name)
-            label_x_raw = label_info.get('x', 0)
-            label_y_raw = label_info.get('y', icon_size//2 + 20)
-            label_x = label_x_raw + icon_size // 2
-            label_y = label_y_raw + icon_size // 2
+            label_x = label_info.get('x', 0)
+            label_y = label_info.get('y', icon_size//2 + 20)
             label_rotation = label_info.get('rotation', 0)
             label_style = label_info.get('style', '')
 
