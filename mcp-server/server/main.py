@@ -1549,7 +1549,7 @@ async def export_topology_diagram(ctx: Context, output_path: str,
       .node-stopped {{ fill: #ff9999; }}
       .node-started {{ fill: #99ff99; }}
       .node-suspended {{ fill: #ffff99; }}
-      .node-label {{ font-family: Arial, sans-serif; font-size: 12px; text-anchor: start; dominant-baseline: hanging; }}
+      .node-label {{ text-anchor: start; dominant-baseline: hanging; }}
       .link {{ stroke: #666; stroke-width: 2; fill: none; }}
     </style>
   </defs>
@@ -1574,15 +1574,38 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
             # Fix text elements without positioning attributes
             # Add x, y, text-anchor, and dominant-baseline for proper centering
+            # While preserving existing font attributes
             if '<text' in svg_inner and 'x="' not in svg_inner:
-                # Text element without x attribute - add positioning for vertical centering
-                # and right alignment with small padding
+                # Extract existing font attributes
+                font_family_match = re.search(r'font-family="([^"]*)"', svg_inner)
+                font_size_match = re.search(r'font-size="([^"]*)"', svg_inner)
+                font_weight_match = re.search(r'font-weight="([^"]*)"', svg_inner)
+                fill_match = re.search(r'fill="([^"]*)"', svg_inner)
+
+                # Build attributes string preserving existing font settings
+                attrs = []
+                if font_family_match:
+                    attrs.append(f'font-family="{font_family_match.group(1)}"')
+                if font_size_match:
+                    attrs.append(f'font-size="{font_size_match.group(1)}"')
+                if font_weight_match:
+                    attrs.append(f'font-weight="{font_weight_match.group(1)}"')
+                if fill_match:
+                    attrs.append(f'fill="{fill_match.group(1)}"')
+
+                # Add positioning for vertical centering and right alignment
                 padding = 10
-                # Insert positioning attributes right after <text tag
-                svg_inner = svg_inner.replace(
-                    '<text',
-                    f'<text x="{svg_width - padding}" y="{svg_height // 2}" text-anchor="end" dominant-baseline="central"',
-                    1  # Only replace first occurrence
+                attrs.append(f'x="{svg_width - padding}"')
+                attrs.append(f'y="{svg_height // 2}"')
+                attrs.append('text-anchor="end"')
+                attrs.append('dominant-baseline="central"')
+
+                # Replace text tag with preserved and new attributes
+                svg_inner = re.sub(
+                    r'<text[^>]*>',
+                    f'<text {" ".join(attrs)}>',
+                    svg_inner,
+                    count=1
                 )
 
             svg_content += f'''  <g transform="translate({drawing['x']}, {drawing['y']})">
