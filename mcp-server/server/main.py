@@ -1618,12 +1618,30 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                         logger.warning(f"Failed to fetch fallback icon {fallback_symbol}: {e}")
                         icon_data = None
 
+            # Extract label information from GNS3 data
+            label_info = node.get('label', {})
+            label_text = label_info.get('text', name)
+            label_x = label_info.get('x', 0)
+            label_y = label_info.get('y', icon_size//2 + 20)
+            label_rotation = label_info.get('rotation', 0)
+            label_style = label_info.get('style', '')
+
+            # Parse style string into SVG attributes
+            style_attrs = ''
+            if label_style:
+                style_attrs = f' style="{label_style}"'
+
+            # Build label transform (rotation around label origin)
+            label_transform = ''
+            if label_rotation != 0:
+                label_transform = f' transform="rotate({label_rotation} {label_x} {label_y})"'
+
             # Render node with icon or final fallback
             if icon_data:
                 # Use actual or fallback icon
                 svg_content += f'''  <g transform="translate({x}, {y})">
     <image href="{icon_data}" x="{-icon_size//2}" y="{-icon_size//2}" width="{icon_size}" height="{icon_size}"/>
-    <text class="node-label" x="0" y="{icon_size//2 + 20}">{name}</text>
+    <text class="node-label" x="{label_x}" y="{label_y}"{label_transform}{style_attrs}>{label_text}</text>
   </g>
 '''
             else:
@@ -1631,7 +1649,7 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 status_class = f"node-{status}"
                 svg_content += f'''  <g transform="translate({x}, {y})">
     <rect class="node {status_class}" x="-40" y="-40" width="80" height="80" rx="5"/>
-    <text class="node-label" x="0" y="{60}">{name}</text>
+    <text class="node-label" x="{label_x}" y="{label_y}"{label_transform}{style_attrs}>{label_text}</text>
   </g>
 '''
 
