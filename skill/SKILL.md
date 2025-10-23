@@ -26,15 +26,17 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 ### Console Access
 - Nodes have **console** ports for CLI access
 - Console types:
-  - `telnet`: CLI access (most routers/switches)
-  - `vnc`: Graphical access (desktops/servers)
-  - `spice+agent`: Enhanced graphical
+  - `telnet`: CLI access (most routers/switches) - currently supported
+  - `vnc`: Graphical access (desktops/servers) - not yet supported
+  - `spice+agent`: Enhanced graphical - not yet supported
   - `none`: No console
-- Console workflow:
-  1. Connect using `connect_console(node_name)` → get session_id
-  2. Send commands with `send_console(session_id, command)`
-  3. Read output with `read_console_diff(session_id)` for new output only
-  4. Disconnect with `disconnect_console(session_id)`
+- **Auto-connect workflow** (v0.2.0):
+  1. Just use `send_console(node_name, command)` - automatically connects if needed
+  2. Read output with `read_console(node_name)` for full buffer
+  3. Or use `read_console(node_name, diff=True)` for new output only
+  4. Disconnect with `disconnect_console(node_name)` when done
+- Sessions are managed automatically by node name
+- Session timeout: 30 minutes of inactivity
 
 ## Common Workflows
 
@@ -52,13 +54,22 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 ### Configuring a Router via Console
 
 ```
-1. Ensure node is started
-2. Connect to console: connect_console("Router1")
-3. Send initial command: send_console(session_id, "\n")
-4. Read output to see prompt: read_console_diff(session_id)
-5. Send configuration commands one at a time
-6. Always read output after each command to verify
-7. Disconnect when done
+1. Ensure node is started (use set_node if needed)
+2. Send initial newline to wake console: send_console("Router1", "\n")
+3. Read output to see prompt: read_console("Router1", diff=True)
+4. Send configuration commands one at a time
+5. Always read output after each command to verify
+6. Use diff=True to see only new output
+7. Disconnect when done: disconnect_console("Router1")
+```
+
+**Example:**
+```
+send_console("R1", "\n")
+read_console("R1", diff=True)  # See prompt
+send_console("R1", "show ip interface brief\n")
+read_console("R1", diff=True)  # See command output
+disconnect_console("R1")  # Clean up when done
 ```
 
 ### Console Best Practices
@@ -67,7 +78,9 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 - **Wait** 1-2 seconds between commands for device processing
 - **Send** `\n` (newline) first to wake up console
 - **Look for** prompts (>, #) in output to confirm device is ready
-- **Use** `read_console_diff()` to avoid re-reading old output
+- **Use** `diff=True` parameter to see only new output since last read
+- **No need** to manually connect - auto-connects on first send/read
+- **Disconnect** when done to free resources (30min timeout otherwise)
 - For RouterOS (MikroTik): default user `admin`, empty password
 - For Arista vEOS: default user `admin`, no password
 
@@ -122,16 +135,132 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 ### Session Timeout
 - Console sessions expire after 30 minutes of inactivity
 - Always disconnect when done to free resources
-- List sessions to see active connections
+- Sessions managed by node_name (no manual tracking needed)
 
 ## Multi-Node Operations
 
 When working with multiple nodes:
-1. Start nodes in logical order
-2. Use separate console sessions per device
-3. Track session IDs carefully (store in conversation)
-4. Configure one device at a time, verify before moving on
-5. Disconnect sessions when done
+1. Start nodes using `set_node(node_name, action='start')` or batch operations
+2. Console sessions identified by node_name (no manual tracking needed)
+3. Configure one device at a time, verify before moving on
+4. Read output with `diff=True` to avoid confusion between devices
+5. Disconnect sessions when done: `disconnect_console(node_name)`
+
+**Example - Configure multiple routers:**
+```
+# Start all routers
+set_node("R1", action="start")
+set_node("R2", action="start")
+
+# Configure R1
+send_console("R1", "\n")
+read_console("R1", diff=True)
+send_console("R1", "configure terminal\n")
+read_console("R1", diff=True)
+# ... more commands ...
+disconnect_console("R1")
+
+# Configure R2 (same pattern)
+send_console("R2", "\n")
+# ... configure R2 ...
+disconnect_console("R2")
+```
+
+## Managing Network Connections
+
+### Link Management with set_connection
+
+Use `set_connection(connections)` for batch link operations. Operations execute sequentially (top-to-bottom) with predictable state on failure.
+
+**Connection Format:**
+```python
+connections = [
+    # Disconnect a link
+    {"action": "disconnect", "link_id": "abc123"},
+
+    # Connect two nodes
+    {"action": "connect", "node_a": "R1", "port_a": 0,
+     "node_b": "R2", "port_b": 1}
+]
+```
+
+**Returns:**
+```json
+{
+  "completed": [
+    {"index": 0, "action": "disconnect", "link_id": "abc123"},
+    {"index": 1, "action": "connect", "link_id": "new-id",
+     "node_a": "R1", "port_a": 0, "node_b": "R2", "port_b": 1}
+  ],
+  "failed": {
+    "index": 2,
+    "action": "connect",
+    "reason": "Port already in use"
+  }
+}
+```
+
+**Best Practices:**
+- Get link IDs from `get_links()` before disconnecting
+- Check port availability with `list_nodes` or existing links
+- Operations stop at first failure for predictable state
+- Adapter 0 is used by default (suitable for most devices)
+
+**Example - Rewire topology:**
+```python
+# 1. Get current links to find link_id
+links = get_links(project_id)
+
+# 2. Disconnect old link and create new one
+set_connection([
+    {"action": "disconnect", "link_id": "old-link-id"},
+    {"action": "connect", "node_a": "R1", "port_a": 0,
+     "node_b": "Switch1", "port_b": 3}
+])
+```
+
+## Node Positioning & Configuration
+
+### Unified Node Control with set_node
+
+Use `set_node(node_name, ...)` for both control and configuration:
+
+**Control Actions:**
+- `action="start"` - Start the node
+- `action="stop"` - Stop the node
+- `action="suspend"` - Suspend node (VM only)
+- `action="reload"` - Reload node
+- `action="restart"` - Stop, wait (3 retries × 5s), then start
+
+**Configuration Properties:**
+- `x`, `y` - Position on canvas
+- `z` - Z-order (layer) for overlapping nodes
+- `locked` - Lock position (True/False)
+- `ports` - Number of ports (ethernet switches only)
+
+**Examples:**
+```python
+# Start a node
+set_node("R1", action="start")
+
+# Restart with retry logic
+set_node("R1", action="restart")  # Waits for clean stop
+
+# Move and lock position
+set_node("R1", x=100, y=200, locked=True)
+
+# Configure switch ports
+set_node("Switch1", ports=16)
+
+# Combined operation
+set_node("R1", action="start", x=150, y=300)
+```
+
+**Restart Behavior:**
+- Stops node and polls status (3 attempts × 5 seconds)
+- Waits for confirmed stop before starting
+- Returns all retry attempts in result
+- Use for nodes that need clean restart
 
 ## Automation Tips
 
@@ -140,6 +269,8 @@ When working with multiple nodes:
 - **Verify each step** before proceeding (don't assume success)
 - **Handle errors gracefully** (node might not start immediately)
 - **Clean up** console sessions when done
+- **Use set_node** for node lifecycle operations (replaces start/stop)
+- **Use set_connection** for topology changes (batch operations)
 
 ## Example Workflows
 
