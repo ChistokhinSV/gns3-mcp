@@ -89,17 +89,87 @@ None - Moving to Phase 4
 - ✅ Added comprehensive Migration Guide (v0.1.x → v0.2.0)
 - ✅ Updated API Reference with new endpoints
 
-### Pending Phases
+#### ✅ Phase 7: Version Update and Testing (VERSION UPDATE COMPLETE)
+**Files:** `mcp-server/manifest.json`
 
-#### ⏳ Phase 7: Version Update and Testing
-- Update version: 0.1.4 → 0.2.0 (breaking changes)
-- Update manifest.json
-- Repackage .mcpb extension
-- Test all new features:
-  - Console auto-connect
-  - Node restart with retries
-  - Link management
-  - Port configuration
+**Version Update:**
+- ✅ Updated version: 0.1.4 → 0.2.0
+- ✅ Updated long_description with v0.2.0 features
+- ✅ Updated tools list (removed 5, updated 3, added 1)
+
+**Tools Changes:**
+- ✅ Removed: start_node, stop_node, connect_console, read_console_diff, list_console_sessions
+- ✅ Updated: send_console, read_console, disconnect_console
+- ✅ Added: set_node, set_connection
+
+### Remaining Tasks
+
+#### ⏳ Packaging and Testing
+**Status:** Code complete, ready for packaging
+
+**Next Steps:**
+1. Repackage .mcpb extension:
+   ```bash
+   cd mcp-server
+   npx @anthropic-ai/mcpb pack
+   ```
+
+2. Install in Claude Desktop (optional):
+   - Double-click mcp-server.mcpb
+   - Configure credentials
+   - Restart Claude Desktop
+
+3. Test new features:
+   - ✅ Console auto-connect (tested during development)
+   - ✅ Node restart with retries (implemented and tested)
+   - ✅ Link management (tested with test_port_field.py)
+   - ⏳ Integration testing with all features
+
+4. Claude Code testing:
+   - Server auto-loads from .mcp.json
+   - Start new conversation to access tools
+   - Test all v0.2.0 features
+
+## Summary
+
+### v0.2.0 Complete - Breaking Changes
+
+**All 7 Phases Complete:**
+1. ✅ GNS3Client API methods (suspend, reload, update, create_link, delete_link)
+2. ✅ ConsoleManager node_name tracking and convenience methods
+3. ✅ main.py tool rewrites (set_node, set_connection, console auto-connect)
+4. ✅ port_number field verification (test script passed)
+5. ✅ Skill documentation updates (SKILL.md)
+6. ✅ README updates and migration guide
+7. ✅ Version bump to 0.2.0 and manifest update
+
+**Breaking Changes:**
+- Console operations use node_name instead of session_id
+- Auto-connect eliminates connect_console tool
+- Unified set_node replaces start_node/stop_node
+- Merged read_console variants (diff parameter)
+- Removed list_console_sessions (automatic management)
+
+**New Features:**
+- Auto-connecting console sessions
+- Unified node control with restart retry logic
+- Batch link management (connect/disconnect)
+- Node positioning and configuration
+- Clean console output (ANSI stripped)
+
+**Files Modified:**
+- mcp-server/server/main.py
+- mcp-server/server/gns3_client.py
+- mcp-server/server/console_manager.py
+- mcp-server/manifest.json
+- skill/SKILL.md
+- README.md
+- tests/test_port_field.py (new)
+- TODOS.md
+
+**Git Commits:** 6 commits covering all phases
+
+**Ready for:** Packaging and user testing
 
 ## Implementation Details
 
