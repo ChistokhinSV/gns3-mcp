@@ -1592,16 +1592,42 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                     logger.warning(f"Failed to fetch icon for {symbol}: {e}")
                     icon_data = None
 
-            # Render node with icon or fallback
+            # Try category-based fallback if primary icon failed
+            if not icon_data:
+                # Map node_type to category fallback icons
+                node_type = node.get('node_type', '')
+                fallback_symbol = None
+
+                if node_type == 'qemu':
+                    # Most QEMU nodes are routers
+                    fallback_symbol = ':/symbols/affinity/circle/blue/router.svg'
+                elif node_type in ['ethernet_switch', 'ethernet_hub', 'atm_switch', 'frame_relay_switch']:
+                    fallback_symbol = ':/symbols/affinity/square/blue/switch_multilayer.svg'
+                elif node_type in ['nat', 'vpcs', 'cloud', 'docker']:
+                    fallback_symbol = ':/symbols/classic/computer.svg'
+                else:
+                    fallback_symbol = ':/symbols/affinity/circle/blue/router.svg'  # Default
+
+                # Try to fetch category fallback icon
+                if fallback_symbol:
+                    try:
+                        raw_bytes = await app.gns3.get_symbol_raw(fallback_symbol)
+                        b64_data = base64.b64encode(raw_bytes).decode('utf-8')
+                        icon_data = f"data:image/svg+xml;base64,{b64_data}"
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch fallback icon {fallback_symbol}: {e}")
+                        icon_data = None
+
+            # Render node with icon or final fallback
             if icon_data:
-                # Use actual icon
+                # Use actual or fallback icon
                 svg_content += f'''  <g transform="translate({x}, {y})">
     <image href="{icon_data}" x="{-icon_size//2}" y="{-icon_size//2}" width="{icon_size}" height="{icon_size}"/>
     <text class="node-label" x="0" y="{icon_size//2 + 20}">{name}</text>
   </g>
 '''
             else:
-                # Fallback: colored rectangle with status
+                # Final fallback: colored rectangle with status
                 status_class = f"node-{status}"
                 svg_content += f'''  <g transform="translate({x}, {y})">
     <rect class="node {status_class}" x="-40" y="-40" width="80" height="80" rx="5"/>
