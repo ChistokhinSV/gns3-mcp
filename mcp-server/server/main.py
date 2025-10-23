@@ -1,7 +1,14 @@
-"""GNS3 MCP Server v0.4.0
+"""GNS3 MCP Server v0.4.2
 
 Model Context Protocol server for GNS3 lab automation.
 Provides tools for managing projects, nodes, links, console access, and drawings.
+
+Version 0.4.2 - Topology Export:
+- NEW: export_topology_diagram() - Export topology as SVG/PNG with nodes, links, drawings
+
+Version 0.4.1 - Drawing Management:
+- NEW: delete_drawing() - Delete drawing objects
+- NEW: create_ellipse() - Create circles and ellipses
 
 Version 0.4.0 - Node Creation & Drawing Objects:
 - NEW: delete_node() - Delete nodes from project
@@ -1417,6 +1424,188 @@ async def create_ellipse(ctx: Context, x: int, y: int, rx: int, ry: int,
     except Exception as e:
         return json.dumps(ErrorResponse(
             error="Failed to create ellipse",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
+@mcp.tool()
+async def export_topology_diagram(ctx: Context, output_path: str,
+                                  format: str = "both",
+                                  crop_x: Optional[int] = None,
+                                  crop_y: Optional[int] = None,
+                                  crop_width: Optional[int] = None,
+                                  crop_height: Optional[int] = None) -> str:
+    """Export topology as SVG and/or PNG diagram
+
+    Creates a visual diagram of the current topology including nodes, links,
+    and drawings with status indicators.
+
+    Args:
+        output_path: Base path for output files (without extension)
+        format: Output format - "svg", "png", or "both" (default: "both")
+        crop_x: Optional crop X coordinate (default: auto-fit to content)
+        crop_y: Optional crop Y coordinate (default: auto-fit to content)
+        crop_width: Optional crop width (default: auto-fit to content)
+        crop_height: Optional crop height (default: auto-fit to content)
+
+    Returns:
+        JSON with created file paths and diagram info
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    try:
+        # Get all topology data
+        nodes = await app.cache.get_nodes(
+            app.current_project_id,
+            lambda pid: app.gns3.get_nodes(pid)
+        )
+        links = await app.cache.get_links(
+            app.current_project_id,
+            lambda pid: app.gns3.get_links(pid)
+        )
+        drawings = await app.gns3.get_drawings(app.current_project_id)
+
+        # Calculate bounds
+        if crop_x is None or crop_y is None or crop_width is None or crop_height is None:
+            # Auto-calculate bounds
+            min_x = min_y = float('inf')
+            max_x = max_y = float('-inf')
+
+            for node in nodes:
+                x, y = node['x'], node['y']
+                min_x = min(min_x, x - 256)  # Node icon half-width
+                max_x = max(max_x, x + 256)
+                min_y = min(min_y, y - 256)
+                max_y = max(max_y, y + 256)
+
+            for drawing in drawings:
+                # Parse SVG to get dimensions (basic parsing)
+                svg = drawing['svg']
+                if 'width=' in svg and 'height=' in svg:
+                    import re
+                    w_match = re.search(r'width="(\d+)"', svg)
+                    h_match = re.search(r'height="(\d+)"', svg)
+                    if w_match and h_match:
+                        w, h = int(w_match.group(1)), int(h_match.group(1))
+                        min_x = min(min_x, drawing['x'])
+                        max_x = max(max_x, drawing['x'] + w)
+                        min_y = min(min_y, drawing['y'])
+                        max_y = max(max_y, drawing['y'] + h)
+
+            # Add padding
+            padding = 50
+            crop_x = int(min_x - padding)
+            crop_y = int(min_y - padding)
+            crop_width = int(max_x - min_x + padding * 2)
+            crop_height = int(max_y - min_y + padding * 2)
+
+        # Generate SVG
+        svg_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="{crop_width}" height="{crop_height}"
+     viewBox="{crop_x} {crop_y} {crop_width} {crop_height}">
+  <defs>
+    <style>
+      .node {{ stroke: #333; stroke-width: 2; }}
+      .node-stopped {{ fill: #ff9999; }}
+      .node-started {{ fill: #99ff99; }}
+      .node-suspended {{ fill: #ffff99; }}
+      .node-label {{ font-family: Arial, sans-serif; font-size: 12px; text-anchor: middle; }}
+      .link {{ stroke: #666; stroke-width: 2; fill: none; }}
+    </style>
+  </defs>
+
+  <!-- Drawings (background) -->
+'''
+
+        # Add drawings sorted by z-order
+        for drawing in sorted(drawings, key=lambda d: d.get('z', 0)):
+            # Extract SVG content (remove outer svg tags)
+            svg = drawing['svg']
+            import re
+            svg_inner = re.sub(r'<svg[^>]*>', '', svg)
+            svg_inner = re.sub(r'</svg>', '', svg_inner)
+
+            svg_content += f'''  <g transform="translate({drawing['x']}, {drawing['y']})">
+    {svg_inner}
+  </g>
+'''
+
+        # Add links
+        svg_content += '\n  <!-- Links -->\n'
+        node_map = {n['node_id']: n for n in nodes}
+
+        for link in links:
+            node_a_id = link['nodes'][0]['node_id']
+            node_b_id = link['nodes'][1]['node_id']
+
+            if node_a_id in node_map and node_b_id in node_map:
+                node_a = node_map[node_a_id]
+                node_b = node_map[node_b_id]
+
+                x1, y1 = node_a['x'], node_a['y']
+                x2, y2 = node_b['x'], node_b['y']
+
+                svg_content += f'  <line class="link" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>\n'
+
+        # Add nodes
+        svg_content += '\n  <!-- Nodes -->\n'
+        for node in nodes:
+            x, y = node['x'], node['y']
+            status = node['status']
+            name = node['name']
+
+            # Node as rectangle with status color
+            status_class = f"node-{status}"
+
+            svg_content += f'''  <g transform="translate({x}, {y})">
+    <rect class="node {status_class}" x="-40" y="-30" width="80" height="60" rx="5"/>
+    <text class="node-label" x="0" y="5">{name}</text>
+  </g>
+'''
+
+        svg_content += '</svg>\n'
+
+        # Save SVG
+        files_created = []
+        if format in ["svg", "both"]:
+            svg_path = f"{output_path}.svg"
+            with open(svg_path, 'w', encoding='utf-8') as f:
+                f.write(svg_content)
+            files_created.append(svg_path)
+
+        # Save PNG (if requested and cairosvg available)
+        if format in ["png", "both"]:
+            try:
+                import cairosvg
+                png_path = f"{output_path}.png"
+                cairosvg.svg2png(bytestring=svg_content.encode('utf-8'),
+                               write_to=png_path)
+                files_created.append(png_path)
+            except ImportError:
+                return json.dumps({
+                    "warning": "PNG export requires cairosvg library",
+                    "files_created": files_created,
+                    "bounds": {"x": crop_x, "y": crop_y, "width": crop_width, "height": crop_height},
+                    "note": "Install with: pip install cairosvg"
+                }, indent=2)
+
+        return json.dumps({
+            "message": "Topology diagram exported successfully",
+            "files_created": files_created,
+            "bounds": {"x": crop_x, "y": crop_y, "width": crop_width, "height": crop_height},
+            "nodes_count": len(nodes),
+            "links_count": len(links),
+            "drawings_count": len(drawings)
+        }, indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to export topology diagram",
             details=str(e)
         ).model_dump(), indent=2)
 
