@@ -1347,6 +1347,80 @@ async def create_text(ctx: Context, text: str, x: int, y: int,
         ).model_dump(), indent=2)
 
 
+@mcp.tool()
+async def delete_drawing(ctx: Context, drawing_id: str) -> str:
+    """Delete a drawing object from the current project
+
+    Args:
+        drawing_id: ID of the drawing to delete
+
+    Returns:
+        JSON confirmation message
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    try:
+        await app.gns3.delete_drawing(app.current_project_id, drawing_id)
+        return json.dumps({"message": f"Drawing {drawing_id} deleted successfully"}, indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to delete drawing",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
+@mcp.tool()
+async def create_ellipse(ctx: Context, x: int, y: int, rx: int, ry: int,
+                        fill_color: str = "#ffffff", border_color: str = "#000000",
+                        border_width: int = 2, z: int = 0) -> str:
+    """Create an ellipse/circle drawing
+
+    Args:
+        x: X coordinate (center)
+        y: Y coordinate (center)
+        rx: Horizontal radius
+        ry: Vertical radius (use same as rx for a circle)
+        fill_color: Fill color (hex or name, default: white)
+        border_color: Border color (default: black)
+        border_width: Border width in pixels (default: 2)
+        z: Z-order/layer (default: 0 - behind nodes)
+
+    Returns:
+        JSON with created drawing info
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    try:
+        svg = create_ellipse_svg(rx, ry, fill_color, border_color, border_width)
+
+        drawing_data = {
+            "x": x,
+            "y": y,
+            "z": z,
+            "svg": svg,
+            "rotation": 0
+        }
+
+        result = await app.gns3.create_drawing(app.current_project_id, drawing_data)
+
+        return json.dumps({"message": "Ellipse created successfully", "drawing": result}, indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to create ellipse",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="GNS3 MCP Server")
