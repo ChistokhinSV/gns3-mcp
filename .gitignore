@@ -47,7 +47,9 @@ env/
 Thumbs.db
 
 # MCP specific
-*.mcpb
+# Note: mcp-server/mcp-server.mcpb is committed (built by pre-commit hook)
+# But ignore any other .mcpb files
+!mcp-server/mcp-server.mcpb
 
 # Project specific - keep data folder but ignore large files
 data/*.pcapng

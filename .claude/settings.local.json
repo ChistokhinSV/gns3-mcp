@@ -5,13 +5,15 @@
       "WebSearch",
       "mcp__context7__get-library-docs",
       "WebFetch(domain:www.anthropic.com)",
-      "WebFetch(domain:apiv3.gns3.net)"
+      "WebFetch(domain:apiv3.gns3.net)",
+      "Bash(git add:*)",
+      "Bash(npx @anthropic-ai/mcpb pack:*)"
     ],
     "deny": [],
     "ask": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "gns3-lab"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
