@@ -289,6 +289,26 @@ class GNS3Client:
         response.raise_for_status()
         return response.json()
 
+    async def get_symbol_raw(self, symbol_id: str) -> bytes:
+        """GET /v3/symbols/{symbol_id}/raw - get raw symbol file (PNG/SVG)
+
+        Args:
+            symbol_id: Symbol filename (e.g., 'mikrotik.png')
+
+        Returns:
+            Raw bytes of the symbol file
+        """
+        # URL-encode the symbol_id to handle paths like ':/symbols/...'
+        import urllib.parse
+        encoded_symbol = urllib.parse.quote(symbol_id, safe='')
+
+        response = await self.client.get(
+            f"{self.base_url}/v3/symbols/{encoded_symbol}/raw",
+            headers=self._headers()
+        )
+        response.raise_for_status()
+        return response.content
+
     async def close(self):
         """Close the HTTP client"""
         await self.client.aclose()

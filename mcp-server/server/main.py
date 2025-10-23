@@ -1477,11 +1477,12 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
             for node in nodes:
                 x, y = node['x'], node['y']
-                # Account for hexagon node size (60px radius) + label below (+80px)
-                min_x = min(min_x, x - 80)
-                max_x = max(max_x, x + 80)
-                min_y = min(min_y, y - 80)
-                max_y = max(max_y, y + 100)  # Extra space for label below
+                # Account for icon size (100px) + label below (+30px)
+                icon_size = 100
+                min_x = min(min_x, x - icon_size // 2)
+                max_x = max(max_x, x + icon_size // 2)
+                min_y = min(min_y, y - icon_size // 2)
+                max_y = max(max_y, y + icon_size // 2 + 30)  # Extra space for label below
 
             for drawing in drawings:
                 # Parse SVG to get dimensions (basic parsing)
@@ -1553,31 +1554,58 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
                 svg_content += f'  <line class="link" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>\n'
 
-        # Add nodes
+        # Add nodes with actual icons
         svg_content += '\n  <!-- Nodes -->\n'
+        import base64
+
         for node in nodes:
             x, y = node['x'], node['y']
             status = node['status']
             name = node['name']
+            symbol = node.get('symbol', '')
 
-            # Node size to match GNS3 visual representation
-            node_size = 60  # Radius for hexagon approximation
-            status_class = f"node-{status}"
+            # GNS3 standard node icon size (visual representation)
+            icon_size = 100  # Width/height in pixels
 
-            # Draw hexagon (approximated with polygon) to match MikroTik icon
-            # Hexagon points: 6 vertices around center
-            import math
-            hex_points = []
-            for i in range(6):
-                angle = math.pi / 3 * i - math.pi / 2  # Start from top
-                px = node_size * math.cos(angle)
-                py = node_size * math.sin(angle)
-                hex_points.append(f"{px:.1f},{py:.1f}")
-            hex_path = " ".join(hex_points)
+            # Fetch actual icon if available
+            icon_data = None
+            if symbol:
+                try:
+                    # Get raw symbol data from GNS3
+                    raw_bytes = await app.gns3.get_symbol_raw(symbol)
 
-            svg_content += f'''  <g transform="translate({x}, {y})">
-    <polygon class="node {status_class}" points="{hex_path}"/>
-    <text class="node-label" x="0" y="{node_size + 20}">{name}</text>
+                    # Determine MIME type
+                    if symbol.lower().endswith('.png'):
+                        mime_type = 'image/png'
+                    elif symbol.lower().endswith('.svg'):
+                        mime_type = 'image/svg+xml'
+                    elif symbol.lower().endswith('.jpg') or symbol.lower().endswith('.jpeg'):
+                        mime_type = 'image/jpeg'
+                    else:
+                        mime_type = 'image/png'  # Default
+
+                    # Encode as base64 data URI
+                    b64_data = base64.b64encode(raw_bytes).decode('utf-8')
+                    icon_data = f"data:{mime_type};base64,{b64_data}"
+
+                except Exception as e:
+                    logger.warning(f"Failed to fetch icon for {symbol}: {e}")
+                    icon_data = None
+
+            # Render node with icon or fallback
+            if icon_data:
+                # Use actual icon
+                svg_content += f'''  <g transform="translate({x}, {y})">
+    <image href="{icon_data}" x="{-icon_size//2}" y="{-icon_size//2}" width="{icon_size}" height="{icon_size}"/>
+    <text class="node-label" x="0" y="{icon_size//2 + 20}">{name}</text>
+  </g>
+'''
+            else:
+                # Fallback: colored rectangle with status
+                status_class = f"node-{status}"
+                svg_content += f'''  <g transform="translate({x}, {y})">
+    <rect class="node {status_class}" x="-40" y="-40" width="80" height="80" rx="5"/>
+    <text class="node-label" x="0" y="{60}">{name}</text>
   </g>
 '''
 
