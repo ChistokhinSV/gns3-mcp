@@ -6,6 +6,7 @@ Supports multiple concurrent sessions with output buffering and diff tracking.
 
 import asyncio
 import telnetlib3
+import re
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -13,6 +14,13 @@ import logging
 import uuid
 
 logger = logging.getLogger(__name__)
+
+# ANSI escape sequence pattern
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text"""
+    return ANSI_ESCAPE.sub('', text)
 
 MAX_BUFFER_SIZE = 10 * 1024 * 1024  # 10MB per session
 SESSION_TIMEOUT = 1800  # 30 minutes
@@ -129,6 +137,11 @@ class ConsoleManager:
             return False
 
         try:
+            # Convert bare \n to \r\n for telnet compatibility
+            # But don't convert if \r\n already present
+            if '\r\n' not in data and '\n' in data:
+                data = data.replace('\n', '\r\n')
+
             session.writer.write(data)
             await session.writer.drain()
             session.update_activity()
@@ -144,12 +157,12 @@ class ConsoleManager:
             session_id: Session identifier
 
         Returns:
-            Full console buffer or None if session not found
+            Full console buffer (ANSI codes stripped) or None if session not found
         """
         session = self.sessions.get(session_id)
         if session:
             session.update_activity()
-            return session.buffer
+            return strip_ansi(session.buffer)
         return None
 
     def get_diff(self, session_id: str) -> Optional[str]:
@@ -159,7 +172,7 @@ class ConsoleManager:
             session_id: Session identifier
 
         Returns:
-            New output since last read, or None if session not found
+            New output since last read (ANSI codes stripped), or None if session not found
         """
         session = self.sessions.get(session_id)
         if not session:
@@ -168,7 +181,7 @@ class ConsoleManager:
         new_data = session.buffer[session.read_position:]
         session.read_position = len(session.buffer)
         session.update_activity()
-        return new_data
+        return strip_ansi(new_data)
 
     async def disconnect(self, session_id: str) -> bool:
         """Disconnect console session
