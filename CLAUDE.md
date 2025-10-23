@@ -10,6 +10,25 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
+## ⚠️ Current Work: v0.2.0 Tools Refactoring (IN PROGRESS)
+
+**Status:** Major refactoring in progress - see `TODOS.md` for detailed status
+
+**Completed:**
+- ✅ Phase 1: Added new GNS3Client methods (update_node, reload_node, suspend_node, create_link, delete_link)
+- ✅ Phase 2: Enhanced ConsoleManager with node_name tracking and convenience methods
+
+**In Progress:**
+- 🔄 Phase 3: Rewriting main.py MCP tools (console tools → set_node → set_connection)
+
+**Breaking Changes in v0.2.0:**
+- Console tools now use `node_name` instead of `session_id` (auto-connect)
+- `start_node` + `stop_node` → unified `set_node` tool
+- New `set_connection` tool for link management
+- Removed: `connect_console`, `read_console_diff`, `list_console_sessions`
+
+**See `TODOS.md` for complete progress tracking and implementation details.**
+
 ## Version Management
 
 **CRITICAL**: Update extension version every time a change is made.
@@ -436,3 +455,4 @@ git status
 # Commit
 git add . && git commit -m "feat: description"
 ```
+- use https://apiv3.gns3.net/ as a source of documentation for GNS3 v3 api

@@ -106,6 +106,66 @@ class GNS3Client:
         response.raise_for_status()
         return response.json()
 
+    async def suspend_node(self, project_id: str, node_id: str) -> Dict[str, Any]:
+        """POST /v3/projects/{id}/nodes/{node_id}/suspend - suspend a node"""
+        response = await self.client.post(
+            f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}/suspend",
+            headers=self._headers(),
+            json={}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def reload_node(self, project_id: str, node_id: str) -> Dict[str, Any]:
+        """POST /v3/projects/{id}/nodes/{node_id}/reload - reload a node"""
+        response = await self.client.post(
+            f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}/reload",
+            headers=self._headers(),
+            json={}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def update_node(self, project_id: str, node_id: str,
+                         properties: Dict[str, Any]) -> Dict[str, Any]:
+        """PUT /v3/projects/{id}/nodes/{node_id} - update node properties
+
+        Args:
+            project_id: Project ID
+            node_id: Node ID
+            properties: Dict with properties to update (x, y, z, locked, ports, etc.)
+        """
+        response = await self.client.put(
+            f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}",
+            headers=self._headers(),
+            json=properties
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def create_link(self, project_id: str, link_spec: Dict[str, Any]) -> Dict[str, Any]:
+        """POST /v3/projects/{id}/links - create a new link
+
+        Args:
+            project_id: Project ID
+            link_spec: Link specification with nodes and ports
+        """
+        response = await self.client.post(
+            f"{self.base_url}/v3/projects/{project_id}/links",
+            headers=self._headers(),
+            json=link_spec
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def delete_link(self, project_id: str, link_id: str) -> None:
+        """DELETE /v3/projects/{id}/links/{link_id} - delete a link"""
+        response = await self.client.delete(
+            f"{self.base_url}/v3/projects/{project_id}/links/{link_id}",
+            headers=self._headers()
+        )
+        response.raise_for_status()
+
     async def get_version(self) -> Dict[str, Any]:
         """GET /v3/version - get GNS3 server version"""
         response = await self.client.get(

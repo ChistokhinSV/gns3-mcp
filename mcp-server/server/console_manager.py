@@ -63,8 +63,9 @@ class ConsoleManager:
     """Manages multiple console sessions"""
 
     def __init__(self):
-        self.sessions: Dict[str, ConsoleSession] = {}
-        self._readers: Dict[str, asyncio.Task] = {}
+        self.sessions: Dict[str, ConsoleSession] = {}  # session_id → ConsoleSession
+        self._readers: Dict[str, asyncio.Task] = {}    # session_id → reader task
+        self._node_sessions: Dict[str, str] = {}       # node_name → session_id
 
     async def connect(self, host: str, port: int, node_name: str) -> str:
         """Connect to a console and return session ID
@@ -95,6 +96,7 @@ class ConsoleManager:
             )
 
             self.sessions[session_id] = session
+            self._node_sessions[node_name] = session_id  # Track by node_name
 
             # Start background task to read console output
             self._readers[session_id] = asyncio.create_task(
@@ -216,7 +218,13 @@ class ConsoleManager:
                 session.writer.close()
                 await session.writer.wait_closed()
 
+            # Clean up mappings
             del self.sessions[session_id]
+            # Remove node_name mapping if it exists
+            if session.node_name in self._node_sessions:
+                if self._node_sessions[session.node_name] == session_id:
+                    del self._node_sessions[session.node_name]
+
             logger.info(f"Disconnected session {session_id} for {session.node_name}")
             return True
 
@@ -253,3 +261,87 @@ class ConsoleManager:
             }
             for sid, s in self.sessions.items()
         }
+
+    # Node-name based convenience methods
+
+    def get_session_id(self, node_name: str) -> Optional[str]:
+        """Get session ID for a node
+
+        Args:
+            node_name: Node name
+
+        Returns:
+            session_id or None if not found
+        """
+        return self._node_sessions.get(node_name)
+
+    def has_session(self, node_name: str) -> bool:
+        """Check if a session exists for a node
+
+        Args:
+            node_name: Node name
+
+        Returns:
+            True if session exists and is active
+        """
+        session_id = self._node_sessions.get(node_name)
+        if not session_id:
+            return False
+        return session_id in self.sessions
+
+    async def send_by_node(self, node_name: str, data: str) -> bool:
+        """Send data to console by node name
+
+        Args:
+            node_name: Node name
+            data: Data to send
+
+        Returns:
+            Success status
+        """
+        session_id = self.get_session_id(node_name)
+        if not session_id:
+            return False
+        return await self.send(session_id, data)
+
+    def get_output_by_node(self, node_name: str) -> Optional[str]:
+        """Get console output by node name
+
+        Args:
+            node_name: Node name
+
+        Returns:
+            Console buffer or None
+        """
+        session_id = self.get_session_id(node_name)
+        if not session_id:
+            return None
+        return self.get_output(session_id)
+
+    def get_diff_by_node(self, node_name: str) -> Optional[str]:
+        """Get new console output by node name
+
+        Args:
+            node_name: Node name
+
+        Returns:
+            New output since last read or None
+        """
+        session_id = self.get_session_id(node_name)
+        if not session_id:
+            return None
+        return self.get_diff(session_id)
+
+    async def disconnect_by_node(self, node_name: str) -> bool:
+        """Disconnect console by node name
+
+        Args:
+            node_name: Node name
+
+        Returns:
+            Success status
+        """
+        session_id = self.get_session_id(node_name)
+        if not session_id:
+            return False
+        return await self.disconnect(session_id)

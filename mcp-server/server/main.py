@@ -6,10 +6,12 @@ Provides tools for managing projects, nodes, and console access.
 
 import argparse
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from typing import Optional, List, Dict, Any
 
 from mcp.server.fastmcp import FastMCP, Context
 
