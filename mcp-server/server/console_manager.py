@@ -60,15 +60,22 @@ class ConsoleSession:
 
 
 class ConsoleManager:
-    """Manages multiple console sessions"""
+    """Manages multiple console sessions
+
+    Thread-safe management of telnet console connections with automatic
+    output buffering and session tracking.
+    """
 
     def __init__(self):
         self.sessions: Dict[str, ConsoleSession] = {}  # session_id → ConsoleSession
         self._readers: Dict[str, asyncio.Task] = {}    # session_id → reader task
         self._node_sessions: Dict[str, str] = {}       # node_name → session_id
+        self._lock = asyncio.Lock()  # Protect shared state from race conditions
 
     async def connect(self, host: str, port: int, node_name: str) -> str:
         """Connect to a console and return session ID
+
+        Thread-safe. If already connected to this node, returns existing session ID.
 
         Args:
             host: Console host (GNS3 server IP)
@@ -78,10 +85,18 @@ class ConsoleManager:
         Returns:
             session_id: Unique session identifier
         """
-        session_id = str(uuid.uuid4())
+        async with self._lock:
+            # Check if already connected
+            if node_name in self._node_sessions:
+                existing_id = self._node_sessions[node_name]
+                if existing_id in self.sessions:
+                    logger.debug(f"Reusing existing session for {node_name}: {existing_id}")
+                    return existing_id
+
+            session_id = str(uuid.uuid4())
 
         try:
-            # Connect via telnet
+            # Connect via telnet (outside lock - network I/O)
             reader, writer = await telnetlib3.open_connection(
                 host, port, encoding='utf-8'
             )
@@ -95,10 +110,22 @@ class ConsoleManager:
                 writer=writer
             )
 
-            self.sessions[session_id] = session
-            self._node_sessions[node_name] = session_id  # Track by node_name
+            async with self._lock:
+                # Double-check node_name mapping (another connection might have completed)
+                if node_name in self._node_sessions:
+                    existing_id = self._node_sessions[node_name]
+                    if existing_id in self.sessions:
+                        # Another connection won the race - close this one and return existing
+                        writer.close()
+                        await writer.wait_closed()
+                        logger.debug(f"Race condition detected for {node_name}, using existing session")
+                        return existing_id
 
-            # Start background task to read console output
+                # Store session
+                self.sessions[session_id] = session
+                self._node_sessions[node_name] = session_id
+
+            # Start background task to read console output (outside lock)
             self._readers[session_id] = asyncio.create_task(
                 self._read_console(session)
             )

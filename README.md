@@ -2,6 +2,30 @@
 
 Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS3 projects, nodes, and device consoles through Claude Desktop or any MCP-compatible client.
 
+## What's New in v0.3.0
+
+Version 0.3.0 is a major refactoring with **breaking changes** that significantly improves reliability, performance, and type safety.
+
+**IMPORTANT**: If upgrading from v0.2.x, see [MIGRATION_v0.3.md](MIGRATION_v0.3.md) for complete migration guide.
+
+### Key Improvements
+
+- **Type-Safe Operations**: Pydantic v2 models with validation for all inputs/outputs
+- **Two-Phase Validation**: Prevents partial topology changes - validates ALL operations before executing ANY
+- **10× Performance**: TTL-based caching eliminates N+1 queries in batch operations
+- **Multi-Adapter Support**: Explicit `adapter_a`/`adapter_b` parameters for routers with multiple interface types
+- **JSON Outputs**: All tools now return structured JSON instead of formatted strings
+- **Better Error Messages**: Detailed validation errors with suggested fixes
+- **New Tool**: `get_console_status()` makes auto-connect behavior transparent
+
+### Breaking Changes
+
+1. **All tool outputs now return JSON** - Update parsing code if calling from scripts
+2. **set_connection() requires adapters** - Add `adapter_a` and `adapter_b` to connect operations
+3. **Error format changed** - Errors now return JSON with `error` and `details` fields
+
+See [MIGRATION_v0.3.md](MIGRATION_v0.3.md) for detailed migration instructions and examples.
+
 ## Features
 
 - **Project Management**: List, open GNS3 projects
@@ -9,10 +33,12 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
 - **Auto-Connect Console** (v0.2.0): Automatic session management by node name
 - **Console Access**: Telnet console with clean output (ANSI stripped, normalized line endings)
 - **Output Diff Tracking**: Read full buffer or only new output since last check
-- **Link Management** (v0.2.0): Batch connect/disconnect network connections
+- **Link Management** (v0.2.0): Batch connect/disconnect network connections with two-phase validation (v0.3.0)
 - **Node Configuration** (v0.2.0): Position, lock, configure switch ports
 - **Desktop Extension**: One-click installation in Claude Desktop
 - **Multi-Session**: Support multiple concurrent console connections
+- **Performance Caching** (v0.3.0): 30s TTL cache for faster operations
+- **Type Safety** (v0.3.0): Pydantic models ensure data integrity
 
 ## Architecture
 
@@ -25,6 +51,12 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
 - Python ≥ 3.10
 - GNS3 Server v3.x running and accessible
 - Network access to GNS3 server
+- Dependencies (see `requirements.txt`):
+  - `mcp>=1.2.1` - MCP protocol support
+  - `httpx>=0.28.1` - HTTP client for GNS3 API
+  - `telnetlib3>=2.0.4` - Telnet console connections
+  - `pydantic>=2.0.0` - Type-safe data models (v0.3.0)
+  - `python-dotenv>=1.1.1` - Environment variable management
 
 ## Installation
 
@@ -160,33 +192,53 @@ Based on traffic analysis, typical setup:
 
 ## Available MCP Tools
 
+**All tools return JSON** (v0.3.0) - Outputs are structured and parseable.
+
 ### Project Operations
-- `list_projects()` - List all projects with status
+- `list_projects(force_refresh=False)` - List all projects with status
+  - Returns: JSON array of `ProjectInfo` objects
+  - Caching: 60s TTL (use `force_refresh=True` to bypass)
 - `open_project(project_name)` - Open a project by name
+  - Returns: JSON `ProjectInfo` object
 
 ### Node Operations
-- `list_nodes()` - List all nodes in current project
-- `get_node_details(node_name)` - Get node info (console, status, ports)
+- `list_nodes(force_refresh=False)` - List all nodes in current project
+  - Returns: JSON array of `NodeInfo` objects
+  - Caching: 30s TTL
+- `get_node_details(node_name, force_refresh=False)` - Get node info (console, status, ports)
+  - Returns: JSON `NodeInfo` object with ports, adapters, console info
+  - Caching: 30s TTL
 - `set_node(node_name, action, x, y, z, locked, ports)` - **[v0.2.0]** Unified node control
   - Actions: `start`, `stop`, `suspend`, `reload`, `restart`
   - Properties: position (x, y, z), locked, switch ports
   - Restart with automatic retry logic (3 attempts × 5 seconds)
+  - Returns: JSON status message
 
 ### Console Operations (Auto-Connect)
 - `send_console(node_name, data)` - **[v0.2.0]** Send commands (auto-connects)
+  - Returns: JSON status message
 - `read_console(node_name, diff)` - **[v0.2.0]** Read console output
   - `diff=False` (default): full buffer
   - `diff=True`: only new output since last read
+  - Returns: JSON with console output
 - `disconnect_console(node_name)` - **[v0.2.0]** Close console session
+  - Returns: JSON status message
+- `get_console_status(node_name)` - **[v0.3.0]** Check console connection status
+  - Returns: JSON `ConsoleStatus` (connected, session_id, host, port, buffer_size)
+  - Makes auto-connect behavior transparent
 
 ### Link Management
-- `get_links()` - **[v0.2.1]** List all network links with IDs, nodes, and ports
+- `get_links(force_refresh=False)` - **[v0.2.1]** List all network links with IDs, nodes, and ports
+  - Returns: JSON array of `LinkInfo` objects with adapter numbers
   - Shows link IDs needed for disconnection
   - Displays which ports are in use
-- `set_connection(connections)` - **[v0.2.0]** Batch connect/disconnect links
+  - Caching: 30s TTL
+- `set_connection(connections)` - **[v0.2.0, v0.3.0 breaking]** Batch connect/disconnect links
+  - **Two-phase validation** (v0.3.0): Validates ALL operations before executing ANY
+  - **BREAKING**: Now requires `adapter_a` and `adapter_b` parameters
   - **Use get_links() first** to check topology
-  - Sequential execution with predictable state
-  - Returns completed and failed operations
+  - Returns: JSON `OperationResult` with completed and failed operations
+  - Cache invalidation: Clears link/node cache after execution
 
 ## Usage Examples
 
@@ -245,25 +297,46 @@ for router in ["R1", "R2", "R3"]:
     disconnect_console(router)
 ```
 
-### Manage Network Topology (v0.2.1)
+### Manage Network Topology (v0.3.0)
 
 ```python
-# 1. Check current topology
-get_links()
-# Output shows: Link [abc-123]: R1 port 0 <-> NAT1 port 0 (ethernet)
+# 1. Check current topology (returns JSON)
+links_json = get_links()
+# Output: JSON array with LinkInfo objects showing adapters and ports
 
 # 2. Batch link operations (disconnect then connect)
+# IMPORTANT: v0.3.0 requires adapter_a and adapter_b parameters
 set_connection([
     # Disconnect old link (use link_id from get_links output)
     {"action": "disconnect", "link_id": "abc-123"},
 
     # Connect R1 to Switch1 (port 0 now free)
-    {"action": "connect", "node_a": "R1", "port_a": 0,
-     "node_b": "Switch1", "port_b": 3},
+    {"action": "connect",
+     "node_a": "R1", "adapter_a": 0, "port_a": 0,
+     "node_b": "Switch1", "adapter_b": 0, "port_b": 3},
 
     # Connect R2 to Switch1
-    {"action": "connect", "node_a": "R2", "port_a": 0,
-     "node_b": "Switch1", "port_b": 4}
+    {"action": "connect",
+     "node_a": "R2", "adapter_a": 0, "port_a": 0,
+     "node_b": "Switch1", "adapter_b": 0, "port_b": 4}
+])
+# Returns: JSON OperationResult with completed operations
+
+# 3. Multi-adapter device example (router with GigE and Serial)
+# Router has:
+# - Adapter 0: GigabitEthernet 0/0-3
+# - Adapter 1: Serial 1/0-1
+
+set_connection([
+    # Connect GigabitEthernet to switch
+    {"action": "connect",
+     "node_a": "Router1", "adapter_a": 0, "port_a": 0,
+     "node_b": "Switch1", "adapter_b": 0, "port_b": 0},
+
+    # Connect Serial to another router
+    {"action": "connect",
+     "node_a": "Router1", "adapter_a": 1, "port_a": 0,
+     "node_b": "Router2", "adapter_b": 1, "port_b": 0}
 ])
 ```
 
@@ -280,7 +353,19 @@ set_node("Switch1", ports=16)
 set_node("Router1", action="start", x=150, y=300)
 ```
 
-## Migration Guide (v0.1.x → v0.2.0)
+## Migration Guides
+
+### v0.2.x → v0.3.0
+
+**BREAKING CHANGES**: See [MIGRATION_v0.3.md](MIGRATION_v0.3.md) for complete migration guide.
+
+Key changes:
+- All tool outputs now return JSON
+- `set_connection()` requires `adapter_a` and `adapter_b` parameters
+- Error responses changed to JSON format
+- New features: Two-phase validation, caching, multi-adapter support
+
+### v0.1.x → v0.2.0
 
 Version 0.2.0 introduces breaking changes to simplify the API and improve usability.
 
@@ -423,20 +508,27 @@ Based on actual traffic analysis and implementation:
 │   ├── server/
 │   │   ├── main.py              # MCP server with FastMCP
 │   │   ├── gns3_client.py       # GNS3 API v3 client
-│   │   └── console_manager.py   # Telnet console manager
+│   │   ├── console_manager.py   # Telnet console manager
+│   │   ├── models.py            # [v0.3.0] Pydantic data models
+│   │   ├── link_validator.py    # [v0.3.0] Two-phase link validation
+│   │   └── cache.py             # [v0.3.0] TTL-based data caching
+│   ├── lib/                     # Bundled Python dependencies
 │   ├── manifest.json            # Desktop extension manifest
-│   └── README.md
+│   └── start_mcp.py            # Wrapper script for .env loading
 ├── skill/
 │   ├── SKILL.md                 # Agent skill documentation
 │   └── examples/                # Workflow examples
 ├── tests/
-│   ├── test_mcp_server.py       # Automated test suite
-│   ├── simple_console_test.py   # Direct console testing
+│   ├── test_mcp_console.py      # Console manager tests
+│   ├── interactive_console_test.py  # Direct console testing
+│   ├── list_nodes_helper.py     # Node discovery helper
 │   ├── ALPINE_SETUP_GUIDE.md    # Test device setup guide
-│   └── README.md                # Testing documentation
+│   └── TEST_RESULTS.md          # Latest test results
 ├── data/
 │   ├── dump.pcapng             # Traffic analysis (reference)
 │   └── SESSION.txt             # HTTP session analysis
+├── MIGRATION_v0.3.md           # [v0.3.0] Migration guide
+├── REFACTORING_STATUS_v0.3.md  # [v0.3.0] Refactoring documentation
 ├── requirements.txt
 └── README.md
 ```

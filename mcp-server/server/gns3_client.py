@@ -7,6 +7,7 @@ Based on actual traffic analysis from GNS3 v3.0.5.
 import httpx
 from typing import Optional, Dict, List, Any
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,28 @@ class GNS3Client:
         if not self.token:
             raise RuntimeError("Not authenticated - call authenticate() first")
         return {"Authorization": f"Bearer {self.token}"}
+
+    def _extract_error(self, exception: Exception) -> str:
+        """Extract detailed error message from exception
+
+        Args:
+            exception: Exception from httpx
+
+        Returns:
+            Detailed error message
+        """
+        if isinstance(exception, httpx.HTTPStatusError):
+            try:
+                # Try to extract GNS3 API error message
+                error_data = exception.response.json()
+                if isinstance(error_data, dict):
+                    # GNS3 API typically returns {"message": "error details"}
+                    return error_data.get("message", str(exception))
+                return str(exception)
+            except (json.JSONDecodeError, AttributeError):
+                # Fallback to generic message
+                return f"HTTP {exception.response.status_code}: {exception.response.text[:200]}"
+        return str(exception)
 
     async def get_projects(self) -> List[Dict[str, Any]]:
         """GET /v3/projects - list all projects"""
@@ -143,28 +166,45 @@ class GNS3Client:
         response.raise_for_status()
         return response.json()
 
-    async def create_link(self, project_id: str, link_spec: Dict[str, Any]) -> Dict[str, Any]:
+    async def create_link(self, project_id: str, link_spec: Dict[str, Any],
+                         timeout: float = 10.0) -> Dict[str, Any]:
         """POST /v3/projects/{id}/links - create a new link
 
         Args:
             project_id: Project ID
             link_spec: Link specification with nodes and ports
+            timeout: Operation timeout in seconds
         """
-        response = await self.client.post(
-            f"{self.base_url}/v3/projects/{project_id}/links",
-            headers=self._headers(),
-            json=link_spec
-        )
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = await self.client.post(
+                f"{self.base_url}/v3/projects/{project_id}/links",
+                headers=self._headers(),
+                json=link_spec,
+                timeout=timeout
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            raise RuntimeError(f"Failed to create link: {self._extract_error(e)}") from e
 
-    async def delete_link(self, project_id: str, link_id: str) -> None:
-        """DELETE /v3/projects/{id}/links/{link_id} - delete a link"""
-        response = await self.client.delete(
-            f"{self.base_url}/v3/projects/{project_id}/links/{link_id}",
-            headers=self._headers()
-        )
-        response.raise_for_status()
+    async def delete_link(self, project_id: str, link_id: str,
+                         timeout: float = 10.0) -> None:
+        """DELETE /v3/projects/{id}/links/{link_id} - delete a link
+
+        Args:
+            project_id: Project ID
+            link_id: Link ID to delete
+            timeout: Operation timeout in seconds
+        """
+        try:
+            response = await self.client.delete(
+                f"{self.base_url}/v3/projects/{project_id}/links/{link_id}",
+                headers=self._headers(),
+                timeout=timeout
+            )
+            response.raise_for_status()
+        except Exception as e:
+            raise RuntimeError(f"Failed to delete link {link_id}: {self._extract_error(e)}") from e
 
     async def get_version(self) -> Dict[str, Any]:
         """GET /v3/version - get GNS3 server version"""

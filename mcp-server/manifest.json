@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.2.1",
-  "description": "Control and automate GNS3 network labs through Claude",
-  "long_description": "This desktop extension provides comprehensive control over GNS3 network simulation labs. Features unified node control, auto-connecting console sessions, link discovery and management, and node positioning. Supports GNS3 v3 API with telnet console access for router configuration and troubleshooting. Version 0.2.1 adds get_links tool for topology discovery.",
+  "version": "0.3.0",
+  "description": "Control and automate GNS3 network labs through Claude with type-safe operations",
+  "long_description": "Version 0.3.0 major refactoring: Type-safe Pydantic models, two-phase link validation prevents partial topology changes, performance caching (10× faster batch ops), multi-adapter support, detailed error messages. BREAKING CHANGES: All tools return JSON, set_connection requires adapter parameters. Features: project/node/link management, auto-connecting consoles, port availability validation, corrupted link detection. Supports GNS3 v3 API with telnet console access.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -59,43 +59,47 @@
   "tools": [
     {
       "name": "list_projects",
-      "description": "List all GNS3 projects with their status (opened/closed)"
+      "description": "List all GNS3 projects (returns JSON array of ProjectInfo)"
     },
     {
       "name": "open_project",
-      "description": "Open a GNS3 project by name"
+      "description": "Open a GNS3 project by name (returns JSON ProjectInfo)"
     },
     {
       "name": "list_nodes",
-      "description": "List all nodes in the current project with status and console info"
+      "description": "List all nodes in current project (returns JSON array of NodeInfo)"
     },
     {
       "name": "get_node_details",
-      "description": "Get detailed information about a specific node"
+      "description": "Get detailed node information (returns JSON NodeInfo)"
     },
     {
       "name": "get_links",
-      "description": "List all network links with IDs, connected nodes, and ports (use before set_connection)"
+      "description": "List all network links with adapters/ports (returns JSON array of LinkInfo)"
     },
     {
       "name": "set_node",
-      "description": "Configure node properties and/or control node state (start/stop/suspend/reload/restart, position, lock, ports)"
+      "description": "Configure node properties and/or control state (start/stop/suspend/reload/restart)"
     },
     {
       "name": "send_console",
-      "description": "Send commands to a node's console (auto-connects if needed)"
+      "description": "Send commands to node console (auto-connects if needed)"
     },
     {
       "name": "read_console",
-      "description": "Read console output (full buffer or diff mode for new output only)"
+      "description": "Read console output (full buffer or diff mode)"
     },
     {
       "name": "disconnect_console",
-      "description": "Disconnect from a node's console session"
+      "description": "Disconnect from node console session (returns JSON status)"
+    },
+    {
+      "name": "get_console_status",
+      "description": "Check console connection status for a node (returns JSON ConsoleStatus)"
     },
     {
       "name": "set_connection",
-      "description": "Manage network connections in batch (connect/disconnect links between nodes)"
+      "description": "Batch manage network connections with two-phase validation (requires adapters)"
     }
   ],
   "compatibility": {

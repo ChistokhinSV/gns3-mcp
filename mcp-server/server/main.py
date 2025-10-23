@@ -1,7 +1,13 @@
-"""GNS3 MCP Server
+"""GNS3 MCP Server v0.3.0
 
 Model Context Protocol server for GNS3 lab automation.
 Provides tools for managing projects, nodes, links, and console access.
+
+Version 0.3.0 - Breaking Changes:
+- All tools now return JSON (not formatted strings)
+- set_connection() requires adapter_a and adapter_b parameters
+- Two-phase validation prevents partial topology changes
+- Data caching for improved performance
 """
 
 import argparse
@@ -10,13 +16,22 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 
 from mcp.server.fastmcp import FastMCP, Context
 
 from gns3_client import GNS3Client
 from console_manager import ConsoleManager
+from cache import DataCache
+from link_validator import LinkValidator
+from models import (
+    ProjectInfo, NodeInfo, LinkInfo, LinkEndpoint,
+    ConnectOperation, DisconnectOperation,
+    CompletedOperation, FailedOperation, OperationResult,
+    ConsoleStatus, ErrorResponse,
+    validate_connection_operations
+)
 
 # Setup logging
 logging.basicConfig(
@@ -29,10 +44,26 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AppContext:
-    """Application context with GNS3 client and console manager"""
+    """Application context with GNS3 client, console manager, and cache"""
     gns3: GNS3Client
     console: ConsoleManager
+    cache: DataCache
     current_project_id: str | None = None
+    cleanup_task: Optional[asyncio.Task] = field(default=None)
+
+
+async def periodic_console_cleanup(console: ConsoleManager):
+    """Periodically clean up expired console sessions"""
+    while True:
+        try:
+            await asyncio.sleep(300)  # Every 5 minutes
+            await console.cleanup_expired()
+            logger.debug("Completed periodic console cleanup")
+        except asyncio.CancelledError:
+            logger.info("Console cleanup task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in cleanup task: {e}")
 
 
 @asynccontextmanager
@@ -58,6 +89,12 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     # Initialize console manager
     console = ConsoleManager()
 
+    # Initialize cache (30s TTL for nodes/links, 60s for projects)
+    cache = DataCache(node_ttl=30, link_ttl=30, project_ttl=60)
+
+    # Start periodic cleanup task
+    cleanup_task = asyncio.create_task(periodic_console_cleanup(console))
+
     # Auto-detect opened project
     projects = await gns3.get_projects()
     opened = [p for p in projects if p.get("status") == "opened"]
@@ -71,40 +108,129 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     context = AppContext(
         gns3=gns3,
         console=console,
-        current_project_id=current_project_id
+        cache=cache,
+        current_project_id=current_project_id,
+        cleanup_task=cleanup_task
     )
 
     try:
         yield context
     finally:
         # Cleanup
+        if cleanup_task:
+            cleanup_task.cancel()
+            try:
+                await cleanup_task
+            except asyncio.CancelledError:
+                pass
+
         await console.close_all()
         await gns3.close()
+
+        # Log cache statistics
+        stats = cache.get_stats()
+        logger.info(f"Cache statistics: {json.dumps(stats, indent=2)}")
         logger.info("GNS3 MCP Server shutdown complete")
+
+
+# Helper Functions
+
+async def validate_current_project(app: AppContext) -> Optional[str]:
+    """Validate that current project is still open
+
+    Args:
+        app: Application context
+
+    Returns:
+        Error message if invalid, None if valid
+    """
+    if not app.current_project_id:
+        return json.dumps(ErrorResponse(
+            error="No project opened",
+            details="Use open_project() to open a project first"
+        ).model_dump(), indent=2)
+
+    try:
+        # Use cache for project list
+        projects = await app.cache.get_projects(
+            lambda: app.gns3.get_projects()
+        )
+
+        project = next((p for p in projects
+                       if p['project_id'] == app.current_project_id), None)
+
+        if not project:
+            app.current_project_id = None
+            return json.dumps(ErrorResponse(
+                error="Project no longer exists",
+                details=f"Project ID {app.current_project_id} not found. Use list_projects() and open_project()"
+            ).model_dump(), indent=2)
+
+        if project['status'] != 'opened':
+            app.current_project_id = None
+            return json.dumps(ErrorResponse(
+                error=f"Project is {project['status']}",
+                details=f"Project '{project['name']}' is not open. Use open_project() to reopen"
+            ).model_dump(), indent=2)
+
+        return None
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to validate project",
+            details=str(e)
+        ).model_dump(), indent=2)
 
 
 # Create MCP server
 mcp = FastMCP(
     "GNS3 Lab Controller",
     lifespan=app_lifespan,
-    dependencies=["mcp>=1.2.1", "httpx>=0.28.1", "telnetlib3>=2.0.4"]
+    dependencies=["mcp>=1.2.1", "httpx>=0.28.1", "telnetlib3>=2.0.4", "pydantic>=2.0.0"]
 )
 
 
 @mcp.tool()
-async def list_projects(ctx: Context) -> str:
-    """List all GNS3 projects with their status"""
-    gns3: GNS3Client = ctx.request_context.lifespan_context.gns3
+async def list_projects(ctx: Context, force_refresh: bool = False) -> str:
+    """List all GNS3 projects with their status
 
-    projects = await gns3.get_projects()
+    Args:
+        force_refresh: Force cache refresh (default: False)
 
-    result = []
-    for p in projects:
-        result.append(
-            f"- {p['name']} ({p['status']}) [ID: {p['project_id']}]"
+    Returns:
+        JSON array of ProjectInfo objects
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    try:
+        # Get projects with caching
+        projects = await app.cache.get_projects(
+            lambda: app.gns3.get_projects(),
+            force_refresh=force_refresh
         )
 
-    return "\n".join(result) if result else "No projects found"
+        # Convert to ProjectInfo models
+        project_models = [
+            ProjectInfo(
+                project_id=p['project_id'],
+                name=p['name'],
+                status=p['status'],
+                path=p.get('path'),
+                filename=p.get('filename'),
+                auto_start=p.get('auto_start', False),
+                auto_close=p.get('auto_close', True),
+                auto_open=p.get('auto_open', False)
+            )
+            for p in projects
+        ]
+
+        return json.dumps([p.model_dump() for p in project_models], indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to list projects",
+            details=str(e)
+        ).model_dump(), indent=2)
 
 
 @mcp.tool()
@@ -113,126 +239,276 @@ async def open_project(ctx: Context, project_name: str) -> str:
 
     Args:
         project_name: Name of the project to open
+
+    Returns:
+        JSON with ProjectInfo for opened project
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    # Find project by name
-    projects = await app.gns3.get_projects()
-    project = next((p for p in projects if p['name'] == project_name), None)
-
-    if not project:
-        return f"Project '{project_name}' not found"
-
-    # Open it
-    result = await app.gns3.open_project(project['project_id'])
-    app.current_project_id = project['project_id']
-
-    return f"Opened project: {result['name']} (status: {result['status']})"
-
-
-@mcp.tool()
-async def list_nodes(ctx: Context) -> str:
-    """List all nodes in the current project with their status and console info"""
-    app: AppContext = ctx.request_context.lifespan_context
-
-    if not app.current_project_id:
-        return "No project opened - use open_project() first"
-
-    nodes = await app.gns3.get_nodes(app.current_project_id)
-
-    result = []
-    for node in nodes:
-        console_info = f"{node['console_type']}:{node['console']}" if node['console'] else "none"
-        result.append(
-            f"- {node['name']} ({node['node_type']}) - {node['status']} [console: {console_info}] [ID: {node['node_id']}]"
+    try:
+        # Find project by name (use cache)
+        projects = await app.cache.get_projects(
+            lambda: app.gns3.get_projects(),
+            force_refresh=True  # Refresh to get latest status
         )
 
-    return "\n".join(result) if result else "No nodes found"
+        project = next((p for p in projects if p['name'] == project_name), None)
+
+        if not project:
+            return json.dumps(ErrorResponse(
+                error="Project not found",
+                details=f"No project named '{project_name}' found. Use list_projects() to see available projects."
+            ).model_dump(), indent=2)
+
+        # Open it
+        result = await app.gns3.open_project(project['project_id'])
+        app.current_project_id = project['project_id']
+
+        # Invalidate caches (project status changed)
+        await app.cache.invalidate_projects()
+
+        # Return ProjectInfo
+        project_info = ProjectInfo(
+            project_id=result['project_id'],
+            name=result['name'],
+            status=result['status'],
+            path=result.get('path'),
+            filename=result.get('filename')
+        )
+
+        return json.dumps(project_info.model_dump(), indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to open project",
+            details=str(e)
+        ).model_dump(), indent=2)
 
 
 @mcp.tool()
-async def get_node_details(ctx: Context, node_name: str) -> str:
+async def list_nodes(ctx: Context, force_refresh: bool = False) -> str:
+    """List all nodes in the current project with their status and console info
+
+    Args:
+        force_refresh: Force cache refresh (default: False)
+
+    Returns:
+        JSON array of NodeInfo objects
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    # Validate project
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    try:
+        # Get nodes with caching
+        nodes = await app.cache.get_nodes(
+            app.current_project_id,
+            lambda pid: app.gns3.get_nodes(pid),
+            force_refresh=force_refresh
+        )
+
+        # Convert to NodeInfo models
+        node_models = [
+            NodeInfo(
+                node_id=n['node_id'],
+                name=n['name'],
+                node_type=n['node_type'],
+                status=n['status'],
+                console_type=n['console_type'],
+                console=n.get('console'),
+                console_host=n.get('console_host'),
+                compute_id=n.get('compute_id', 'local'),
+                x=n.get('x', 0),
+                y=n.get('y', 0),
+                z=n.get('z', 0),
+                locked=n.get('locked', False),
+                ports=n.get('ports'),
+                label=n.get('label'),
+                symbol=n.get('symbol')
+            )
+            for n in nodes
+        ]
+
+        return json.dumps([n.model_dump() for n in node_models], indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to list nodes",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
+@mcp.tool()
+async def get_node_details(ctx: Context, node_name: str, force_refresh: bool = False) -> str:
     """Get detailed information about a specific node
 
     Args:
         node_name: Name of the node
+        force_refresh: Force cache refresh (default: False)
+
+    Returns:
+        JSON with NodeInfo object
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    if not app.current_project_id:
-        return "No project opened"
+    # Validate project
+    error = await validate_current_project(app)
+    if error:
+        return error
 
-    nodes = await app.gns3.get_nodes(app.current_project_id)
-    node = next((n for n in nodes if n['name'] == node_name), None)
+    try:
+        # Get nodes with caching
+        nodes = await app.cache.get_nodes(
+            app.current_project_id,
+            lambda pid: app.gns3.get_nodes(pid),
+            force_refresh=force_refresh
+        )
 
-    if not node:
-        return f"Node '{node_name}' not found"
+        node = next((n for n in nodes if n['name'] == node_name), None)
 
-    # Format key info
-    info = [
-        f"Name: {node['name']}",
-        f"Type: {node['node_type']}",
-        f"Status: {node['status']}",
-        f"Console: {node['console_type']}:{node['console']} @ {node['console_host']}",
-        f"ID: {node['node_id']}",
-        f"Compute: {node['compute_id']}"
-    ]
+        if not node:
+            return json.dumps(ErrorResponse(
+                error="Node not found",
+                details=f"No node named '{node_name}' in current project. Use list_nodes() to see available nodes."
+            ).model_dump(), indent=2)
 
-    if 'ports' in node:
-        info.append(f"Ports: {len(node['ports'])}")
+        # Convert to NodeInfo model
+        node_info = NodeInfo(
+            node_id=node['node_id'],
+            name=node['name'],
+            node_type=node['node_type'],
+            status=node['status'],
+            console_type=node['console_type'],
+            console=node.get('console'),
+            console_host=node.get('console_host'),
+            compute_id=node.get('compute_id', 'local'),
+            x=node.get('x', 0),
+            y=node.get('y', 0),
+            z=node.get('z', 0),
+            locked=node.get('locked', False),
+            ports=node.get('ports'),
+            label=node.get('label'),
+            symbol=node.get('symbol')
+        )
 
-    return "\n".join(info)
+        return json.dumps(node_info.model_dump(), indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to get node details",
+            details=str(e)
+        ).model_dump(), indent=2)
 
 
 @mcp.tool()
-async def get_links(ctx: Context) -> str:
+async def get_links(ctx: Context, force_refresh: bool = False) -> str:
     """List all network links in the current project
 
     Returns link details including link IDs (needed for disconnect),
-    connected nodes, ports, and link type. Use this before set_connection()
-    to check current topology and find link IDs for disconnection.
+    connected nodes, ports, adapters, and link type. Use this before
+    set_connection() to check current topology and find link IDs.
 
-    Output format: Link [ID]: NodeA port X <-> NodeB port Y (type)
+    Args:
+        force_refresh: Force cache refresh (default: False)
+
+    Returns:
+        JSON array of LinkInfo objects
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    if not app.current_project_id:
-        return "No project opened"
+    # Validate project
+    error = await validate_current_project(app)
+    if error:
+        return error
 
-    # Get links and nodes
-    links = await app.gns3.get_links(app.current_project_id)
-    nodes = await app.gns3.get_nodes(app.current_project_id)
+    try:
+        # Get links and nodes with caching
+        links = await app.cache.get_links(
+            app.current_project_id,
+            lambda pid: app.gns3.get_links(pid),
+            force_refresh=force_refresh
+        )
 
-    # Create node ID to name mapping
-    node_map = {n['node_id']: n['name'] for n in nodes}
+        nodes = await app.cache.get_nodes(
+            app.current_project_id,
+            lambda pid: app.gns3.get_nodes(pid),
+            force_refresh=force_refresh
+        )
 
-    if not links:
-        return "No links in project"
+        # Create node ID to name mapping
+        node_map = {n['node_id']: n['name'] for n in nodes}
 
-    # Format each link
-    result = []
-    for link in links:
-        link_id = link['link_id']
-        link_type = link.get('link_type', 'unknown')
+        # Convert to LinkInfo models
+        link_models = []
+        warnings = []
 
-        # Get node endpoints
-        link_nodes = link.get('nodes', [])
-        if len(link_nodes) >= 2:
+        for link in links:
+            link_id = link['link_id']
+            link_type = link.get('link_type', 'ethernet')
+            link_nodes = link.get('nodes', [])
+
+            # Check for corrupted links
+            if len(link_nodes) < 2:
+                warnings.append(
+                    f"Warning: Link {link_id} has only {len(link_nodes)} endpoint(s) - "
+                    f"possibly corrupted. Consider deleting with set_connection()"
+                )
+                continue
+
+            if len(link_nodes) > 2:
+                warnings.append(
+                    f"Warning: Link {link_id} has {len(link_nodes)} endpoints - "
+                    f"unexpected topology (multi-point link?)"
+                )
+
+            # Build LinkInfo
             node_a = link_nodes[0]
             node_b = link_nodes[1]
 
-            node_a_name = node_map.get(node_a['node_id'], 'Unknown')
-            node_b_name = node_map.get(node_b['node_id'], 'Unknown')
-
-            port_a = node_a.get('port_number', '?')
-            port_b = node_b.get('port_number', '?')
-
-            result.append(
-                f"Link [{link_id}]: {node_a_name} port {port_a} <-> "
-                f"{node_b_name} port {port_b} ({link_type})"
+            link_info = LinkInfo(
+                link_id=link_id,
+                link_type=link_type,
+                node_a=LinkEndpoint(
+                    node_id=node_a['node_id'],
+                    node_name=node_map.get(node_a['node_id'], 'Unknown'),
+                    adapter_number=node_a.get('adapter_number', 0),
+                    port_number=node_a.get('port_number', 0),
+                    adapter_type=node_a.get('adapter_type'),
+                    port_name=node_a.get('name')
+                ),
+                node_b=LinkEndpoint(
+                    node_id=node_b['node_id'],
+                    node_name=node_map.get(node_b['node_id'], 'Unknown'),
+                    adapter_number=node_b.get('adapter_number', 0),
+                    port_number=node_b.get('port_number', 0),
+                    adapter_type=node_b.get('adapter_type'),
+                    port_name=node_b.get('name')
+                ),
+                capturing=link.get('capturing', False),
+                capture_file_name=link.get('capture_file_name'),
+                capture_file_path=link.get('capture_file_path'),
+                capture_compute_id=link.get('capture_compute_id'),
+                suspend=link.get('suspend', False)
             )
 
-    return "\n".join(result) if result else "No valid links found"
+            link_models.append(link_info)
+
+        # Build response
+        response = {
+            "links": [link.model_dump() for link in link_models],
+            "warnings": warnings if warnings else None
+        }
+
+        return json.dumps(response, indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to get links",
+            details=str(e)
+        ).model_dump(), indent=2)
 
 
 @mcp.tool()
@@ -451,22 +727,67 @@ async def disconnect_console(ctx: Context, node_name: str) -> str:
 
     Args:
         node_name: Name of the node
+
+    Returns:
+        JSON with status
     """
     app: AppContext = ctx.request_context.lifespan_context
 
     success = await app.console.disconnect_by_node(node_name)
-    return "Disconnected successfully" if success else "No active session for this node"
+
+    return json.dumps({
+        "success": success,
+        "node_name": node_name,
+        "message": "Disconnected successfully" if success else "No active session for this node"
+    }, indent=2)
+
+
+@mcp.tool()
+async def get_console_status(ctx: Context, node_name: str) -> str:
+    """Check console connection status for a node
+
+    Makes auto-connect behavior transparent by showing connection state.
+
+    Args:
+        node_name: Name of the node
+
+    Returns:
+        JSON with ConsoleStatus object
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    if app.console.has_session(node_name):
+        session_id = app.console.get_session_id(node_name)
+        sessions = app.console.list_sessions()
+        session_info = sessions.get(session_id, {})
+
+        status = ConsoleStatus(
+            connected=True,
+            node_name=node_name,
+            session_id=session_id,
+            host=session_info.get("host"),
+            port=session_info.get("port"),
+            buffer_size=session_info.get("buffer_size"),
+            created_at=session_info.get("created_at")
+        )
+    else:
+        status = ConsoleStatus(
+            connected=False,
+            node_name=node_name
+        )
+
+    return json.dumps(status.model_dump(), indent=2)
 
 
 @mcp.tool()
 async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str:
-    """Manage network connections (links) in batch
+    """Manage network connections (links) in batch with two-phase validation
 
-    IMPORTANT: Call get_links() first to check current topology and find link IDs.
-    Ports must be free before connecting - disconnect existing links first if needed.
+    BREAKING CHANGE v0.3.0: Now requires adapter_a and adapter_b parameters.
 
-    Executes connection operations sequentially. If an operation fails,
-    returns status showing what completed and what failed.
+    Two-phase execution prevents partial topology changes:
+    1. VALIDATE ALL operations (check nodes exist, ports free, adapters valid)
+    2. EXECUTE ALL operations (only if all valid - atomic)
 
     Workflow:
         1. Call get_links() to see current topology
@@ -474,109 +795,154 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
         3. Call set_connection() with disconnect + connect operations
 
     Args:
-        connections: List of connection operations to perform.
-            Each operation is a dict with:
-            - action: "connect" or "disconnect"
-            - For disconnect: {"action": "disconnect", "link_id": "abc123"}
-            - For connect: {"action": "connect", "node_a": "R1", "port_a": 0,
-                           "node_b": "R2", "port_b": 1}
+        connections: List of connection operations:
+            Connect: {
+                "action": "connect",
+                "node_a": "Router1",
+                "node_b": "Router2",
+                "port_a": 0,
+                "port_b": 1,
+                "adapter_a": 0,  # REQUIRED in v0.3.0 (default 0 if omitted)
+                "adapter_b": 0   # REQUIRED in v0.3.0 (default 0 if omitted)
+            }
+            Disconnect: {
+                "action": "disconnect",
+                "link_id": "abc123"
+            }
 
     Returns:
-        JSON string with completed and failed operations
+        JSON with OperationResult (completed and failed operations)
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    if not app.current_project_id:
-        return json.dumps({"error": "No project opened"})
+    # Validate project
+    error = await validate_current_project(app)
+    if error:
+        return error
 
-    completed = []
-    failed = None
+    try:
+        # Validate operation structure with Pydantic
+        parsed_ops, validation_error = validate_connection_operations(connections)
+        if validation_error:
+            return json.dumps(ErrorResponse(
+                error="Invalid operation structure",
+                details=validation_error
+            ).model_dump(), indent=2)
 
-    # Execute operations sequentially
-    for idx, conn in enumerate(connections):
-        action = conn.get("action", "").lower()
+        # Fetch topology data ONCE (not in loop - fixes N+1 issue)
+        nodes = await app.cache.get_nodes(
+            app.current_project_id,
+            lambda pid: app.gns3.get_nodes(pid),
+            force_refresh=True  # Ensure fresh data for validation
+        )
 
-        try:
-            if action == "disconnect":
-                # Disconnect operation
-                link_id = conn.get("link_id")
-                if not link_id:
-                    raise ValueError("Missing link_id for disconnect operation")
+        links = await app.cache.get_links(
+            app.current_project_id,
+            lambda pid: app.gns3.get_links(pid),
+            force_refresh=True
+        )
 
-                await app.gns3.delete_link(app.current_project_id, link_id)
-                completed.append({
-                    "index": idx,
-                    "action": "disconnect",
-                    "link_id": link_id
-                })
+        # PHASE 1: VALIDATE ALL operations (no state changes)
+        validator = LinkValidator(nodes, links)
 
-            elif action == "connect":
-                # Connect operation
-                node_a_name = conn.get("node_a")
-                node_b_name = conn.get("node_b")
-                port_a = conn.get("port_a")
-                port_b = conn.get("port_b")
+        for idx, op in enumerate(parsed_ops):
+            if isinstance(op, ConnectOperation):
+                validation_error = validator.validate_connect(
+                    op.node_a, op.node_b,
+                    op.port_a, op.port_b,
+                    op.adapter_a, op.adapter_b
+                )
+            else:  # DisconnectOperation
+                validation_error = validator.validate_disconnect(op.link_id)
 
-                if not all([node_a_name, node_b_name, port_a is not None, port_b is not None]):
-                    raise ValueError("Missing required fields for connect operation (node_a, node_b, port_a, port_b)")
+            if validation_error:
+                return json.dumps(ErrorResponse(
+                    error=f"Validation failed at operation {idx}",
+                    details=validation_error,
+                    operation_index=idx
+                ).model_dump(), indent=2)
 
-                # Find nodes
-                nodes = await app.gns3.get_nodes(app.current_project_id)
-                node_a = next((n for n in nodes if n['name'] == node_a_name), None)
-                node_b = next((n for n in nodes if n['name'] == node_b_name), None)
+        logger.info(f"All {len(parsed_ops)} operations validated successfully")
 
-                if not node_a:
-                    raise ValueError(f"Node '{node_a_name}' not found")
-                if not node_b:
-                    raise ValueError(f"Node '{node_b_name}' not found")
+        # PHASE 2: EXECUTE ALL operations (all validated - safe to proceed)
+        completed = []
+        failed = None
+        node_map = {n['name']: n for n in nodes}
 
-                # Create link specification
-                # Using port_number as per API research (will verify in Phase 4)
-                link_spec = {
-                    "nodes": [
-                        {
-                            "node_id": node_a["node_id"],
-                            "adapter_number": 0,  # Default adapter
-                            "port_number": port_a
-                        },
-                        {
-                            "node_id": node_b["node_id"],
-                            "adapter_number": 0,  # Default adapter
-                            "port_number": port_b
-                        }
-                    ]
-                }
+        for idx, op in enumerate(parsed_ops):
+            try:
+                if isinstance(op, ConnectOperation):
+                    # Build link spec with adapter support (FIXES hardcoded adapter_number=0)
+                    node_a = node_map[op.node_a]
+                    node_b = node_map[op.node_b]
 
-                result = await app.gns3.create_link(app.current_project_id, link_spec)
-                completed.append({
-                    "index": idx,
-                    "action": "connect",
-                    "link_id": result.get("link_id"),
-                    "node_a": node_a_name,
-                    "port_a": port_a,
-                    "node_b": node_b_name,
-                    "port_b": port_b
-                })
+                    link_spec = {
+                        "nodes": [
+                            {
+                                "node_id": node_a["node_id"],
+                                "adapter_number": op.adapter_a,
+                                "port_number": op.port_a
+                            },
+                            {
+                                "node_id": node_b["node_id"],
+                                "adapter_number": op.adapter_b,
+                                "port_number": op.port_b
+                            }
+                        ]
+                    }
 
-            else:
-                raise ValueError(f"Unknown action: {action}. Valid actions: connect, disconnect")
+                    result = await app.gns3.create_link(app.current_project_id, link_spec)
 
-        except Exception as e:
-            # Operation failed - record it and stop
-            failed = {
-                "index": idx,
-                "action": action,
-                "operation": conn,
-                "reason": str(e)
-            }
-            break
+                    completed.append(CompletedOperation(
+                        index=idx,
+                        action="connect",
+                        link_id=result.get("link_id"),
+                        node_a=op.node_a,
+                        node_b=op.node_b,
+                        port_a=op.port_a,
+                        port_b=op.port_b,
+                        adapter_a=op.adapter_a,
+                        adapter_b=op.adapter_b
+                    ))
 
-    # Build result
-    result = {"completed": completed}
-    if failed:
-        result["failed"] = failed
+                    logger.info(f"Connected {op.node_a} adapter {op.adapter_a} port {op.port_a} <-> "
+                              f"{op.node_b} adapter {op.adapter_b} port {op.port_b}")
 
-    return json.dumps(result, indent=2)
+                else:  # Disconnect
+                    await app.gns3.delete_link(app.current_project_id, op.link_id)
+
+                    completed.append(CompletedOperation(
+                        index=idx,
+                        action="disconnect",
+                        link_id=op.link_id
+                    ))
+
+                    logger.info(f"Disconnected link {op.link_id}")
+
+            except Exception as e:
+                # Execution failed (should be rare after validation)
+                failed = FailedOperation(
+                    index=idx,
+                    action=op.action,
+                    operation=op.model_dump(),
+                    reason=str(e)
+                )
+                logger.error(f"Operation {idx} failed during execution: {str(e)}")
+                break
+
+        # Invalidate cache after topology changes
+        await app.cache.invalidate_links(app.current_project_id)
+        await app.cache.invalidate_nodes(app.current_project_id)  # Port status changed
+
+        # Build result
+        result = OperationResult(completed=completed, failed=failed)
+        return json.dumps(result.model_dump(), indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to manage connections",
+            details=str(e)
+        ).model_dump(), indent=2)
 
 
 if __name__ == "__main__":

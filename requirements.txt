@@ -1,3 +1,5 @@
 mcp>=1.2.1
 httpx>=0.28.1
 telnetlib3>=2.0.4
+pydantic>=2.0.0
+python-dotenv>=1.1.1
