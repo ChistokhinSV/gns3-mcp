@@ -238,17 +238,16 @@ async def stop_node(ctx: Context, node_name: str) -> str:
     return f"Stopped {node_name} - status: {result.get('status', 'unknown')}"
 
 
-@mcp.tool()
-async def connect_console(ctx: Context, node_name: str) -> str:
-    """Connect to a node's console
-
-    Args:
-        node_name: Name of the node
+# Console helper function
+async def _auto_connect_console(app: AppContext, node_name: str) -> Optional[str]:
+    """Auto-connect to console if not already connected
 
     Returns:
-        Session ID for subsequent console operations
+        Error message if connection fails, None if successful
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    # Check if already connected
+    if app.console.has_session(node_name):
+        return None
 
     if not app.current_project_id:
         return "No project opened"
@@ -274,89 +273,68 @@ async def connect_console(ctx: Context, node_name: str) -> str:
 
     # Connect
     try:
-        session_id = await app.console.connect(host, port, node_name)
-        return f"Connected to {node_name} console\nSession ID: {session_id}\nUse this session ID with send_console, read_console, and disconnect_console"
+        await app.console.connect(host, port, node_name)
+        return None
     except Exception as e:
         return f"Failed to connect: {str(e)}"
 
 
 @mcp.tool()
-async def send_console(ctx: Context, session_id: str, data: str) -> str:
-    """Send data to console session
+async def send_console(ctx: Context, node_name: str, data: str) -> str:
+    """Send data to console (auto-connects if needed)
 
     Args:
-        session_id: Console session ID from connect_console
+        node_name: Name of the node
         data: Data to send (commands or keystrokes)
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    success = await app.console.send(session_id, data)
+    # Auto-connect if needed
+    error = await _auto_connect_console(app, node_name)
+    if error:
+        return error
+
+    success = await app.console.send_by_node(node_name, data)
     return "Sent successfully" if success else "Failed to send"
 
 
 @mcp.tool()
-async def read_console(ctx: Context, session_id: str) -> str:
-    """Read current console output
+async def read_console(ctx: Context, node_name: str, diff: bool = False) -> str:
+    """Read console output (auto-connects if needed)
 
     Args:
-        session_id: Console session ID
+        node_name: Name of the node
+        diff: If True, return only new output since last read
 
     Returns:
-        Full console buffer
+        Console output
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    output = app.console.get_output(session_id)
-    return output if output is not None else f"Session '{session_id}' not found"
+    # Auto-connect if needed
+    error = await _auto_connect_console(app, node_name)
+    if error:
+        return error
+
+    if diff:
+        output = app.console.get_diff_by_node(node_name)
+    else:
+        output = app.console.get_output_by_node(node_name)
+
+    return output if output is not None else "No output available"
 
 
 @mcp.tool()
-async def read_console_diff(ctx: Context, session_id: str) -> str:
-    """Read new console output since last read
-
-    Args:
-        session_id: Console session ID
-
-    Returns:
-        New output since last read
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    diff = app.console.get_diff(session_id)
-    return diff if diff is not None else f"Session '{session_id}' not found"
-
-
-@mcp.tool()
-async def disconnect_console(ctx: Context, session_id: str) -> str:
+async def disconnect_console(ctx: Context, node_name: str) -> str:
     """Disconnect console session
 
     Args:
-        session_id: Console session ID to disconnect
+        node_name: Name of the node
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    success = await app.console.disconnect(session_id)
-    return "Disconnected successfully" if success else "Failed to disconnect or session not found"
-
-
-@mcp.tool()
-async def list_console_sessions(ctx: Context) -> str:
-    """List all active console sessions"""
-    app: AppContext = ctx.request_context.lifespan_context
-
-    sessions = app.console.list_sessions()
-
-    if not sessions:
-        return "No active console sessions"
-
-    result = []
-    for sid, info in sessions.items():
-        result.append(
-            f"- {info['node_name']} @ {info['host']}:{info['port']} "
-            f"[Session: {sid}, Buffer: {info['buffer_size']} bytes]"
-        )
-
-    return "\n".join(result)
+    success = await app.console.disconnect_by_node(node_name)
+    return "Disconnected successfully" if success else "No active session for this node"
 
 
 if __name__ == "__main__":
