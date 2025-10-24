@@ -1,7 +1,14 @@
-"""GNS3 MCP Server v0.6.3
+"""GNS3 MCP Server v0.6.4
 
 Model Context Protocol server for GNS3 lab automation.
 Provides tools for managing projects, nodes, links, console access, and drawings.
+
+Version 0.6.4 - Z-Order Rendering Fix:
+- FIXED: Z-order rendering in topology export now matches GNS3 GUI painter's algorithm
+  * Links render at z=min(connected_nodes)-0.5 (always below nodes)
+  * Drawings and nodes intermixed by z-value (sorted rendering)
+  * Port indicators integrated into link rendering
+  * Ensures correct layering: links → nodes/drawings (by z) → high-z elements
 
 Version 0.6.3 - Font Fallback Chain:
 - FIXED: Font fallback for consistent cross-platform rendering in SVG/PNG exports
@@ -2200,11 +2207,26 @@ async def export_topology_diagram(ctx: Context, output_path: str,
     </style>
   </defs>
 
-  <!-- Drawings (background) -->
+  <!-- Z-Ordered Rendering (painter's algorithm) -->
 '''
 
-        # Add drawings sorted by z-order
-        for drawing in sorted(drawings, key=lambda d: d.get('z', 0)):
+        # ===== Z-ORDER RENDERING =====
+        # Collect all render items with their z-values for proper layering
+        # GNS3 uses: links (z=min(nodes)-0.5), nodes (z=custom), drawings (z=custom)
+        render_items = []
+
+        # Pre-calculate icon sizes and node map for link z-value calculation
+        node_icon_sizes = {}
+        node_map = {n['node_id']: n for n in nodes}
+        for node in nodes:
+            symbol = node.get('symbol', '')
+            if symbol and symbol.lower().endswith('.png'):
+                node_icon_sizes[node['node_id']] = 78
+            else:
+                node_icon_sizes[node['node_id']] = 58
+
+        # 1. Add DRAWINGS to render list
+        for drawing in drawings:
             # Extract SVG content (remove outer svg tags)
             svg = drawing['svg']
             import re
@@ -2265,46 +2287,15 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                     count=1
                 )
 
-            svg_content += f'''  <g transform="translate({drawing['x']}, {drawing['y']})">
+            # Store drawing in render list with its z-value
+            drawing_svg = f'''  <g transform="translate({drawing['x']}, {drawing['y']})">
     {svg_inner}
   </g>
 '''
+            render_items.append((drawing.get('z', 0), 'drawing', drawing_svg))
 
-        # Pre-calculate icon sizes for all nodes
-        # PNG images: 78×78, SVG/internal icons: 58×58
-        node_icon_sizes = {}
-        for node in nodes:
-            symbol = node.get('symbol', '')
-            if symbol and symbol.lower().endswith('.png'):
-                node_icon_sizes[node['node_id']] = 78
-            else:
-                node_icon_sizes[node['node_id']] = 58
-
-        # Add links
-        svg_content += '\n  <!-- Links -->\n'
-        node_map = {n['node_id']: n for n in nodes}
-
-        for link in links:
-            node_a_id = link['nodes'][0]['node_id']
-            node_b_id = link['nodes'][1]['node_id']
-
-            if node_a_id in node_map and node_b_id in node_map:
-                node_a = node_map[node_a_id]
-                node_b = node_map[node_b_id]
-
-                # Links connect to center of nodes (offset from top-left by icon_size/2)
-                icon_size_a = node_icon_sizes.get(node_a_id, 58)
-                icon_size_b = node_icon_sizes.get(node_b_id, 58)
-
-                x1 = node_a['x'] + icon_size_a // 2
-                y1 = node_a['y'] + icon_size_a // 2
-                x2 = node_b['x'] + icon_size_b // 2
-                y2 = node_b['y'] + icon_size_b // 2
-
-                svg_content += f'  <line class="link" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>\n'
-
-        # Add port status indicators
-        svg_content += '\n  <!-- Port Status Indicators -->\n'
+        # 2. Add LINKS to render list (with port indicators integrated)
+        # Links render at z = min(connected nodes) - 0.5 (always below nodes)
         import math
 
         for link in links:
@@ -2316,18 +2307,26 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 node_a = node_map[node_a_id]
                 node_b = node_map[node_b_id]
 
-                # Get node statuses
-                status_a = node_a['status']
-                status_b = node_b['status']
+                # Calculate z-value: min(connected nodes) - 0.5 (GNS3 algorithm)
+                link_z = min(node_a.get('z', 1), node_b.get('z', 1)) - 0.5
 
-                # Calculate indicator colors
-                # Green if node started and link not suspended, else red
-                color_a = "#00cc00" if (status_a == "started" and not link_suspended) else "#cc0000"
-                color_b = "#00cc00" if (status_b == "started" and not link_suspended) else "#cc0000"
-
-                # Get icon sizes
+                # Links connect to center of nodes (offset from top-left by icon_size/2)
                 icon_size_a = node_icon_sizes.get(node_a_id, 58)
                 icon_size_b = node_icon_sizes.get(node_b_id, 58)
+
+                x1 = node_a['x'] + icon_size_a // 2
+                y1 = node_a['y'] + icon_size_a // 2
+                x2 = node_b['x'] + icon_size_b // 2
+                y2 = node_b['y'] + icon_size_b // 2
+
+                # Build link SVG with integrated port indicators
+                link_svg = f'  <line class="link" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>\n'
+
+                # Calculate port status indicator positions and colors
+                status_a = node_a['status']
+                status_b = node_b['status']
+                color_a = "#00cc00" if (status_a == "started" and not link_suspended) else "#cc0000"
+                color_b = "#00cc00" if (status_b == "started" and not link_suspended) else "#cc0000"
 
                 # Node centers
                 cx_a = node_a['x'] + icon_size_a // 2
@@ -2336,7 +2335,6 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 cy_b = node_b['y'] + icon_size_b // 2
 
                 # Calculate indicator positions on link line
-                # Distance from center: icon_size/2 + 15px
                 dx = cx_b - cx_a
                 dy = cy_b - cy_a
                 length = math.sqrt(dx*dx + dy*dy)
@@ -2352,15 +2350,17 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
                     # Indicator for node B side
                     offset_b = icon_size_b // 2 + 15
-                    ind_bx = cx_b - unit_x * offset_b  # Negative because going from B toward A
+                    ind_bx = cx_b - unit_x * offset_b
                     ind_by = cy_b - unit_y * offset_b
 
-                    # Render indicators (4px radius, no border)
-                    svg_content += f'  <circle cx="{ind_ax}" cy="{ind_ay}" r="4" fill="{color_a}"/>\n'
-                    svg_content += f'  <circle cx="{ind_bx}" cy="{ind_by}" r="4" fill="{color_b}"/>\n'
+                    # Add port indicators to link SVG
+                    link_svg += f'  <circle cx="{ind_ax}" cy="{ind_ay}" r="4" fill="{color_a}"/>\n'
+                    link_svg += f'  <circle cx="{ind_bx}" cy="{ind_by}" r="4" fill="{color_b}"/>\n'
 
-        # Add nodes with actual icons
-        svg_content += '\n  <!-- Nodes -->\n'
+                # Store link in render list with calculated z-value
+                render_items.append((link_z, 'link', link_svg))
+
+        # 3. Add NODES to render list
         import base64
 
         for node in nodes:
@@ -2478,11 +2478,11 @@ async def export_topology_diagram(ctx: Context, output_path: str,
             if label_rotation != 0:
                 label_transform = f' transform="rotate({label_rotation} {label_x} {label_y})"'
 
-            # Render node with icon or final fallback
+            # Generate node SVG with icon or final fallback
             # Note: GNS3 coordinates are top-left corner of icon
             if icon_data:
                 # Use actual or fallback icon
-                svg_content += f'''  <g transform="translate({x}, {y})">
+                node_svg = f'''  <g transform="translate({x}, {y})">
     <image href="{icon_data}" x="0" y="0" width="{icon_size}" height="{icon_size}"/>
     <text class="node-label" x="{label_x}" y="{label_y}" text-anchor="{text_anchor}"{label_transform}{style_attrs}>{label_text}</text>
   </g>
@@ -2490,11 +2490,22 @@ async def export_topology_diagram(ctx: Context, output_path: str,
             else:
                 # Final fallback: colored rectangle with status
                 status_class = f"node-{status}"
-                svg_content += f'''  <g transform="translate({x}, {y})">
+                node_svg = f'''  <g transform="translate({x}, {y})">
     <rect class="node {status_class}" x="0" y="0" width="80" height="80" rx="5"/>
     <text class="node-label" x="{label_x}" y="{label_y}" text-anchor="{text_anchor}"{label_transform}{style_attrs}>{label_text}</text>
   </g>
 '''
+
+            # Store node in render list with its z-value
+            render_items.append((node.get('z', 1), 'node', node_svg))
+
+        # ===== RENDER SORTED ITEMS =====
+        # Sort by z-value (stable sort preserves insertion order for equal z)
+        sorted_items = sorted(render_items, key=lambda item: item[0])
+
+        # Render all items in z-order
+        for z_value, item_type, svg_fragment in sorted_items:
+            svg_content += svg_fragment
 
         svg_content += '</svg>\n'
 
