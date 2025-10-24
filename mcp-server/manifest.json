@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Control and automate GNS3 network labs through Claude with type-safe operations",
-  "long_description": "Version 0.7.0: NEW - set_connection() now accepts adapter names (e.g., 'eth0', 'GigabitEthernet0/0') in addition to numeric indexes. Responses include both human-readable port names and adapter numbers for clarity. Use port names for better readability when creating links. Version 0.6.5: FIXED - Node actions (start/stop/suspend/reload) now handle empty API responses correctly. Previously failed with 'Expecting value: line 1 column 1 (char 0)' when GNS3 returned HTTP 204 No Content. Version 0.6.4: FIXED - Z-order rendering in topology export now matches GNS3 GUI. Links render below nodes (z=min(nodes)-0.5), drawings/nodes intermixed by z-value using painter's algorithm. Version 0.6.3: FIXED - Font fallback chain for consistent cross-platform rendering. Version 0.6.2: FIXED - Node label positioning in export_topology_diagram() now matches official GNS3 GUI rendering. Version 0.6.1: FIXED - All newlines automatically converted to \\r\\n (CR+LF) for console compatibility. Version 0.6.0: Added interactive console tools. Version 0.5.0: Port status indicators on topology export. Version 0.3.0: Type-safe Pydantic models, two-phase link validation, performance caching. Supports GNS3 v3 API.",
+  "long_description": "Version 0.8.0: REDESIGNED - read_console() now defaults to diff=True (returns only new output), added last_page parameter for last 25 lines. Unified drawing tools into create_drawing() with drawing_type parameter (rectangle/ellipse/text). BREAKING: read_console() default changed from diff=False to diff=True. Removed create_rectangle/create_text/create_ellipse (use create_drawing). Version 0.7.0: NEW - set_connection() accepts adapter names. Version 0.6.5: FIXED - Node actions handle empty API responses. Version 0.6.4: FIXED - Z-order rendering. Version 0.6.3: FIXED - Font fallback chain. Version 0.6.2: FIXED - Label positioning. Version 0.6.0: Interactive console tools. Version 0.5.0: Port status indicators. Version 0.3.0: Type-safe Pydantic models, two-phase validation, caching. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -87,7 +87,7 @@
     },
     {
       "name": "read_console",
-      "description": "Read console output (full buffer or diff mode)"
+      "description": "Read console output (diff mode by default, last page, or full buffer)"
     },
     {
       "name": "disconnect_console",
@@ -130,20 +130,12 @@
       "description": "List all drawing objects in current project (returns JSON array of DrawingInfo)"
     },
     {
-      "name": "create_rectangle",
-      "description": "Create a colored rectangle drawing with customizable fill and border"
-    },
-    {
-      "name": "create_text",
-      "description": "Create a text label with formatting (bold, font size, color)"
+      "name": "create_drawing",
+      "description": "Create a drawing object (rectangle, ellipse, line, or text) with customizable properties"
     },
     {
       "name": "delete_drawing",
       "description": "Delete a drawing object from the current project"
-    },
-    {
-      "name": "create_ellipse",
-      "description": "Create an ellipse or circle drawing with customizable fill and border"
     },
     {
       "name": "export_topology_diagram",

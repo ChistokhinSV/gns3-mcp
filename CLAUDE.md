@@ -10,9 +10,33 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.7.0
+## Current Version: v0.8.0
 
-**Latest Release:** v0.7.0 - Adapter Name Support (Feature)
+**Latest Release:** v0.8.0 - Tool Redesign (Breaking Changes)
+- **BREAKING**: `read_console()` now defaults to `diff=True` (was `diff=False`)
+  - Previous: `read_console(node)` returned full buffer
+  - Now: `read_console(node)` returns only new output since last read
+  - Migration: Use `read_console(node, diff=False, last_page=False)` for old behavior
+- **NEW**: `read_console()` added `last_page=True` parameter for last ~25 lines
+  - `read_console(node)` - new output only (diff mode, default)
+  - `read_console(node, diff=False, last_page=True)` - last ~25 lines
+  - `read_console(node, diff=False, last_page=False)` - full buffer
+- **BREAKING**: Removed individual drawing tools: `create_rectangle()`, `create_text()`, `create_ellipse()`
+- **NEW**: Unified `create_drawing(drawing_type, ...)` tool
+  - Supports `drawing_type`: "rectangle", "ellipse", "line", "text"
+  - **Rectangle**: `create_drawing("rectangle", x, y, width=W, height=H, fill_color, border_color)`
+  - **Ellipse**: `create_drawing("ellipse", x, y, rx=R1, ry=R2, fill_color, border_color)`
+  - **Line**: `create_drawing("line", x, y, x2=X, y2=Y, border_color, border_width)` - NEW type
+  - **Text**: `create_drawing("text", x, y, text=T, font_size, color, font_weight)`
+- **Files changed**:
+  - `main.py`: Modified `read_console()` defaults (line 1055), added unified `create_drawing()` (lines 2003-2136)
+  - `main.py`: Added `create_line_svg()` helper function (lines 258-283)
+  - `main.py`: Removed `create_rectangle()`, `create_text()`, `create_ellipse()` tools
+  - `manifest.json`: Updated tool definitions for v0.8.0
+  - `SKILL.md`: Updated documentation with new tool interfaces
+- **Rationale**: Diff mode is most common use case for interactive sessions; unified drawing tool reduces API surface
+
+**Previous:** v0.7.0 - Adapter Name Support (Feature)
 - **NEW**: `set_connection()` now accepts adapter names in addition to numeric indexes
 - **Adapter names**: Use port names like "eth0", "GigabitEthernet0/0", "Ethernet0" for better readability
 - **Backward compatible**: Numeric adapter indexes still work (0, 1, 2, ...)

@@ -255,6 +255,34 @@ def create_ellipse_svg(rx: int, ry: int, fill: str = "#ffffff",
 </svg>'''
 
 
+def create_line_svg(x2: int, y2: int, stroke: str = "#000000", stroke_width: int = 2) -> str:
+    """Generate SVG for a line
+
+    Args:
+        x2: X coordinate of end point (relative to x, y position)
+        y2: Y coordinate of end point (relative to x, y position)
+        stroke: Line color
+        stroke_width: Line width in pixels
+
+    Note: Line starts at (0, 0) in SVG, which maps to the drawing's (x, y) position.
+          End point is at (x2, y2) relative to start.
+    """
+    # Calculate SVG dimensions to fit the line
+    width = abs(x2) + stroke_width
+    height = abs(y2) + stroke_width
+
+    # Adjust start/end points if line goes in negative direction
+    x1 = stroke_width // 2 if x2 >= 0 else abs(x2) + stroke_width // 2
+    y1 = stroke_width // 2 if y2 >= 0 else abs(y2) + stroke_width // 2
+    x2_adj = x1 + x2
+    y2_adj = y1 + y2
+
+    return f'''<svg height="{height}" width="{width}">
+  <line stroke="{stroke}" stroke-width="{stroke_width}" stroke-linecap="round"
+        x1="{x1}" y1="{y1}" x2="{x2_adj}" y2="{y2_adj}" />
+</svg>'''
+
+
 @dataclass
 class AppContext:
     """Application context with GNS3 client, console manager, and cache"""
@@ -1052,7 +1080,7 @@ async def send_console(ctx: Context, node_name: str, data: str, raw: bool = Fals
 
 
 @mcp.tool()
-async def read_console(ctx: Context, node_name: str, diff: bool = False) -> str:
+async def read_console(ctx: Context, node_name: str, diff: bool = True, last_page: bool = True) -> str:
     """Read console output (auto-connects if needed)
 
     Reads accumulated output from background console buffer. Output accumulates
@@ -1060,8 +1088,9 @@ async def read_console(ctx: Context, node_name: str, diff: bool = False) -> str:
 
     Buffer Behavior:
     - Background task continuously reads console into 10MB buffer
-    - Full buffer (diff=False): Returns all console output since connection
-    - Diff mode (diff=True): Returns only NEW output since last read
+    - Diff mode (diff=True, DEFAULT): Returns only NEW output since last read
+    - Last page (diff=False, last_page=True): Returns last ~25 lines of buffer
+    - Full buffer (diff=False, last_page=False): Returns ALL console output since connection
     - Read position advances with each diff=True read
 
     Timing Recommendations:
@@ -1077,19 +1106,25 @@ async def read_console(ctx: Context, node_name: str, diff: bool = False) -> str:
 
     Args:
         node_name: Name of the node
-        diff: If True, return only new output since last read (recommended for
-              interactive sessions to avoid seeing old output)
+        diff: If True (DEFAULT), return only new output since last read.
+              Set to False to get last page or full buffer.
+        last_page: If True (DEFAULT when diff=False), return last ~25 lines only.
+                   Set to False with diff=False to get entire buffer.
 
     Returns:
         Console output (ANSI escape codes stripped, line endings normalized)
         or "No output available" if buffer empty
 
-    Example - Check for specific prompt:
-        output = read_console("R1", diff=True)
+    Example - Interactive session (default):
+        output = read_console("R1")  # diff=True by default
         if "Login:" in output:
             send_console("R1", "admin\\n")
-        elif "Router>" in output:
-            send_console("R1", "enable\\n")
+
+    Example - Check recent output:
+        output = read_console("R1", diff=False, last_page=True)  # Last 25 lines
+
+    Example - Get everything:
+        output = read_console("R1", diff=False, last_page=False)  # Entire buffer
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -1099,8 +1134,18 @@ async def read_console(ctx: Context, node_name: str, diff: bool = False) -> str:
         return error
 
     if diff:
+        # Return only new output since last read
         output = app.console.get_diff_by_node(node_name)
+    elif last_page:
+        # Return last ~25 lines
+        full_output = app.console.get_output_by_node(node_name)
+        if full_output:
+            lines = full_output.splitlines()
+            output = '\n'.join(lines[-25:]) if len(lines) > 25 else full_output
+        else:
+            output = None
     else:
+        # Return entire buffer
         output = app.console.get_output_by_node(node_name)
 
     return output if output is not None else "No output available"
@@ -1955,23 +2000,84 @@ async def list_drawings(ctx: Context) -> str:
 
 
 @mcp.tool()
-async def create_rectangle(ctx: Context, x: int, y: int, width: int, height: int,
-                          fill_color: str = "#ffffff", border_color: str = "#000000",
-                          border_width: int = 2, z: int = 0) -> str:
-    """Create a colored rectangle drawing
+async def create_drawing(ctx: Context,
+                        drawing_type: str,
+                        x: int,
+                        y: int,
+                        z: int = 0,
+                        # Rectangle/Ellipse parameters
+                        width: Optional[int] = None,
+                        height: Optional[int] = None,
+                        rx: Optional[int] = None,
+                        ry: Optional[int] = None,
+                        fill_color: str = "#ffffff",
+                        border_color: str = "#000000",
+                        border_width: int = 2,
+                        # Line parameters
+                        x2: Optional[int] = None,
+                        y2: Optional[int] = None,
+                        # Text parameters
+                        text: Optional[str] = None,
+                        font_size: int = 10,
+                        font_weight: str = "normal",
+                        font_family: str = "TypeWriter",
+                        color: str = "#000000") -> str:
+    """Create a drawing object (rectangle, ellipse, line, or text)
 
     Args:
-        x: X coordinate (top-left corner)
-        y: Y coordinate (top-left corner)
-        width: Rectangle width
-        height: Rectangle height
-        fill_color: Fill color (hex or name, default: white)
-        border_color: Border color (default: black)
-        border_width: Border width in pixels (default: 2)
-        z: Z-order/layer (default: 0 - behind nodes)
+        drawing_type: Type of drawing - "rectangle", "ellipse", "line", or "text"
+        x: X coordinate (start point for line, top-left for others)
+        y: Y coordinate (start point for line, top-left for others)
+        z: Z-order/layer (default: 0 for shapes, 1 for text)
+
+        Rectangle parameters (drawing_type="rectangle"):
+            width: Rectangle width (required)
+            height: Rectangle height (required)
+            fill_color: Fill color (hex or name, default: white)
+            border_color: Border color (default: black)
+            border_width: Border width in pixels (default: 2)
+
+        Ellipse parameters (drawing_type="ellipse"):
+            rx: Horizontal radius (required)
+            ry: Vertical radius (required, use same as rx for circle)
+            fill_color: Fill color (hex or name, default: white)
+            border_color: Border color (default: black)
+            border_width: Border width in pixels (default: 2)
+            Note: Ellipse center will be at (x + rx, y + ry)
+
+        Line parameters (drawing_type="line"):
+            x2: X offset from start point (required, can be negative)
+            y2: Y offset from start point (required, can be negative)
+            color: Line color (hex or name, default: black)
+            border_width: Line width in pixels (default: 2)
+            Note: Line goes from (x, y) to (x+x2, y+y2)
+
+        Text parameters (drawing_type="text"):
+            text: Text content (required)
+            font_size: Font size in points (default: 10)
+            font_weight: Font weight - "normal" or "bold" (default: normal)
+            font_family: Font family (default: "TypeWriter")
+            color: Text color (hex or name, default: black)
 
     Returns:
         JSON with created drawing info
+
+    Examples:
+        # Create rectangle
+        create_drawing("rectangle", x=100, y=100, width=200, height=150,
+                      fill_color="#ff0000", z=0)
+
+        # Create circle
+        create_drawing("ellipse", x=100, y=100, rx=50, ry=50,
+                      fill_color="#00ff00", z=0)
+
+        # Create line from (100,100) to (300,200)
+        create_drawing("line", x=100, y=100, x2=200, y2=100,
+                      color="#0000ff", border_width=3, z=0)
+
+        # Create text label
+        create_drawing("text", x=100, y=100, text="Router1",
+                      font_size=12, font_weight="bold", z=1)
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -1980,8 +2086,56 @@ async def create_rectangle(ctx: Context, x: int, y: int, width: int, height: int
         return error
 
     try:
-        svg = create_rectangle_svg(width, height, fill_color, border_color, border_width)
+        drawing_type = drawing_type.lower()
 
+        # Generate appropriate SVG based on type
+        if drawing_type == "rectangle":
+            if width is None or height is None:
+                return json.dumps(ErrorResponse(
+                    error="Missing required parameters",
+                    details="Rectangle requires 'width' and 'height' parameters"
+                ).model_dump(), indent=2)
+
+            svg = create_rectangle_svg(width, height, fill_color, border_color, border_width)
+            message = "Rectangle created successfully"
+
+        elif drawing_type == "ellipse":
+            if rx is None or ry is None:
+                return json.dumps(ErrorResponse(
+                    error="Missing required parameters",
+                    details="Ellipse requires 'rx' and 'ry' parameters"
+                ).model_dump(), indent=2)
+
+            svg = create_ellipse_svg(rx, ry, fill_color, border_color, border_width)
+            message = "Ellipse created successfully"
+
+        elif drawing_type == "line":
+            if x2 is None or y2 is None:
+                return json.dumps(ErrorResponse(
+                    error="Missing required parameters",
+                    details="Line requires 'x2' and 'y2' parameters (offset from start point)"
+                ).model_dump(), indent=2)
+
+            svg = create_line_svg(x2, y2, color, border_width)
+            message = "Line created successfully"
+
+        elif drawing_type == "text":
+            if text is None:
+                return json.dumps(ErrorResponse(
+                    error="Missing required parameters",
+                    details="Text drawing requires 'text' parameter"
+                ).model_dump(), indent=2)
+
+            svg = create_text_svg(text, font_size, font_weight, font_family, color)
+            message = "Text created successfully"
+
+        else:
+            return json.dumps(ErrorResponse(
+                error="Invalid drawing type",
+                details=f"drawing_type must be 'rectangle', 'ellipse', 'line', or 'text', got '{drawing_type}'"
+            ).model_dump(), indent=2)
+
+        # Create drawing in GNS3
         drawing_data = {
             "x": x,
             "y": y,
@@ -1992,59 +2146,11 @@ async def create_rectangle(ctx: Context, x: int, y: int, width: int, height: int
 
         result = await app.gns3.create_drawing(app.current_project_id, drawing_data)
 
-        return json.dumps({"message": "Rectangle created successfully", "drawing": result}, indent=2)
+        return json.dumps({"message": message, "drawing": result}, indent=2)
 
     except Exception as e:
         return json.dumps(ErrorResponse(
-            error="Failed to create rectangle",
-            details=str(e)
-        ).model_dump(), indent=2)
-
-
-@mcp.tool()
-async def create_text(ctx: Context, text: str, x: int, y: int,
-                     font_size: int = 10, font_weight: str = "normal",
-                     font_family: str = "TypeWriter", color: str = "#000000",
-                     z: int = 1) -> str:
-    """Create a text label with formatting
-
-    Args:
-        text: Text content
-        x: X coordinate (top-left corner of text)
-        y: Y coordinate (top-left corner of text)
-        font_size: Font size in points (default: 10)
-        font_weight: Font weight - "normal" or "bold" (default: normal)
-        font_family: Font family (default: "TypeWriter")
-        color: Text color (hex or name, default: black)
-        z: Z-order/layer (default: 1 - in front of shapes)
-
-    Returns:
-        JSON with created drawing info
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    try:
-        svg = create_text_svg(text, font_size, font_weight, font_family, color)
-
-        drawing_data = {
-            "x": x,
-            "y": y,
-            "z": z,
-            "svg": svg,
-            "rotation": 0
-        }
-
-        result = await app.gns3.create_drawing(app.current_project_id, drawing_data)
-
-        return json.dumps({"message": "Text created successfully", "drawing": result}, indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to create text",
+            error="Failed to create drawing",
             details=str(e)
         ).model_dump(), indent=2)
 
@@ -2072,56 +2178,6 @@ async def delete_drawing(ctx: Context, drawing_id: str) -> str:
     except Exception as e:
         return json.dumps(ErrorResponse(
             error="Failed to delete drawing",
-            details=str(e)
-        ).model_dump(), indent=2)
-
-
-@mcp.tool()
-async def create_ellipse(ctx: Context, x: int, y: int, rx: int, ry: int,
-                        fill_color: str = "#ffffff", border_color: str = "#000000",
-                        border_width: int = 2, z: int = 0) -> str:
-    """Create an ellipse/circle drawing
-
-    Args:
-        x: X coordinate (top-left corner of bounding box)
-        y: Y coordinate (top-left corner of bounding box)
-        rx: Horizontal radius
-        ry: Vertical radius (use same as rx for a circle)
-        fill_color: Fill color (hex or name, default: white)
-        border_color: Border color (default: black)
-        border_width: Border width in pixels (default: 2)
-        z: Z-order/layer (default: 0 - behind nodes)
-
-    Note: The ellipse center will be at (x + rx, y + ry). For a circle
-    with radius 50 at position (100, 100), the center is at (150, 150).
-
-    Returns:
-        JSON with created drawing info
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    try:
-        svg = create_ellipse_svg(rx, ry, fill_color, border_color, border_width)
-
-        drawing_data = {
-            "x": x,
-            "y": y,
-            "z": z,
-            "svg": svg,
-            "rotation": 0
-        }
-
-        result = await app.gns3.create_drawing(app.current_project_id, drawing_data)
-
-        return json.dumps({"message": "Ellipse created successfully", "drawing": result}, indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to create ellipse",
             details=str(e)
         ).model_dump(), indent=2)
 

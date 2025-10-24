@@ -32,9 +32,10 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
   - `none`: No console
 - **Auto-connect workflow** (v0.2.0):
   1. Just use `send_console(node_name, command)` - automatically connects if needed
-  2. Read output with `read_console(node_name)` for full buffer
-  3. Or use `read_console(node_name, diff=True)` for new output only
-  4. Disconnect with `disconnect_console(node_name)` when done
+  2. Read output with `read_console(node_name)` - returns new output since last read (diff mode, default since v0.8.0)
+  3. Or use `read_console(node_name, diff=False, last_page=True)` for last ~25 lines
+  4. Or use `read_console(node_name, diff=False, last_page=False)` for full buffer
+  5. Disconnect with `disconnect_console(node_name)` when done
 - Sessions are managed automatically by node name
 - Session timeout: 30 minutes of inactivity
 
@@ -62,11 +63,13 @@ GNS3 uses a specific coordinate system for positioning elements:
 - Connection point: `(node_x + icon_size/2, node_y + icon_size/2)`
 - When using `set_connection()`, specify which adapter and port on each node
 
-**Drawing Objects (Rectangles, Text, Ellipses):**
+**Drawing Objects (v0.8.0 - Unified create_drawing):**
+- Create drawings with `create_drawing(drawing_type, x, y, ...)` where type is "rectangle", "ellipse", "line", or "text"
 - All drawing coordinates (x, y) represent the **top-left corner** of bounding box
-- Rectangle at (100, 100) with 200×100 size: top-left at (100, 100), bottom-right at (300, 200)
-- Ellipse at (100, 100) with rx=50, ry=30: bounding box top-left at (100, 100), center at (150, 130)
-- Text at (100, 100): starts rendering from that point
+- **Rectangle**: `create_drawing("rectangle", x, y, width=W, height=H, fill_color="#fff", border_color="#000")`
+- **Ellipse**: `create_drawing("ellipse", x, y, rx=50, ry=30, fill_color="#fff", border_color="#000")`
+- **Line**: `create_drawing("line", x, y, x2=100, y2=50, border_color="#000", border_width=2)` - ends at (x+x2, y+y2)
+- **Text**: `create_drawing("text", x, y, text="Label", font_size=10, color="#000", font_weight="normal")`
 - Z-order: 0 = behind nodes (backgrounds), 1 = in front of nodes (labels)
 
 **Topology Export:**
@@ -117,19 +120,19 @@ GNS3 uses a specific coordinate system for positioning elements:
 ```
 1. Ensure node is started (use set_node if needed)
 2. Send initial newline to wake console: send_console("Router1", "\n")
-3. Read output to see prompt: read_console("Router1", diff=True)
+3. Read output to see prompt: read_console("Router1")
 4. Send configuration commands one at a time
 5. Always read output after each command to verify
-6. Use diff=True to see only new output
+6. Default behavior (v0.8.0): returns only new output since last read
 7. Disconnect when done: disconnect_console("Router1")
 ```
 
 **Example:**
 ```
 send_console("R1", "\n")
-read_console("R1", diff=True)  # See prompt
+read_console("R1")  # See prompt (diff mode default since v0.8.0)
 send_console("R1", "show ip interface brief\n")
-read_console("R1", diff=True)  # See command output
+read_console("R1")  # See command output (only new lines)
 disconnect_console("R1")  # Clean up when done
 ```
 
@@ -139,7 +142,9 @@ disconnect_console("R1")  # Clean up when done
 - **Wait** 1-2 seconds between commands for device processing
 - **Send** `\n` (newline) first to wake up console
 - **Look for** prompts (>, #) in output to confirm device is ready
-- **Use** `diff=True` parameter to see only new output since last read
+- **Default behavior** (v0.8.0): `read_console()` returns only new output since last read (diff mode)
+- **Last page mode**: Use `read_console(node, diff=False, last_page=True)` for last ~25 lines
+- **Full buffer**: Use `read_console(node, diff=False, last_page=False)` for entire console history
 - **No need** to manually connect - auto-connects on first send/read
 - **Disconnect** when done to free resources (30min timeout otherwise)
 - For RouterOS (MikroTik): default user `admin`, empty password
@@ -204,7 +209,7 @@ When working with multiple nodes:
 1. Start nodes using `set_node(node_name, action='start')` or batch operations
 2. Console sessions identified by node_name (no manual tracking needed)
 3. Configure one device at a time, verify before moving on
-4. Read output with `diff=True` to avoid confusion between devices
+4. Read output to get only new lines (diff mode default since v0.8.0) - avoids confusion between devices
 5. Disconnect sessions when done: `disconnect_console(node_name)`
 
 **Example - Configure multiple routers:**
@@ -215,9 +220,9 @@ set_node("R2", action="start")
 
 # Configure R1
 send_console("R1", "\n")
-read_console("R1", diff=True)
+read_console("R1")  # Diff mode default - only new output
 send_console("R1", "configure terminal\n")
-read_console("R1", diff=True)
+read_console("R1")  # Only new output since last read
 # ... more commands ...
 disconnect_console("R1")
 
