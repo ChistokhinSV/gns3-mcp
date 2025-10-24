@@ -53,3 +53,6 @@ Thumbs.db
 
 # Project specific - keep data folder but ignore large files
 data/*.pcapng
+
+gns3-gui/
+gns3-project/

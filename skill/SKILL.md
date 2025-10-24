@@ -32,9 +32,9 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
   - `none`: No console
 - **Auto-connect workflow** (v0.2.0):
   1. Just use `send_console(node_name, command)` - automatically connects if needed
-  2. Read output with `read_console(node_name)` - returns new output since last read (diff mode, default since v0.8.0)
-  3. Or use `read_console(node_name, diff=False, last_page=True)` for last ~25 lines
-  4. Or use `read_console(node_name, diff=False, last_page=False)` for full buffer
+  2. Read output with `read_console(node_name)` - returns new output since last read (diff mode, default since v0.9.0)
+  3. Or use `read_console(node_name, mode="last_page")` for last ~25 lines
+  4. Or use `read_console(node_name, mode="all")` for full buffer
   5. Disconnect with `disconnect_console(node_name)` when done
 - Sessions are managed automatically by node name
 - Session timeout: 30 minutes of inactivity
@@ -130,7 +130,7 @@ GNS3 uses a specific coordinate system for positioning elements:
 **Example:**
 ```
 send_console("R1", "\n")
-read_console("R1")  # See prompt (diff mode default since v0.8.0)
+read_console("R1")  # See prompt (diff mode default since v0.9.0)
 send_console("R1", "show ip interface brief\n")
 read_console("R1")  # See command output (only new lines)
 disconnect_console("R1")  # Clean up when done
@@ -189,9 +189,9 @@ result = send_and_wait_console("R1",
 - **Wait** 1-2 seconds between commands for device processing
 - **Send** `\n` (newline) first to wake up console
 - **Look for** prompts (>, #) in output to confirm device is ready
-- **Default behavior** (v0.8.0): `read_console()` returns only new output since last read (diff mode)
-- **Last page mode**: Use `read_console(node, diff=False, last_page=True)` for last ~25 lines
-- **Full buffer**: Use `read_console(node, diff=False, last_page=False)` for entire console history
+- **Default behavior** (v0.9.0): `read_console()` returns only new output since last read (diff mode)
+- **Last page mode**: Use `read_console(node, mode="last_page")` for last ~25 lines
+- **Full buffer**: Use `read_console(node, mode="all")` for entire console history
 - **Before using send_and_wait_console()**: First check what the prompt looks like with `read_console()`
   - Different devices have different prompts: `Router#`, `[admin@MikroTik] >`, `switch>`, etc.
   - Use the exact prompt pattern in `wait_pattern` parameter to ensure command completion

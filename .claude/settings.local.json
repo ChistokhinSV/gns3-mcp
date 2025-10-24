@@ -10,7 +10,10 @@
       "Bash(npx @anthropic-ai/mcpb pack:*)",
       "mcp__gns3-lab__list_nodes",
       "Read(//c/DOWNLOAD_TEMP/**)",
-      "mcp__gns3-lab__list_templates"
+      "mcp__gns3-lab__list_templates",
+      "Bash(fc-list:*)",
+      "Bash(python:*)",
+      "mcp__gns3-lab__list_drawings"
     ],
     "deny": [],
     "ask": []

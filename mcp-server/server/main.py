@@ -1,7 +1,13 @@
-"""GNS3 MCP Server v0.6.4
+"""GNS3 MCP Server v0.9.0
 
 Model Context Protocol server for GNS3 lab automation.
 Provides tools for managing projects, nodes, links, console access, and drawings.
+
+Version 0.9.0 - Major Refactoring (BREAKING CHANGES):
+- REMOVED: Caching infrastructure (cache.py, all cache usage, force_refresh parameters)
+- REMOVED: detect_console_state() tool and DEVICE_PATTERNS dictionary
+- CHANGED: read_console() now uses mode parameter ("diff"/"last_page"/"all") instead of bool flags
+- SIMPLIFIED: Direct API calls instead of cache layer, better for local/close labs
 
 Version 0.6.4 - Z-Order Rendering Fix:
 - FIXED: Z-order rendering in topology export now matches GNS3 GUI painter's algorithm
@@ -74,7 +80,6 @@ from mcp.server.fastmcp import FastMCP, Context
 
 from gns3_client import GNS3Client
 from console_manager import ConsoleManager
-from cache import DataCache
 from link_validator import LinkValidator
 from models import (
     ProjectInfo, NodeInfo, LinkInfo, LinkEndpoint,
@@ -92,63 +97,6 @@ logging.basicConfig(
     datefmt='%H:%M:%S %d.%m.%Y'
 )
 logger = logging.getLogger(__name__)
-
-
-# Device Pattern Library for Console State Detection
-# Used by detect_console_state() and execute_console_sequence()
-DEVICE_PATTERNS = {
-    "cisco_ios": {
-        "login": r"[Uu]sername:",
-        "password": r"[Pp]assword:",
-        "user_mode": r"[\w\-]+>",
-        "privileged": r"[\w\-]+#",
-        "config": r"\(config[^\)]*\)#",
-        "errors": [r"% Invalid", r"% Unknown", r"% Incomplete"]
-    },
-    "mikrotik": {
-        "login": r"Login:",
-        "password": r"Password:",
-        "new_password": r"[Nn]ew [Pp]assword\s*>",
-        "repeat_password": r"[Rr]epeat.*[Pp]assword\s*>",
-        "prompt": r"\[[\w\-]+@[\w\-]+\]\s*[>]",
-        "errors": [r"failure", r"bad command", r"expected"]
-    },
-    "juniper": {
-        "login": r"login:",
-        "password": r"[Pp]assword:",
-        "user_mode": r"[\w\-]+>",
-        "privileged": r"[\w\-]+#",
-        "config": r"\[edit[^\]]*\]",
-        "errors": [r"error:", r"syntax error", r"unknown command"]
-    },
-    "arista": {
-        "login": r"[Ll]ogin:",
-        "password": r"[Pp]assword:",
-        "user_mode": r"[\w\-]+>",
-        "privileged": r"[\w\-]+#",
-        "config": r"\(config[^\)]*\)#",
-        "errors": [r"% Invalid", r"% Incomplete"]
-    },
-    "linux": {
-        "login": r"login:",
-        "password": r"[Pp]assword:",
-        "prompt": r"[$#]",
-        "root_prompt": r"#",
-        "errors": [r"command not found", r"permission denied", r"No such file"]
-    }
-}
-
-# Common error patterns across all devices
-COMMON_ERROR_PATTERNS = [
-    r"% Invalid",
-    r"% Unknown",
-    r"% Incomplete",
-    r"^Error:",
-    r"[Ff]ailed",
-    r"[Ff]ailure",
-    r"syntax error",
-    r"bad command"
-]
 
 
 def add_font_fallbacks(style_string: str) -> str:
@@ -285,10 +233,9 @@ def create_line_svg(x2: int, y2: int, stroke: str = "#000000", stroke_width: int
 
 @dataclass
 class AppContext:
-    """Application context with GNS3 client, console manager, and cache"""
+    """Application context with GNS3 client and console manager"""
     gns3: GNS3Client
     console: ConsoleManager
-    cache: DataCache
     current_project_id: str | None = None
     cleanup_task: Optional[asyncio.Task] = field(default=None)
 
@@ -330,9 +277,6 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     # Initialize console manager
     console = ConsoleManager()
 
-    # Initialize cache (30s TTL for nodes/links, 60s for projects)
-    cache = DataCache(node_ttl=30, link_ttl=30, project_ttl=60)
-
     # Start periodic cleanup task
     cleanup_task = asyncio.create_task(periodic_console_cleanup(console))
 
@@ -349,7 +293,6 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     context = AppContext(
         gns3=gns3,
         console=console,
-        cache=cache,
         current_project_id=current_project_id,
         cleanup_task=cleanup_task
     )
@@ -368,9 +311,6 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         await console.close_all()
         await gns3.close()
 
-        # Log cache statistics
-        stats = cache.get_stats()
-        logger.info(f"Cache statistics: {json.dumps(stats, indent=2)}")
         logger.info("GNS3 MCP Server shutdown complete")
 
 
@@ -388,14 +328,13 @@ async def validate_current_project(app: AppContext) -> Optional[str]:
     if not app.current_project_id:
         return json.dumps(ErrorResponse(
             error="No project opened",
-            details="Use open_project() to open a project first"
+            details="Use open_project() to open a project first",
+            suggested_action="Call list_projects() to see available projects, then open_project(project_name)"
         ).model_dump(), indent=2)
 
     try:
-        # Use cache for project list
-        projects = await app.cache.get_projects(
-            lambda: app.gns3.get_projects()
-        )
+        # Get project list directly from API
+        projects = await app.gns3.get_projects()
 
         project = next((p for p in projects
                        if p['project_id'] == app.current_project_id), None)
@@ -404,14 +343,16 @@ async def validate_current_project(app: AppContext) -> Optional[str]:
             app.current_project_id = None
             return json.dumps(ErrorResponse(
                 error="Project no longer exists",
-                details=f"Project ID {app.current_project_id} not found. Use list_projects() and open_project()"
+                details=f"Project ID {app.current_project_id} not found. Use list_projects() and open_project()",
+                suggested_action="Call list_projects() to see current projects, then open_project(project_name)"
             ).model_dump(), indent=2)
 
         if project['status'] != 'opened':
             app.current_project_id = None
             return json.dumps(ErrorResponse(
                 error=f"Project is {project['status']}",
-                details=f"Project '{project['name']}' is not open. Use open_project() to reopen"
+                details=f"Project '{project['name']}' is not open. Use open_project() to reopen",
+                suggested_action=f"Call open_project('{project['name']}') to reopen this project"
             ).model_dump(), indent=2)
 
         return None
@@ -419,7 +360,8 @@ async def validate_current_project(app: AppContext) -> Optional[str]:
     except Exception as e:
         return json.dumps(ErrorResponse(
             error="Failed to validate project",
-            details=str(e)
+            details=str(e),
+            suggested_action="Check GNS3 server connection and project state"
         ).model_dump(), indent=2)
 
 
@@ -432,11 +374,8 @@ mcp = FastMCP(
 
 
 @mcp.tool()
-async def list_projects(ctx: Context, force_refresh: bool = False) -> str:
+async def list_projects(ctx: Context) -> str:
     """List all GNS3 projects with their status
-
-    Args:
-        force_refresh: Force cache refresh (default: False)
 
     Returns:
         JSON array of ProjectInfo objects
@@ -444,11 +383,8 @@ async def list_projects(ctx: Context, force_refresh: bool = False) -> str:
     app: AppContext = ctx.request_context.lifespan_context
 
     try:
-        # Get projects with caching
-        projects = await app.cache.get_projects(
-            lambda: app.gns3.get_projects(),
-            force_refresh=force_refresh
-        )
+        # Get projects directly from API
+        projects = await app.gns3.get_projects()
 
         # Convert to ProjectInfo models
         project_models = [
@@ -487,26 +423,21 @@ async def open_project(ctx: Context, project_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
 
     try:
-        # Find project by name (use cache)
-        projects = await app.cache.get_projects(
-            lambda: app.gns3.get_projects(),
-            force_refresh=True  # Refresh to get latest status
-        )
+        # Find project by name
+        projects = await app.gns3.get_projects()
 
         project = next((p for p in projects if p['name'] == project_name), None)
 
         if not project:
             return json.dumps(ErrorResponse(
                 error="Project not found",
-                details=f"No project named '{project_name}' found. Use list_projects() to see available projects."
+                details=f"No project named '{project_name}' found. Use list_projects() to see available projects.",
+                suggested_action="Call list_projects() to see exact project names (case-sensitive)"
             ).model_dump(), indent=2)
 
         # Open it
         result = await app.gns3.open_project(project['project_id'])
         app.current_project_id = project['project_id']
-
-        # Invalidate caches (project status changed)
-        await app.cache.invalidate_projects()
 
         # Return ProjectInfo
         project_info = ProjectInfo(
@@ -522,16 +453,14 @@ async def open_project(ctx: Context, project_name: str) -> str:
     except Exception as e:
         return json.dumps(ErrorResponse(
             error="Failed to open project",
-            details=str(e)
+            details=str(e),
+            suggested_action="Verify project exists in GNS3 and is not corrupted"
         ).model_dump(), indent=2)
 
 
 @mcp.tool()
-async def list_nodes(ctx: Context, force_refresh: bool = False) -> str:
+async def list_nodes(ctx: Context) -> str:
     """List all nodes in the current project with their status and console info
-
-    Args:
-        force_refresh: Force cache refresh (default: False)
 
     Returns:
         JSON array of NodeInfo objects
@@ -544,12 +473,8 @@ async def list_nodes(ctx: Context, force_refresh: bool = False) -> str:
         return error
 
     try:
-        # Get nodes with caching
-        nodes = await app.cache.get_nodes(
-            app.current_project_id,
-            lambda pid: app.gns3.get_nodes(pid),
-            force_refresh=force_refresh
-        )
+        # Get nodes directly from API
+        nodes = await app.gns3.get_nodes(app.current_project_id)
 
         # Convert to NodeInfo models
         node_models = []
@@ -589,12 +514,11 @@ async def list_nodes(ctx: Context, force_refresh: bool = False) -> str:
 
 
 @mcp.tool()
-async def get_node_details(ctx: Context, node_name: str, force_refresh: bool = False) -> str:
+async def get_node_details(ctx: Context, node_name: str) -> str:
     """Get detailed information about a specific node
 
     Args:
         node_name: Name of the node
-        force_refresh: Force cache refresh (default: False)
 
     Returns:
         JSON with NodeInfo object
@@ -607,19 +531,16 @@ async def get_node_details(ctx: Context, node_name: str, force_refresh: bool = F
         return error
 
     try:
-        # Get nodes with caching
-        nodes = await app.cache.get_nodes(
-            app.current_project_id,
-            lambda pid: app.gns3.get_nodes(pid),
-            force_refresh=force_refresh
-        )
+        # Get nodes directly from API
+        nodes = await app.gns3.get_nodes(app.current_project_id)
 
         node = next((n for n in nodes if n['name'] == node_name), None)
 
         if not node:
             return json.dumps(ErrorResponse(
                 error="Node not found",
-                details=f"No node named '{node_name}' in current project. Use list_nodes() to see available nodes."
+                details=f"No node named '{node_name}' in current project. Use list_nodes() to see available nodes.",
+                suggested_action="Call list_nodes() to see exact node names (case-sensitive)"
             ).model_dump(), indent=2)
 
         # Extract hardware properties from nested 'properties' object
@@ -660,15 +581,12 @@ async def get_node_details(ctx: Context, node_name: str, force_refresh: bool = F
 
 
 @mcp.tool()
-async def get_links(ctx: Context, force_refresh: bool = False) -> str:
+async def get_links(ctx: Context) -> str:
     """List all network links in the current project
 
     Returns link details including link IDs (needed for disconnect),
     connected nodes, ports, adapters, and link type. Use this before
     set_connection() to check current topology and find link IDs.
-
-    Args:
-        force_refresh: Force cache refresh (default: False)
 
     Returns:
         JSON array of LinkInfo objects
@@ -681,18 +599,9 @@ async def get_links(ctx: Context, force_refresh: bool = False) -> str:
         return error
 
     try:
-        # Get links and nodes with caching
-        links = await app.cache.get_links(
-            app.current_project_id,
-            lambda pid: app.gns3.get_links(pid),
-            force_refresh=force_refresh
-        )
-
-        nodes = await app.cache.get_nodes(
-            app.current_project_id,
-            lambda pid: app.gns3.get_nodes(pid),
-            force_refresh=force_refresh
-        )
+        # Get links and nodes directly from API
+        links = await app.gns3.get_links(app.current_project_id)
+        nodes = await app.gns3.get_nodes(app.current_project_id)
 
         # Create node ID to name mapping
         node_map = {n['node_id']: n['name'] for n in nodes}
@@ -784,20 +693,27 @@ async def set_node(ctx: Context,
                    console_type: Optional[str] = None) -> str:
     """Configure node properties and/or control node state
 
+    Validation Rules:
+    - name parameter requires node to be stopped
+    - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU nodes only
+    - ports parameter applies to ethernet_switch nodes only
+    - action values: start, stop, suspend, reload, restart
+    - restart action: stops node (with retry logic), waits for confirmed stop, then starts
+
     Args:
         node_name: Name of the node to modify
         action: Action to perform (start/stop/suspend/reload/restart)
-        x: X coordinate
-        y: Y coordinate
-        z: Z-order (layer)
-        locked: Lock node position
-        ports: Number of ports (for ethernet switches)
-        name: New name for the node (requires node to be stopped)
-        ram: RAM in MB (QEMU nodes)
-        cpus: Number of CPUs (QEMU nodes)
-        hdd_disk_image: Path to HDD disk image (QEMU nodes)
-        adapters: Number of network adapters (QEMU nodes)
-        console_type: Console type (telnet, vnc, spice, etc.)
+        x: X coordinate (top-left corner of node icon)
+        y: Y coordinate (top-left corner of node icon)
+        z: Z-order (layer) for overlapping nodes
+        locked: Lock node position (prevents accidental moves in GUI)
+        ports: Number of ports (ethernet_switch nodes only)
+        name: New name for the node (REQUIRES node to be stopped)
+        ram: RAM in MB (QEMU nodes only)
+        cpus: Number of CPUs (QEMU nodes only)
+        hdd_disk_image: Path to HDD disk image (QEMU nodes only)
+        adapters: Number of network adapters (QEMU nodes only)
+        console_type: Console type - telnet, vnc, spice, etc.
 
     Returns:
         Status message describing what was done
@@ -885,9 +801,6 @@ async def set_node(ctx: Context,
     if update_payload:
         try:
             await app.gns3.update_node(app.current_project_id, node_id, update_payload)
-
-            # Invalidate cache after node modification
-            await app.cache.invalidate_nodes(app.current_project_id)
 
             # Build change summary
             changes = []
@@ -1080,7 +993,7 @@ async def send_console(ctx: Context, node_name: str, data: str, raw: bool = Fals
 
 
 @mcp.tool()
-async def read_console(ctx: Context, node_name: str, diff: bool = True, last_page: bool = True) -> str:
+async def read_console(ctx: Context, node_name: str, mode: str = "diff") -> str:
     """Read console output (auto-connects if needed)
 
     Reads accumulated output from background console buffer. Output accumulates
@@ -1088,10 +1001,10 @@ async def read_console(ctx: Context, node_name: str, diff: bool = True, last_pag
 
     Buffer Behavior:
     - Background task continuously reads console into 10MB buffer
-    - Diff mode (diff=True, DEFAULT): Returns only NEW output since last read
-    - Last page (diff=False, last_page=True): Returns last ~25 lines of buffer
-    - Full buffer (diff=False, last_page=False): Returns ALL console output since connection
-    - Read position advances with each diff=True read
+    - Diff mode (DEFAULT): Returns only NEW output since last read
+    - Last page mode: Returns last ~25 lines of buffer
+    - All mode: Returns ALL console output since connection
+    - Read position advances with each diff mode read
 
     Timing Recommendations:
     - After send_console(): Wait 0.5-2s before reading for command output
@@ -1106,37 +1019,44 @@ async def read_console(ctx: Context, node_name: str, diff: bool = True, last_pag
 
     Args:
         node_name: Name of the node
-        diff: If True (DEFAULT), return only new output since last read.
-              Set to False to get last page or full buffer.
-        last_page: If True (DEFAULT when diff=False), return last ~25 lines only.
-                   Set to False with diff=False to get entire buffer.
+        mode: Output mode (default: "diff")
+            - "diff": Return only new output since last read (DEFAULT)
+            - "last_page": Return last ~25 lines of buffer
+            - "all": Return entire buffer since connection
 
     Returns:
         Console output (ANSI escape codes stripped, line endings normalized)
         or "No output available" if buffer empty
 
     Example - Interactive session (default):
-        output = read_console("R1")  # diff=True by default
+        output = read_console("R1")  # mode="diff" by default
         if "Login:" in output:
             send_console("R1", "admin\\n")
 
     Example - Check recent output:
-        output = read_console("R1", diff=False, last_page=True)  # Last 25 lines
+        output = read_console("R1", mode="last_page")  # Last 25 lines
 
     Example - Get everything:
-        output = read_console("R1", diff=False, last_page=False)  # Entire buffer
+        output = read_console("R1", mode="all")  # Entire buffer
     """
     app: AppContext = ctx.request_context.lifespan_context
+
+    # Validate mode parameter
+    if mode not in ("diff", "last_page", "all"):
+        return json.dumps(ErrorResponse(
+            error="Invalid mode parameter",
+            details=f"mode must be 'diff', 'last_page', or 'all', got '{mode}'"
+        ).model_dump(), indent=2)
 
     # Auto-connect if needed
     error = await _auto_connect_console(app, node_name)
     if error:
         return error
 
-    if diff:
+    if mode == "diff":
         # Return only new output since last read
         output = app.console.get_diff_by_node(node_name)
-    elif last_page:
+    elif mode == "last_page":
         # Return last ~25 lines
         full_output = app.console.get_output_by_node(node_name)
         if full_output:
@@ -1144,7 +1064,7 @@ async def read_console(ctx: Context, node_name: str, diff: bool = True, last_pag
             output = '\n'.join(lines[-25:]) if len(lines) > 25 else full_output
         else:
             output = None
-    else:
+    else:  # mode == "all"
         # Return entire buffer
         output = app.console.get_output_by_node(node_name)
 
@@ -1474,174 +1394,6 @@ async def send_keystroke(ctx: Context, node_name: str, key: str) -> str:
 
 
 @mcp.tool()
-async def detect_console_state(ctx: Context, node_name: str) -> str:
-    """Analyze console output to determine current device state
-
-    Inspects recent console output to identify device state using pattern library
-    for common devices (Cisco, MikroTik, Juniper, Arista, Linux). Auto-detects
-    device type with fallback to generic patterns.
-
-    Detected States:
-    - "login_prompt": Device asking for username (patterns: "Login:", "login:")
-    - "password_prompt": Device asking for password (patterns: "Password:", "password:")
-    - "new_password_prompt": MikroTik asking to set new password
-    - "repeat_password_prompt": MikroTik asking to repeat new password
-    - "command_prompt_user": User mode CLI (patterns: ">", "$")
-    - "command_prompt_privileged": Privileged mode CLI (patterns: "#")
-    - "config_mode": Configuration mode (patterns: "(config)", "[edit]")
-    - "booting": Device still booting (patterns: "Loading", "Booting")
-    - "unknown": Cannot determine state
-
-    Args:
-        node_name: Name of the node
-
-    Returns:
-        JSON with:
-        {
-            "state": "command_prompt_privileged",
-            "prompt_text": "Router#",
-            "ready_for_commands": true,
-            "detected_device": "cisco_ios",  # or null if generic
-            "last_lines": "show ip int brief\\n...\\nRouter#",
-            "confidence": "high"  # high/medium/low
-        }
-
-    Example Workflow:
-        # Wake console
-        send_console("R1", "\\n")
-        await 2 seconds
-
-        # Check state
-        state = detect_console_state("R1")
-
-        if state["state"] == "login_prompt":
-            send_console("R1", "admin\\n")
-        elif state["state"] == "password_prompt":
-            send_console("R1", "\\n")  # Empty password
-        elif state["ready_for_commands"]:
-            send_console("R1", "show version\\n")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    # Auto-connect
-    error = await _auto_connect_console(app, node_name)
-    if error:
-        return json.dumps({
-            "state": "unknown",
-            "error": error,
-            "ready_for_commands": False
-        }, indent=2)
-
-    # Get recent output (last 1000 chars)
-    full_output = app.console.get_output_by_node(node_name) or ""
-    recent_output = full_output[-1000:] if len(full_output) > 1000 else full_output
-
-    # Extract last few lines for analysis and debugging
-    lines = recent_output.split('\n')
-    last_lines = '\n'.join(lines[-5:]) if len(lines) >= 5 else recent_output
-
-    # Get the last non-empty line (current prompt)
-    current_line = ""
-    for line in reversed(lines):
-        if line.strip():
-            current_line = line
-            break
-
-    # Pattern matching for state detection
-    import re
-
-    state = "unknown"
-    prompt_text = ""
-    confidence = "low"
-    ready = False
-    detected_device = None
-
-    # Try device-specific patterns first (higher confidence)
-    for device_name, patterns in DEVICE_PATTERNS.items():
-        # Check for device-specific prompts on current line
-        if device_name == "mikrotik":
-            if re.search(patterns.get("new_password", ""), current_line, re.IGNORECASE):
-                state = "new_password_prompt"
-                prompt_text = "new password>"
-                confidence = "high"
-                ready = False
-                detected_device = device_name
-                break
-            elif re.search(patterns.get("repeat_password", ""), current_line, re.IGNORECASE):
-                state = "repeat_password_prompt"
-                prompt_text = "repeat new password>"
-                confidence = "high"
-                ready = False
-                detected_device = device_name
-                break
-            elif re.search(patterns.get("prompt", ""), current_line):
-                state = "command_prompt_privileged"
-                match = re.search(patterns.get("prompt", ""), current_line)
-                prompt_text = match.group(0) if match else ""
-                confidence = "high"
-                ready = True
-                detected_device = device_name
-                break
-
-    # Generic pattern matching (if no device-specific match)
-    if state == "unknown":
-        # Login prompt (high confidence)
-        if re.search(r'[Ll]ogin\s*:', current_line):
-            state = "login_prompt"
-            match = re.search(r'[Ll]ogin\s*:', current_line)
-            prompt_text = match.group(0) if match else "Login:"
-            confidence = "high"
-            ready = False
-
-        # Password prompt (high confidence)
-        elif re.search(r'[Pp]assword\s*[>:]', current_line):
-            state = "password_prompt"
-            match = re.search(r'[Pp]assword\s*[>:]', current_line)
-            prompt_text = match.group(0) if match else "Password:"
-            confidence = "high"
-            ready = False
-
-        # Privileged mode (high confidence)
-        elif re.search(r'[\w\-]+#\s*$', current_line):
-            state = "command_prompt_privileged"
-            match = re.search(r'[\w\-]+#\s*$', last_lines)
-            prompt_text = match.group(0).strip() if match else ""
-            confidence = "high"
-            ready = True
-
-        # Config mode (high confidence)
-        elif re.search(r'\(config[^\)]*\)[#>]', last_lines) or re.search(r'\[edit[^\]]*\]', last_lines):
-            state = "config_mode"
-            match = re.search(r'(\(config[^\)]*\)[#>]|\[edit[^\]]*\])', last_lines)
-            prompt_text = match.group(0) if match else ""
-            confidence = "high"
-            ready = True
-
-        # User mode (medium confidence)
-        elif re.search(r'[\w\-]+>\s*$', last_lines):
-            state = "command_prompt_user"
-            match = re.search(r'[\w\-]+>\s*$', last_lines)
-            prompt_text = match.group(0).strip() if match else ""
-            confidence = "medium"
-            ready = True
-
-        # Booting indicators (medium confidence)
-        elif re.search(r'(Loading|Booting|Initializing|Starting)', last_lines, re.IGNORECASE):
-            state = "booting"
-            confidence = "medium"
-            ready = False
-
-    return json.dumps({
-        "state": state,
-        "prompt_text": prompt_text,
-        "ready_for_commands": ready,
-        "detected_device": detected_device,
-        "last_lines": last_lines,
-        "confidence": confidence
-    }, indent=2)
-
-
-@mcp.tool()
 async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str:
     """Manage network connections (links) in batch with two-phase validation
 
@@ -1691,17 +1443,8 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
             ).model_dump(), indent=2)
 
         # Fetch topology data ONCE (not in loop - fixes N+1 issue)
-        nodes = await app.cache.get_nodes(
-            app.current_project_id,
-            lambda pid: app.gns3.get_nodes(pid),
-            force_refresh=True  # Ensure fresh data for validation
-        )
-
-        links = await app.cache.get_links(
-            app.current_project_id,
-            lambda pid: app.gns3.get_links(pid),
-            force_refresh=True
-        )
+        nodes = await app.gns3.get_nodes(app.current_project_id)
+        links = await app.gns3.get_links(app.current_project_id)
 
         # PHASE 1: VALIDATE ALL operations (no state changes)
         validator = LinkValidator(nodes, links)
@@ -1831,10 +1574,6 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
                 logger.error(f"Operation {idx} failed during execution: {str(e)}")
                 break
 
-        # Invalidate cache after topology changes
-        await app.cache.invalidate_links(app.current_project_id)
-        await app.cache.invalidate_nodes(app.current_project_id)  # Port status changed
-
         # Build result
         result = OperationResult(completed=completed, failed=failed)
         return json.dumps(result.model_dump(), indent=2)
@@ -1873,8 +1612,6 @@ async def delete_node(ctx: Context, node_name: str) -> str:
             ).model_dump(), indent=2)
 
         await app.gns3.delete_node(app.current_project_id, node['node_id'])
-        await app.cache.invalidate_nodes(app.current_project_id)
-        await app.cache.invalidate_links(app.current_project_id)
 
         return json.dumps({"message": f"Node '{node_name}' deleted successfully"}, indent=2)
 
@@ -1960,8 +1697,6 @@ async def create_node(ctx: Context, template_name: str, x: int, y: int,
         result = await app.gns3.create_node_from_template(
             app.current_project_id, template['template_id'], payload
         )
-
-        await app.cache.invalidate_nodes(app.current_project_id)
 
         return json.dumps({"message": "Node created successfully", "node": result}, indent=2)
 
@@ -2232,14 +1967,8 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
     try:
         # Get all topology data
-        nodes = await app.cache.get_nodes(
-            app.current_project_id,
-            lambda pid: app.gns3.get_nodes(pid)
-        )
-        links = await app.cache.get_links(
-            app.current_project_id,
-            lambda pid: app.gns3.get_links(pid)
-        )
+        nodes = await app.gns3.get_nodes(app.current_project_id)
+        links = await app.gns3.get_links(app.current_project_id)
         drawings = await app.gns3.get_drawings(app.current_project_id)
 
         # Calculate bounds

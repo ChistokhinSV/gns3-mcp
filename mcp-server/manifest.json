@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Control and automate GNS3 network labs through Claude with type-safe operations",
-  "long_description": "Version 0.8.1: DOCS - Added best practice guidance for send_and_wait_console() - check prompt first with read_console() before using wait patterns. Version 0.8.0: REDESIGNED - read_console() now defaults to diff=True (returns only new output), added last_page parameter for last 25 lines. Unified drawing tools into create_drawing() with drawing_type parameter (rectangle/ellipse/line/text). BREAKING: read_console() default changed from diff=False to diff=True. Removed create_rectangle/create_text/create_ellipse (use create_drawing). Version 0.7.0: NEW - set_connection() accepts adapter names. Version 0.6.5: FIXED - Node actions handle empty API responses. Supports GNS3 v3 API.",
+  "long_description": "Version 0.9.0: MAJOR REFACTORING (BREAKING) - Removed caching infrastructure (force_refresh params removed). Removed detect_console_state() tool. CHANGED: read_console(mode='diff'/'last_page'/'all') replaces bool params. Simplified: direct API calls, better for local labs. Version 0.8.1: DOCS - send_and_wait_console() best practices. Version 0.8.0: read_console() defaults to diff=True, unified create_drawing(). Version 0.7.0: set_connection() accepts adapter names. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -87,7 +87,7 @@
     },
     {
       "name": "read_console",
-      "description": "Read console output (diff mode by default, last page, or full buffer)"
+      "description": "Read console output with mode parameter (mode='diff'/'last_page'/'all', default='diff')"
     },
     {
       "name": "disconnect_console",
@@ -100,10 +100,6 @@
     {
       "name": "send_and_wait_console",
       "description": "Send command and wait for specific prompt pattern (returns JSON with output, pattern_found, timeout_occurred)"
-    },
-    {
-      "name": "detect_console_state",
-      "description": "Analyze console output to detect device type and current state (returns JSON with state, device type, confidence)"
     },
     {
       "name": "send_keystroke",

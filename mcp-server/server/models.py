@@ -314,9 +314,10 @@ class ConsoleStatus(BaseModel):
 # Error Models
 
 class ErrorResponse(BaseModel):
-    """Error response"""
+    """Error response with optional suggested action"""
     error: str
     details: Optional[str] = None
+    suggested_action: Optional[str] = None
     field: Optional[str] = None
     operation_index: Optional[int] = None
 

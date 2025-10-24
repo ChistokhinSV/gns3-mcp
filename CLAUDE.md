@@ -10,9 +10,43 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.8.1
+## Current Version: v0.9.0
 
-**Latest Release:** v0.8.1 - Documentation Enhancement (Patch)
+**Latest Release:** v0.9.0 - Major Refactoring (Breaking Changes)
+- **REMOVED**: Caching infrastructure completely
+  - Deleted `cache.py` (274 lines)
+  - Removed all cache usage from `main.py` (17 locations)
+  - Removed `force_refresh` parameter from 4 tools (list_projects, list_nodes, get_node_details, get_links)
+  - Direct API calls throughout - simpler, faster for local/close labs
+- **REMOVED**: `detect_console_state()` tool and DEVICE_PATTERNS
+  - Deleted 165 lines of console state detection code
+  - Removed DEVICE_PATTERNS dictionary (41 lines) and COMMON_ERROR_PATTERNS (10 lines)
+  - Pattern matching was unreliable (80% dead code per architecture review)
+- **BREAKING**: `read_console()` API redesigned
+  - Previous: `read_console(node, diff: bool, last_page: bool)`
+  - Now: `read_console(node, mode: str = "diff")`
+  - Mode values: `"diff"` (default), `"last_page"`, `"all"`
+  - Added parameter validation with clear error messages
+- **ENHANCED**: ErrorResponse model now includes `suggested_action` field
+  - Critical errors now provide actionable guidance
+  - 8 key validation errors updated with suggested_action
+- **ENHANCED**: `set_node()` docstring now documents validation rules
+  - Clarifies which parameters require stopped nodes
+  - Documents node-type-specific parameters (QEMU, ethernet_switch)
+- **FIXED**: Version mismatch in main.py header (v0.6.4 → v0.9.0)
+- **Files changed**:
+  - `cache.py`: DELETED
+  - `main.py`: Cache removed, read_console() redesigned, detect_console_state() removed, version updated, docstrings enhanced
+  - `models.py`: Added `suggested_action` to ErrorResponse
+  - `manifest.json`: Version 0.9.0, removed detect_console_state tool, updated descriptions
+  - `CLAUDE.md`: This version entry
+- **Migration Guide**:
+  - Remove `force_refresh` parameters from tool calls
+  - Update `read_console()` calls: `diff=True` → `mode="diff"`, `diff=False, last_page=True` → `mode="last_page"`, `diff=False, last_page=False` → `mode="all"`
+  - Replace `detect_console_state()` with manual prompt checking via `read_console()`
+- **Rationale**: Caching added unnecessary complexity for local labs. State detection was unreliable. New API is clearer and more maintainable.
+
+**Previous:** v0.8.1 - Documentation Enhancement (Patch)
 - **ENHANCED**: Added best practice guidance for `send_and_wait_console()`
   - Tool docstring now includes prominent "BEST PRACTICE" section
   - Recommends checking prompt first with `read_console()` before using wait patterns
