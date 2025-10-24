@@ -136,6 +136,53 @@ read_console("R1")  # See command output (only new lines)
 disconnect_console("R1")  # Clean up when done
 ```
 
+### Using send_and_wait_console for Automation
+
+For automated workflows, `send_and_wait_console()` simplifies command execution by waiting for specific prompts:
+
+```
+Workflow:
+1. First, identify the prompt pattern
+   - Send \n and read output to see what prompt looks like
+   - Note the exact prompt: "Router#", "[admin@MikroTik] >", "switch>", etc.
+
+2. Use the prompt pattern in automated commands
+   - send_and_wait_console(node, command, wait_pattern=<prompt>)
+   - Tool waits until prompt appears, then returns all output
+
+3. No need to manually wait or read - tool handles timing
+```
+
+**Example - Automated configuration:**
+```
+# Step 1: Identify the prompt
+send_console("R1", "\n")
+output = read_console("R1")  # Output shows "Router#"
+
+# Step 2: Use prompt pattern for automation
+result = send_and_wait_console("R1",
+    "show ip interface brief\n",
+    wait_pattern="Router#",
+    timeout=10)
+# Returns when "Router#" appears - command is complete
+
+# Step 3: Continue with more commands
+result = send_and_wait_console("R1",
+    "configure terminal\n",
+    wait_pattern="Router\\(config\\)#",  # Prompt changes in config mode
+    timeout=10)
+```
+
+**When to use send_and_wait_console:**
+- Automated scripts where you know the expected prompts
+- Long-running commands that need completion confirmation
+- Interactive menus where you need to wait for specific text
+
+**When to use send_console + read_console:**
+- Interactive troubleshooting where prompts may vary
+- Exploring unknown device states
+- When you need fine-grained control over timing
+
 ### Console Best Practices
 
 - **Always** read console output after sending commands
@@ -145,6 +192,11 @@ disconnect_console("R1")  # Clean up when done
 - **Default behavior** (v0.8.0): `read_console()` returns only new output since last read (diff mode)
 - **Last page mode**: Use `read_console(node, diff=False, last_page=True)` for last ~25 lines
 - **Full buffer**: Use `read_console(node, diff=False, last_page=False)` for entire console history
+- **Before using send_and_wait_console()**: First check what the prompt looks like with `read_console()`
+  - Different devices have different prompts: `Router#`, `[admin@MikroTik] >`, `switch>`, etc.
+  - Use the exact prompt pattern in `wait_pattern` parameter to ensure command completion
+  - Example: Send `\n`, read output to see `Router#`, then use `wait_pattern="Router#"` for commands
+  - This prevents missing output or waiting for wrong prompt
 - **No need** to manually connect - auto-connects on first send/read
 - **Disconnect** when done to free resources (30min timeout otherwise)
 - For RouterOS (MikroTik): default user `admin`, empty password
