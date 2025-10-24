@@ -1,0 +1,292 @@
+"""Link management tools for GNS3 MCP Server
+
+Provides tools for viewing and managing network links (connections) between nodes.
+"""
+import json
+import logging
+from typing import TYPE_CHECKING, List, Dict, Any
+
+from link_validator import LinkValidator
+from models import (
+    LinkInfo, LinkEndpoint, ErrorResponse,
+    ConnectOperation, DisconnectOperation,
+    CompletedOperation, FailedOperation, OperationResult,
+    validate_connection_operations
+)
+
+if TYPE_CHECKING:
+    from main import AppContext
+
+logger = logging.getLogger(__name__)
+
+
+async def get_links_impl(app: "AppContext") -> str:
+    """List all network links in the current project
+
+    Returns link details including link IDs (needed for disconnect),
+    connected nodes, ports, adapters, and link type. Use this before
+    set_connection() to check current topology and find link IDs.
+
+    Returns:
+        JSON array of LinkInfo objects
+    """
+    try:
+        # Get links and nodes directly from API
+        links = await app.gns3.get_links(app.current_project_id)
+        nodes = await app.gns3.get_nodes(app.current_project_id)
+
+        # Create node ID to name mapping
+        node_map = {n['node_id']: n['name'] for n in nodes}
+
+        # Convert to LinkInfo models
+        link_models = []
+        warnings = []
+
+        for link in links:
+            link_id = link['link_id']
+            link_type = link.get('link_type', 'ethernet')
+            link_nodes = link.get('nodes', [])
+
+            # Check for corrupted links
+            if len(link_nodes) < 2:
+                warnings.append(
+                    f"Warning: Link {link_id} has only {len(link_nodes)} endpoint(s) - "
+                    f"possibly corrupted. Consider deleting with set_connection()"
+                )
+                continue
+
+            if len(link_nodes) > 2:
+                warnings.append(
+                    f"Warning: Link {link_id} has {len(link_nodes)} endpoints - "
+                    f"unexpected topology (multi-point link?)"
+                )
+
+            # Build LinkInfo
+            node_a = link_nodes[0]
+            node_b = link_nodes[1]
+
+            link_info = LinkInfo(
+                link_id=link_id,
+                link_type=link_type,
+                node_a=LinkEndpoint(
+                    node_id=node_a['node_id'],
+                    node_name=node_map.get(node_a['node_id'], 'Unknown'),
+                    adapter_number=node_a.get('adapter_number', 0),
+                    port_number=node_a.get('port_number', 0),
+                    adapter_type=node_a.get('adapter_type'),
+                    port_name=node_a.get('name')
+                ),
+                node_b=LinkEndpoint(
+                    node_id=node_b['node_id'],
+                    node_name=node_map.get(node_b['node_id'], 'Unknown'),
+                    adapter_number=node_b.get('adapter_number', 0),
+                    port_number=node_b.get('port_number', 0),
+                    adapter_type=node_b.get('adapter_type'),
+                    port_name=node_b.get('name')
+                ),
+                capturing=link.get('capturing', False),
+                capture_file_name=link.get('capture_file_name'),
+                capture_file_path=link.get('capture_file_path'),
+                capture_compute_id=link.get('capture_compute_id'),
+                suspend=link.get('suspend', False)
+            )
+
+            link_models.append(link_info)
+
+        # Build response
+        response = {
+            "links": [link.model_dump() for link in link_models],
+            "warnings": warnings if warnings else None
+        }
+
+        return json.dumps(response, indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to get links",
+            details=str(e)
+        ).model_dump(), indent=2)
+
+
+async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any]]) -> str:
+    """Manage network connections (links) in batch with two-phase validation
+
+    Two-phase execution prevents partial topology changes:
+    1. VALIDATE ALL operations (check nodes exist, ports free, adapters valid)
+    2. EXECUTE ALL operations (only if all valid - atomic)
+
+    Workflow:
+        1. Call get_links() to see current topology
+        2. Identify link IDs to disconnect (if needed)
+        3. Call set_connection() with disconnect + connect operations
+
+    Args:
+        connections: List of connection operations:
+            Connect: {
+                "action": "connect",
+                "node_a": "Router1",
+                "node_b": "Router2",
+                "port_a": 0,
+                "port_b": 1,
+                "adapter_a": "eth0",  # Port name OR adapter number (int)
+                "adapter_b": "GigabitEthernet0/0"  # Port name OR adapter number
+            }
+            Disconnect: {
+                "action": "disconnect",
+                "link_id": "abc123"
+            }
+
+    Returns:
+        JSON with OperationResult (completed and failed operations)
+        Includes both port names and adapter/port numbers in confirmation
+    """
+    try:
+        # Validate operation structure with Pydantic
+        parsed_ops, validation_error = validate_connection_operations(connections)
+        if validation_error:
+            return json.dumps(ErrorResponse(
+                error="Invalid operation structure",
+                details=validation_error
+            ).model_dump(), indent=2)
+
+        # Fetch topology data ONCE (not in loop - fixes N+1 issue)
+        nodes = await app.gns3.get_nodes(app.current_project_id)
+        links = await app.gns3.get_links(app.current_project_id)
+
+        # PHASE 1: VALIDATE ALL operations (no state changes)
+        validator = LinkValidator(nodes, links)
+
+        # Resolve adapter names to numbers and validate
+        resolved_ops = []
+        for idx, op in enumerate(parsed_ops):
+            if isinstance(op, ConnectOperation):
+                # Resolve adapter_a
+                adapter_a_num, port_a_num, port_a_name, error = validator.resolve_adapter_identifier(
+                    op.node_a, op.adapter_a
+                )
+                if error:
+                    return json.dumps(ErrorResponse(
+                        error=f"Failed to resolve adapter for {op.node_a}",
+                        details=error,
+                        operation_index=idx
+                    ).model_dump(), indent=2)
+
+                # Resolve adapter_b
+                adapter_b_num, port_b_num, port_b_name, error = validator.resolve_adapter_identifier(
+                    op.node_b, op.adapter_b
+                )
+                if error:
+                    return json.dumps(ErrorResponse(
+                        error=f"Failed to resolve adapter for {op.node_b}",
+                        details=error,
+                        operation_index=idx
+                    ).model_dump(), indent=2)
+
+                # Store resolved values
+                resolved_ops.append({
+                    'op': op,
+                    'adapter_a_num': adapter_a_num,
+                    'port_a_num': port_a_num,
+                    'port_a_name': port_a_name,
+                    'adapter_b_num': adapter_b_num,
+                    'port_b_num': port_b_num,
+                    'port_b_name': port_b_name
+                })
+
+                # Validate with resolved numbers
+                validation_error = validator.validate_connect(
+                    op.node_a, op.node_b,
+                    op.port_a, op.port_b,
+                    adapter_a_num, adapter_b_num
+                )
+            else:  # DisconnectOperation
+                resolved_ops.append({'op': op})
+                validation_error = validator.validate_disconnect(op.link_id)
+
+            if validation_error:
+                return json.dumps(ErrorResponse(
+                    error=f"Validation failed at operation {idx}",
+                    details=validation_error,
+                    operation_index=idx
+                ).model_dump(), indent=2)
+
+        logger.info(f"All {len(parsed_ops)} operations validated successfully")
+
+        # PHASE 2: EXECUTE ALL operations (all validated - safe to proceed)
+        completed = []
+        failed = None
+        node_map = {n['name']: n for n in nodes}
+
+        for idx, resolved in enumerate(resolved_ops):
+            op = resolved['op']
+            try:
+                if isinstance(op, ConnectOperation):
+                    # Build link spec with resolved adapter numbers
+                    node_a = node_map[op.node_a]
+                    node_b = node_map[op.node_b]
+
+                    link_spec = {
+                        "nodes": [
+                            {
+                                "node_id": node_a["node_id"],
+                                "adapter_number": resolved['adapter_a_num'],
+                                "port_number": op.port_a
+                            },
+                            {
+                                "node_id": node_b["node_id"],
+                                "adapter_number": resolved['adapter_b_num'],
+                                "port_number": op.port_b
+                            }
+                        ]
+                    }
+
+                    result = await app.gns3.create_link(app.current_project_id, link_spec)
+
+                    completed.append(CompletedOperation(
+                        index=idx,
+                        action="connect",
+                        link_id=result.get("link_id"),
+                        node_a=op.node_a,
+                        node_b=op.node_b,
+                        port_a=op.port_a,
+                        port_b=op.port_b,
+                        adapter_a=resolved['adapter_a_num'],
+                        adapter_b=resolved['adapter_b_num'],
+                        port_a_name=resolved['port_a_name'],
+                        port_b_name=resolved['port_b_name']
+                    ))
+
+                    logger.info(f"Connected {op.node_a} {resolved['port_a_name']} (adapter {resolved['adapter_a_num']}) <-> "
+                              f"{op.node_b} {resolved['port_b_name']} (adapter {resolved['adapter_b_num']})")
+
+                else:  # Disconnect
+                    await app.gns3.delete_link(app.current_project_id, op.link_id)
+
+                    completed.append(CompletedOperation(
+                        index=idx,
+                        action="disconnect",
+                        link_id=op.link_id
+                    ))
+
+                    logger.info(f"Disconnected link {op.link_id}")
+
+            except Exception as e:
+                # Execution failed (should be rare after validation)
+                failed = FailedOperation(
+                    index=idx,
+                    action=op.action,
+                    operation=op.model_dump(),
+                    reason=str(e)
+                )
+                logger.error(f"Operation {idx} failed during execution: {str(e)}")
+                break
+
+        # Build result
+        result = OperationResult(completed=completed, failed=failed)
+        return json.dumps(result.model_dump(), indent=2)
+
+    except Exception as e:
+        return json.dumps(ErrorResponse(
+            error="Failed to manage connections",
+            details=str(e)
+        ).model_dump(), indent=2)

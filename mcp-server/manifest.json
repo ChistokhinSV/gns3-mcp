@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Control and automate GNS3 network labs through Claude with type-safe operations",
-  "long_description": "Version 0.10.0: FEATURE - Added comprehensive unit testing infrastructure (pytest 8.4.2, 134 tests, 30% coverage focused on critical paths). Extracted export functionality to separate module (export_tools.py). Reduced main.py from 2,410 to 1,836 LOC. Version 0.9.1: Error message improvements. Version 0.9.0: BREAKING - Removed caching, detect_console_state(). Version 0.8.1: Console automation best practices. Supports GNS3 v3 API.",
+  "long_description": "Version 0.11.0: REFACTOR - Added console manager unit tests (38 tests, 76% coverage). Extracted 19 tools to 6 category modules (tools/ directory). Reduced main.py from 1,836 to 914 LOC (50% reduction). Version 0.10.0: Added comprehensive unit testing infrastructure (pytest 8.4.2, 134 tests). Version 0.9.0: BREAKING - Removed caching, detect_console_state(). Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"

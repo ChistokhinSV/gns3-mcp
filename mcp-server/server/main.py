@@ -1,23 +1,24 @@
-"""GNS3 MCP Server v0.9.1
+"""GNS3 MCP Server v0.11.0
 
 Model Context Protocol server for GNS3 lab automation.
 Provides tools for managing projects, nodes, links, console access, and drawings.
 
-Version 0.9.1 - Error Message Improvements (PATCH):
-- IMPROVED: Added suggested_action to 15 critical error messages for better user guidance
-- IMPROVED: Standardized all 20 tool descriptions in manifest with return types
-- IMPROVED: Better adapter error messages (shows 15 ports, notes case-sensitivity, suggests get_links())
-- FIXED: read_console() mode validation now returns plain string (not JSON), consistent with other console tools
+Version 0.11.0 - Code Organization Refactoring (REFACTOR):
+- ADDED: Console manager unit tests (38 tests, 76% coverage on 374 LOC critical async code)
+- REFACTORED: Extracted 19 tool implementations to 6 category modules (tools/ directory)
+  * project_tools.py (2 tools), node_tools.py (5 tools), console_tools.py (6 tools)
+  * link_tools.py (2 tools), drawing_tools.py (3 tools), template_tools.py (1 tool)
+- IMPROVED: Reduced main.py from 1,836 to 914 LOC (50% reduction, 922 lines saved)
+- IMPROVED: Better code organization and maintainability while preserving all functionality
+- NO BREAKING CHANGES: All tool interfaces remain unchanged
 
-Version 0.9.0 - Major Refactoring (BREAKING CHANGES):
-- REMOVED: Caching infrastructure (cache.py, all cache usage, force_refresh parameters)
-- REMOVED: detect_console_state() tool and DEVICE_PATTERNS dictionary
-- CHANGED: read_console() now uses mode parameter ("diff"/"last_page"/"all") instead of bool flags
-- SIMPLIFIED: Direct API calls instead of cache layer, better for local/close labs
+Version 0.10.0 - Testing Infrastructure (FEATURE):
+- ADDED: Comprehensive unit testing infrastructure (pytest 8.4.2, 134 tests total)
+- REFACTORED: Extracted export functionality to export_tools.py module
 
-Version 0.6.4 - Z-Order Rendering Fix:
-- FIXED: Z-order rendering in topology export now matches GNS3 GUI painter's algorithm
-  * Links render at z=min(connected_nodes)-0.5 (always below nodes)
+Version 0.9.0 - Major Cleanup (BREAKING CHANGES):
+- REMOVED: Caching infrastructure, detect_console_state() tool
+- CHANGED: read_console() now uses mode parameter ("diff"/"last_page"/"all")
   * Drawings and nodes intermixed by z-value (sorted rendering)
   * Port indicators integrated into link rendering
   * Ensures correct layering: links → nodes/drawings (by z) → high-z elements
@@ -102,6 +103,29 @@ from export_tools import (
     create_ellipse_svg,
     create_line_svg
 )
+from tools.project_tools import list_projects_impl, open_project_impl
+from tools.node_tools import (
+    list_nodes_impl,
+    get_node_details_impl,
+    set_node_impl,
+    create_node_impl,
+    delete_node_impl
+)
+from tools.console_tools import (
+    send_console_impl,
+    read_console_impl,
+    disconnect_console_impl,
+    get_console_status_impl,
+    send_and_wait_console_impl,
+    send_keystroke_impl
+)
+from tools.link_tools import get_links_impl, set_connection_impl
+from tools.drawing_tools import (
+    list_drawings_impl,
+    create_drawing_impl,
+    delete_drawing_impl
+)
+from tools.template_tools import list_templates_impl
 
 # Setup logging
 logging.basicConfig(
@@ -264,33 +288,7 @@ async def list_projects(ctx: Context) -> str:
         JSON array of ProjectInfo objects
     """
     app: AppContext = ctx.request_context.lifespan_context
-
-    try:
-        # Get projects directly from API
-        projects = await app.gns3.get_projects()
-
-        # Convert to ProjectInfo models
-        project_models = [
-            ProjectInfo(
-                project_id=p['project_id'],
-                name=p['name'],
-                status=p['status'],
-                path=p.get('path'),
-                filename=p.get('filename'),
-                auto_start=p.get('auto_start', False),
-                auto_close=p.get('auto_close', True),
-                auto_open=p.get('auto_open', False)
-            )
-            for p in projects
-        ]
-
-        return json.dumps([p.model_dump() for p in project_models], indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to list projects",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await list_projects_impl(app)
 
 
 @mcp.tool()
@@ -304,41 +302,7 @@ async def open_project(ctx: Context, project_name: str) -> str:
         JSON with ProjectInfo for opened project
     """
     app: AppContext = ctx.request_context.lifespan_context
-
-    try:
-        # Find project by name
-        projects = await app.gns3.get_projects()
-
-        project = next((p for p in projects if p['name'] == project_name), None)
-
-        if not project:
-            return json.dumps(ErrorResponse(
-                error="Project not found",
-                details=f"No project named '{project_name}' found. Use list_projects() to see available projects.",
-                suggested_action="Call list_projects() to see exact project names (case-sensitive)"
-            ).model_dump(), indent=2)
-
-        # Open it
-        result = await app.gns3.open_project(project['project_id'])
-        app.current_project_id = project['project_id']
-
-        # Return ProjectInfo
-        project_info = ProjectInfo(
-            project_id=result['project_id'],
-            name=result['name'],
-            status=result['status'],
-            path=result.get('path'),
-            filename=result.get('filename')
-        )
-
-        return json.dumps(project_info.model_dump(), indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to open project",
-            details=str(e),
-            suggested_action="Verify project exists in GNS3 and is not corrupted"
-        ).model_dump(), indent=2)
+    return await open_project_impl(app, project_name)
 
 
 @mcp.tool()
@@ -350,50 +314,11 @@ async def list_nodes(ctx: Context) -> str:
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    # Validate project
     error = await validate_current_project(app)
     if error:
         return error
 
-    try:
-        # Get nodes directly from API
-        nodes = await app.gns3.get_nodes(app.current_project_id)
-
-        # Convert to NodeInfo models
-        node_models = []
-        for n in nodes:
-            props = n.get('properties', {})
-            node_models.append(NodeInfo(
-                node_id=n['node_id'],
-                name=n['name'],
-                node_type=n['node_type'],
-                status=n['status'],
-                console_type=n['console_type'],
-                console=n.get('console'),
-                console_host=n.get('console_host'),
-                compute_id=n.get('compute_id', 'local'),
-                x=n.get('x', 0),
-                y=n.get('y', 0),
-                z=n.get('z', 0),
-                locked=n.get('locked', False),
-                ports=n.get('ports'),
-                label=n.get('label'),
-                symbol=n.get('symbol'),
-                # Hardware properties
-                ram=props.get('ram'),
-                cpus=props.get('cpus'),
-                adapters=props.get('adapters'),
-                hdd_disk_image=props.get('hdd_disk_image'),
-                hda_disk_image=props.get('hda_disk_image')
-            ))
-
-        return json.dumps([n.model_dump() for n in node_models], indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to list nodes",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await list_nodes_impl(app)
 
 
 @mcp.tool()
@@ -408,59 +333,11 @@ async def get_node_details(ctx: Context, node_name: str) -> str:
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    # Validate project
     error = await validate_current_project(app)
     if error:
         return error
 
-    try:
-        # Get nodes directly from API
-        nodes = await app.gns3.get_nodes(app.current_project_id)
-
-        node = next((n for n in nodes if n['name'] == node_name), None)
-
-        if not node:
-            return json.dumps(ErrorResponse(
-                error="Node not found",
-                details=f"No node named '{node_name}' in current project. Use list_nodes() to see available nodes.",
-                suggested_action="Call list_nodes() to see exact node names (case-sensitive)"
-            ).model_dump(), indent=2)
-
-        # Extract hardware properties from nested 'properties' object
-        props = node.get('properties', {})
-
-        # Convert to NodeInfo model
-        node_info = NodeInfo(
-            node_id=node['node_id'],
-            name=node['name'],
-            node_type=node['node_type'],
-            status=node['status'],
-            console_type=node['console_type'],
-            console=node.get('console'),
-            console_host=node.get('console_host'),
-            compute_id=node.get('compute_id', 'local'),
-            x=node.get('x', 0),
-            y=node.get('y', 0),
-            z=node.get('z', 0),
-            locked=node.get('locked', False),
-            ports=node.get('ports'),
-            label=node.get('label'),
-            symbol=node.get('symbol'),
-            # Hardware properties
-            ram=props.get('ram'),
-            cpus=props.get('cpus'),
-            adapters=props.get('adapters'),
-            hdd_disk_image=props.get('hdd_disk_image'),
-            hda_disk_image=props.get('hda_disk_image')
-        )
-
-        return json.dumps(node_info.model_dump(), indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to get node details",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await get_node_details_impl(app, node_name)
 
 
 @mcp.tool()
@@ -476,87 +353,11 @@ async def get_links(ctx: Context) -> str:
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    # Validate project
     error = await validate_current_project(app)
     if error:
         return error
 
-    try:
-        # Get links and nodes directly from API
-        links = await app.gns3.get_links(app.current_project_id)
-        nodes = await app.gns3.get_nodes(app.current_project_id)
-
-        # Create node ID to name mapping
-        node_map = {n['node_id']: n['name'] for n in nodes}
-
-        # Convert to LinkInfo models
-        link_models = []
-        warnings = []
-
-        for link in links:
-            link_id = link['link_id']
-            link_type = link.get('link_type', 'ethernet')
-            link_nodes = link.get('nodes', [])
-
-            # Check for corrupted links
-            if len(link_nodes) < 2:
-                warnings.append(
-                    f"Warning: Link {link_id} has only {len(link_nodes)} endpoint(s) - "
-                    f"possibly corrupted. Consider deleting with set_connection()"
-                )
-                continue
-
-            if len(link_nodes) > 2:
-                warnings.append(
-                    f"Warning: Link {link_id} has {len(link_nodes)} endpoints - "
-                    f"unexpected topology (multi-point link?)"
-                )
-
-            # Build LinkInfo
-            node_a = link_nodes[0]
-            node_b = link_nodes[1]
-
-            link_info = LinkInfo(
-                link_id=link_id,
-                link_type=link_type,
-                node_a=LinkEndpoint(
-                    node_id=node_a['node_id'],
-                    node_name=node_map.get(node_a['node_id'], 'Unknown'),
-                    adapter_number=node_a.get('adapter_number', 0),
-                    port_number=node_a.get('port_number', 0),
-                    adapter_type=node_a.get('adapter_type'),
-                    port_name=node_a.get('name')
-                ),
-                node_b=LinkEndpoint(
-                    node_id=node_b['node_id'],
-                    node_name=node_map.get(node_b['node_id'], 'Unknown'),
-                    adapter_number=node_b.get('adapter_number', 0),
-                    port_number=node_b.get('port_number', 0),
-                    adapter_type=node_b.get('adapter_type'),
-                    port_name=node_b.get('name')
-                ),
-                capturing=link.get('capturing', False),
-                capture_file_name=link.get('capture_file_name'),
-                capture_file_path=link.get('capture_file_path'),
-                capture_compute_id=link.get('capture_compute_id'),
-                suspend=link.get('suspend', False)
-            )
-
-            link_models.append(link_info)
-
-        # Build response
-        response = {
-            "links": [link.model_dump() for link in link_models],
-            "warnings": warnings if warnings else None
-        }
-
-        return json.dumps(response, indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to get links",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await get_links_impl(app)
 
 
 @mcp.tool()
@@ -602,216 +403,10 @@ async def set_node(ctx: Context,
         Status message describing what was done
     """
     app: AppContext = ctx.request_context.lifespan_context
-
-    if not app.current_project_id:
-        return json.dumps(ErrorResponse(
-            error="No project opened",
-            details="Use open_project() to open a project first"
-        ).model_dump(), indent=2)
-
-    # Find node
-    nodes = await app.gns3.get_nodes(app.current_project_id)
-    node = next((n for n in nodes if n['name'] == node_name), None)
-
-    if not node:
-        return json.dumps(ErrorResponse(
-            error="Node not found",
-            details=f"Node '{node_name}' does not exist in current project",
-            suggested_action="Call list_nodes() to see exact node names (case-sensitive)"
-        ).model_dump(), indent=2)
-
-    node_id = node['node_id']
-    node_status = node.get('status', 'unknown')
-    results = []
-
-    # Validate stopped state for properties that require it
-    requires_stopped = []
-    if name is not None:
-        requires_stopped.append('name')
-
-    if requires_stopped and node_status != 'stopped':
-        return json.dumps(ErrorResponse(
-            error="Node must be stopped",
-            details=f"Properties {requires_stopped} can only be changed when node is stopped. Current status: {node_status}. Use set_node(node_name='{node_name}', action='stop') first."
-        ).model_dump(), indent=2)
-
-    # Handle property updates
-    # Separate top-level properties from hardware properties
-    update_payload = {}
-    hardware_props = {}
-
-    # Top-level properties
-    if x is not None:
-        update_payload['x'] = x
-    if y is not None:
-        update_payload['y'] = y
-    if z is not None:
-        update_payload['z'] = z
-    if locked is not None:
-        update_payload['locked'] = locked
-    if name is not None:
-        update_payload['name'] = name
-
-    # Hardware properties (nested in 'properties' object for QEMU nodes)
-    if ram is not None:
-        hardware_props['ram'] = ram
-    if cpus is not None:
-        hardware_props['cpus'] = cpus
-    if hdd_disk_image is not None:
-        hardware_props['hdd_disk_image'] = hdd_disk_image
-    if adapters is not None:
-        hardware_props['adapters'] = adapters
-    if console_type is not None:
-        hardware_props['console_type'] = console_type
-
-    # Special handling for ethernet switches
-    if ports is not None:
-        if node['node_type'] == 'ethernet_switch':
-            ports_mapping = [
-                {"name": f"Ethernet{i}", "port_number": i, "type": "access", "vlan": 1}
-                for i in range(ports)
-            ]
-            hardware_props['ports_mapping'] = ports_mapping
-        else:
-            results.append(f"Warning: Port configuration only supported for ethernet switches")
-
-    # Wrap hardware properties in 'properties' object for QEMU nodes
-    if hardware_props and node['node_type'] == 'qemu':
-        update_payload['properties'] = hardware_props
-    elif hardware_props:
-        # For non-QEMU nodes, merge directly
-        update_payload.update(hardware_props)
-
-    if update_payload:
-        try:
-            await app.gns3.update_node(app.current_project_id, node_id, update_payload)
-
-            # Build change summary
-            changes = []
-            if name is not None:
-                changes.append(f"name={name}")
-            if x is not None or y is not None or z is not None:
-                pos_parts = []
-                if x is not None: pos_parts.append(f"x={x}")
-                if y is not None: pos_parts.append(f"y={y}")
-                if z is not None: pos_parts.append(f"z={z}")
-                changes.append(", ".join(pos_parts))
-            if locked is not None:
-                changes.append(f"locked={locked}")
-            for k, v in hardware_props.items():
-                if k != 'ports_mapping':
-                    changes.append(f"{k}={v}")
-            if 'ports_mapping' in hardware_props:
-                changes.append(f"ports={ports}")
-
-            results.append(f"Updated: {', '.join(changes)}")
-        except Exception as e:
-            return json.dumps(ErrorResponse(
-                error="Failed to update properties",
-                details=str(e)
-            ).model_dump(), indent=2)
-
-    # Handle action
-    if action:
-        action = action.lower()
-        try:
-            if action == 'start':
-                await app.gns3.start_node(app.current_project_id, node_id)
-                results.append(f"Started {node_name}")
-
-            elif action == 'stop':
-                await app.gns3.stop_node(app.current_project_id, node_id)
-                results.append(f"Stopped {node_name}")
-
-            elif action == 'suspend':
-                await app.gns3.suspend_node(app.current_project_id, node_id)
-                results.append(f"Suspended {node_name}")
-
-            elif action == 'reload':
-                await app.gns3.reload_node(app.current_project_id, node_id)
-                results.append(f"Reloaded {node_name}")
-
-            elif action == 'restart':
-                # Stop node
-                await app.gns3.stop_node(app.current_project_id, node_id)
-                results.append(f"Stopped {node_name}")
-
-                # Wait for node to stop with retries
-                stopped = False
-                for attempt in range(3):
-                    await asyncio.sleep(5)
-                    nodes = await app.gns3.get_nodes(app.current_project_id)
-                    current_node = next((n for n in nodes if n['node_id'] == node_id), None)
-                    if current_node and current_node['status'] == 'stopped':
-                        stopped = True
-                        break
-                    results.append(f"Retry {attempt + 1}/3: Waiting for stop...")
-
-                if not stopped:
-                    results.append(f"Warning: Node may not have stopped completely")
-
-                # Start node
-                await app.gns3.start_node(app.current_project_id, node_id)
-                results.append(f"Started {node_name}")
-
-            else:
-                return json.dumps(ErrorResponse(
-                    error="Unknown action",
-                    details=f"Action '{action}' not recognized. Valid actions: start, stop, suspend, reload, restart"
-                ).model_dump(), indent=2)
-
-        except Exception as e:
-            return json.dumps(ErrorResponse(
-                error="Action failed",
-                details=str(e)
-            ).model_dump(), indent=2)
-
-    if not results:
-        return json.dumps({"message": f"No changes made to {node_name}"}, indent=2)
-
-    # Return success with list of changes
-    return json.dumps({"message": "Node updated successfully", "changes": results}, indent=2)
-
-
-# Console helper function
-async def _auto_connect_console(app: AppContext, node_name: str) -> Optional[str]:
-    """Auto-connect to console if not already connected
-
-    Returns:
-        Error message if connection fails, None if successful
-    """
-    # Check if already connected
-    if app.console.has_session(node_name):
-        return None
-
-    if not app.current_project_id:
-        return "No project opened. Use open_project() first."
-
-    # Find node
-    nodes = await app.gns3.get_nodes(app.current_project_id)
-    node = next((n for n in nodes if n['name'] == node_name), None)
-
-    if not node:
-        return f"Node '{node_name}' not found. Use list_nodes() to see available nodes (case-sensitive)."
-
-    # Check console type
-    console_type = node['console_type']
-    if console_type not in ['telnet']:
-        return f"Console type '{console_type}' not supported (only 'telnet' currently supported). Check node configuration."
-
-    if not node['console']:
-        return f"Node '{node_name}' has no console configured. Verify node is started with list_nodes()."
-
-    # Extract host from GNS3 client config
-    host = app.gns3.base_url.split('//')[1].split(':')[0]
-    port = node['console']
-
-    # Connect
-    try:
-        await app.console.connect(host, port, node_name)
-        return None
-    except Exception as e:
-        return f"Failed to connect: {str(e)}"
+    return await set_node_impl(
+        app, node_name, action, x, y, z, locked, ports,
+        name, ram, cpus, hdd_disk_image, adapters, console_type
+    )
 
 
 @mcp.tool()
@@ -851,29 +446,7 @@ async def send_console(ctx: Context, node_name: str, data: str, raw: bool = Fals
         read_console("R1", diff=True)  # See what prompt appeared
     """
     app: AppContext = ctx.request_context.lifespan_context
-
-    # Auto-connect if needed
-    error = await _auto_connect_console(app, node_name)
-    if error:
-        return error
-
-    # Process escape sequences unless raw mode
-    if not raw:
-        # First handle escape sequences (backslash-escaped strings)
-        data = data.replace('\\r\\n', '\r\n')  # \r\n → CR+LF
-        data = data.replace('\\n', '\n')       # \n → LF
-        data = data.replace('\\r', '\r')       # \r → CR
-        data = data.replace('\\t', '\t')       # \t → tab
-        data = data.replace('\\x1b', '\x1b')   # \x1b → ESC
-
-        # Then normalize all newlines to \r\n for console compatibility
-        # This handles copy-pasted multi-line text
-        data = data.replace('\r\n', '\n')      # Normalize CRLF to LF first
-        data = data.replace('\r', '\n')        # Normalize CR to LF
-        data = data.replace('\n', '\r\n')      # Convert all LF to CRLF
-
-    success = await app.console.send_by_node(node_name, data)
-    return "Sent successfully" if success else "Failed to send"
+    return await send_console_impl(app, node_name, data, raw)
 
 
 @mcp.tool()
@@ -924,35 +497,7 @@ async def read_console(ctx: Context, node_name: str, mode: str = "diff") -> str:
         output = read_console("R1", mode="all")  # Entire buffer
     """
     app: AppContext = ctx.request_context.lifespan_context
-
-    # Validate mode parameter
-    if mode not in ("diff", "last_page", "all"):
-        return (f"Invalid mode '{mode}'. Valid modes:\n"
-                f"  'diff' - New output since last read (default)\n"
-                f"  'last_page' - Last ~25 lines\n"
-                f"  'all' - Entire buffer")
-
-    # Auto-connect if needed
-    error = await _auto_connect_console(app, node_name)
-    if error:
-        return error
-
-    if mode == "diff":
-        # Return only new output since last read
-        output = app.console.get_diff_by_node(node_name)
-    elif mode == "last_page":
-        # Return last ~25 lines
-        full_output = app.console.get_output_by_node(node_name)
-        if full_output:
-            lines = full_output.splitlines()
-            output = '\n'.join(lines[-25:]) if len(lines) > 25 else full_output
-        else:
-            output = None
-    else:  # mode == "all"
-        # Return entire buffer
-        output = app.console.get_output_by_node(node_name)
-
-    return output if output is not None else "No output available"
+    return await read_console_impl(app, node_name, mode)
 
 
 @mcp.tool()
@@ -966,14 +511,7 @@ async def disconnect_console(ctx: Context, node_name: str) -> str:
         JSON with status
     """
     app: AppContext = ctx.request_context.lifespan_context
-
-    success = await app.console.disconnect_by_node(node_name)
-
-    return json.dumps({
-        "success": success,
-        "node_name": node_name,
-        "message": "Disconnected successfully" if success else "No active session for this node"
-    }, indent=2)
+    return await disconnect_console_impl(app, node_name)
 
 
 @mcp.tool()
@@ -1015,28 +553,7 @@ async def get_console_status(ctx: Context, node_name: str) -> str:
             print("Not connected - next send/read will auto-connect")
     """
     app: AppContext = ctx.request_context.lifespan_context
-
-    if app.console.has_session(node_name):
-        session_id = app.console.get_session_id(node_name)
-        sessions = app.console.list_sessions()
-        session_info = sessions.get(session_id, {})
-
-        status = ConsoleStatus(
-            connected=True,
-            node_name=node_name,
-            session_id=session_id,
-            host=session_info.get("host"),
-            port=session_info.get("port"),
-            buffer_size=session_info.get("buffer_size"),
-            created_at=session_info.get("created_at")
-        )
-    else:
-        status = ConsoleStatus(
-            connected=False,
-            node_name=node_name
-        )
-
-    return json.dumps(status.model_dump(), indent=2)
+    return await get_console_status_impl(app, node_name)
 
 
 @mcp.tool()
@@ -1110,85 +627,9 @@ async def send_and_wait_console(
         # Sends command, waits 2s, returns output
     """
     app: AppContext = ctx.request_context.lifespan_context
-
-    # Auto-connect
-    error = await _auto_connect_console(app, node_name)
-    if error:
-        return json.dumps({
-            "error": error,
-            "output": "",
-            "pattern_found": False,
-            "timeout_occurred": False
-        }, indent=2)
-
-    # Process escape sequences unless raw mode
-    if not raw:
-        # First handle escape sequences (backslash-escaped strings)
-        command = command.replace('\\r\\n', '\r\n')  # \r\n → CR+LF
-        command = command.replace('\\n', '\n')       # \n → LF
-        command = command.replace('\\r', '\r')       # \r → CR
-        command = command.replace('\\t', '\t')       # \t → tab
-        command = command.replace('\\x1b', '\x1b')   # \x1b → ESC
-
-        # Then normalize all newlines to \r\n for console compatibility
-        command = command.replace('\r\n', '\n')      # Normalize CRLF to LF first
-        command = command.replace('\r', '\n')        # Normalize CR to LF
-        command = command.replace('\n', '\r\n')      # Convert all LF to CRLF
-
-    # Send command
-    success = await app.console.send_by_node(node_name, command)
-    if not success:
-        return json.dumps({
-            "error": "Failed to send command",
-            "output": "",
-            "pattern_found": False,
-            "timeout_occurred": False
-        }, indent=2)
-
-    # Wait for pattern or timeout
-    import time
-    start_time = time.time()
-    pattern_found = False
-    timeout_occurred = False
-
-    if wait_pattern:
-        import re
-        try:
-            pattern_re = re.compile(wait_pattern)
-        except re.error as e:
-            return json.dumps({
-                "error": f"Invalid regex pattern: {str(e)}",
-                "output": "",
-                "pattern_found": False,
-                "timeout_occurred": False
-            }, indent=2)
-
-        # Poll console every 0.5s
-        while (time.time() - start_time) < timeout:
-            await asyncio.sleep(0.5)
-            output = app.console.get_diff_by_node(node_name) or ""
-
-            if pattern_re.search(output):
-                pattern_found = True
-                break
-
-        if not pattern_found:
-            timeout_occurred = True
-    else:
-        # No pattern - just wait 2 seconds
-        await asyncio.sleep(2)
-
-    wait_time = time.time() - start_time
-
-    # Get all output since command was sent
-    output = app.console.get_diff_by_node(node_name) or ""
-
-    return json.dumps({
-        "output": output,
-        "pattern_found": pattern_found,
-        "timeout_occurred": timeout_occurred,
-        "wait_time": round(wait_time, 2)
-    }, indent=2)
+    return await send_and_wait_console_impl(
+        app, node_name, command, wait_pattern, timeout, raw
+    )
 
 
 @mcp.tool()
@@ -1221,60 +662,7 @@ async def send_keystroke(ctx: Context, node_name: str, key: str) -> str:
         send_console("R1", ":wq\n")
     """
     app: AppContext = ctx.request_context.lifespan_context
-
-    # Auto-connect if needed
-    error = await _auto_connect_console(app, node_name)
-    if error:
-        return error
-
-    # Map key names to escape sequences
-    SPECIAL_KEYS = {
-        # Navigation
-        'up': '\x1b[A',
-        'down': '\x1b[B',
-        'right': '\x1b[C',
-        'left': '\x1b[D',
-        'home': '\x1b[H',
-        'end': '\x1b[F',
-        'pageup': '\x1b[5~',
-        'pagedown': '\x1b[6~',
-
-        # Editing
-        'enter': '\r\n',
-        'backspace': '\x7f',
-        'delete': '\x1b[3~',
-        'tab': '\t',
-        'esc': '\x1b',
-
-        # Control sequences
-        'ctrl_c': '\x03',
-        'ctrl_d': '\x04',
-        'ctrl_z': '\x1a',
-        'ctrl_a': '\x01',
-        'ctrl_e': '\x05',
-
-        # Function keys
-        'f1': '\x1bOP',
-        'f2': '\x1bOQ',
-        'f3': '\x1bOR',
-        'f4': '\x1bOS',
-        'f5': '\x1b[15~',
-        'f6': '\x1b[17~',
-        'f7': '\x1b[18~',
-        'f8': '\x1b[19~',
-        'f9': '\x1b[20~',
-        'f10': '\x1b[21~',
-        'f11': '\x1b[23~',
-        'f12': '\x1b[24~',
-    }
-
-    key_lower = key.lower()
-    if key_lower not in SPECIAL_KEYS:
-        return f"Unknown key: {key}. Supported keys: {', '.join(sorted(SPECIAL_KEYS.keys()))}"
-
-    keystroke = SPECIAL_KEYS[key_lower]
-    success = await app.console.send_by_node(node_name, keystroke)
-    return "Sent successfully" if success else "Failed to send"
+    return await send_keystroke_impl(app, node_name, key)
 
 
 @mcp.tool()
@@ -1312,161 +700,11 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    # Validate project
     error = await validate_current_project(app)
     if error:
         return error
 
-    try:
-        # Validate operation structure with Pydantic
-        parsed_ops, validation_error = validate_connection_operations(connections)
-        if validation_error:
-            return json.dumps(ErrorResponse(
-                error="Invalid operation structure",
-                details=validation_error
-            ).model_dump(), indent=2)
-
-        # Fetch topology data ONCE (not in loop - fixes N+1 issue)
-        nodes = await app.gns3.get_nodes(app.current_project_id)
-        links = await app.gns3.get_links(app.current_project_id)
-
-        # PHASE 1: VALIDATE ALL operations (no state changes)
-        validator = LinkValidator(nodes, links)
-
-        # Resolve adapter names to numbers and validate
-        resolved_ops = []
-        for idx, op in enumerate(parsed_ops):
-            if isinstance(op, ConnectOperation):
-                # Resolve adapter_a
-                adapter_a_num, port_a_num, port_a_name, error = validator.resolve_adapter_identifier(
-                    op.node_a, op.adapter_a
-                )
-                if error:
-                    return json.dumps(ErrorResponse(
-                        error=f"Failed to resolve adapter for {op.node_a}",
-                        details=error,
-                        operation_index=idx
-                    ).model_dump(), indent=2)
-
-                # Resolve adapter_b
-                adapter_b_num, port_b_num, port_b_name, error = validator.resolve_adapter_identifier(
-                    op.node_b, op.adapter_b
-                )
-                if error:
-                    return json.dumps(ErrorResponse(
-                        error=f"Failed to resolve adapter for {op.node_b}",
-                        details=error,
-                        operation_index=idx
-                    ).model_dump(), indent=2)
-
-                # Store resolved values
-                resolved_ops.append({
-                    'op': op,
-                    'adapter_a_num': adapter_a_num,
-                    'port_a_num': port_a_num,
-                    'port_a_name': port_a_name,
-                    'adapter_b_num': adapter_b_num,
-                    'port_b_num': port_b_num,
-                    'port_b_name': port_b_name
-                })
-
-                # Validate with resolved numbers
-                validation_error = validator.validate_connect(
-                    op.node_a, op.node_b,
-                    op.port_a, op.port_b,
-                    adapter_a_num, adapter_b_num
-                )
-            else:  # DisconnectOperation
-                resolved_ops.append({'op': op})
-                validation_error = validator.validate_disconnect(op.link_id)
-
-            if validation_error:
-                return json.dumps(ErrorResponse(
-                    error=f"Validation failed at operation {idx}",
-                    details=validation_error,
-                    operation_index=idx
-                ).model_dump(), indent=2)
-
-        logger.info(f"All {len(parsed_ops)} operations validated successfully")
-
-        # PHASE 2: EXECUTE ALL operations (all validated - safe to proceed)
-        completed = []
-        failed = None
-        node_map = {n['name']: n for n in nodes}
-
-        for idx, resolved in enumerate(resolved_ops):
-            op = resolved['op']
-            try:
-                if isinstance(op, ConnectOperation):
-                    # Build link spec with resolved adapter numbers
-                    node_a = node_map[op.node_a]
-                    node_b = node_map[op.node_b]
-
-                    link_spec = {
-                        "nodes": [
-                            {
-                                "node_id": node_a["node_id"],
-                                "adapter_number": resolved['adapter_a_num'],
-                                "port_number": op.port_a
-                            },
-                            {
-                                "node_id": node_b["node_id"],
-                                "adapter_number": resolved['adapter_b_num'],
-                                "port_number": op.port_b
-                            }
-                        ]
-                    }
-
-                    result = await app.gns3.create_link(app.current_project_id, link_spec)
-
-                    completed.append(CompletedOperation(
-                        index=idx,
-                        action="connect",
-                        link_id=result.get("link_id"),
-                        node_a=op.node_a,
-                        node_b=op.node_b,
-                        port_a=op.port_a,
-                        port_b=op.port_b,
-                        adapter_a=resolved['adapter_a_num'],
-                        adapter_b=resolved['adapter_b_num'],
-                        port_a_name=resolved['port_a_name'],
-                        port_b_name=resolved['port_b_name']
-                    ))
-
-                    logger.info(f"Connected {op.node_a} {resolved['port_a_name']} (adapter {resolved['adapter_a_num']}) <-> "
-                              f"{op.node_b} {resolved['port_b_name']} (adapter {resolved['adapter_b_num']})")
-
-                else:  # Disconnect
-                    await app.gns3.delete_link(app.current_project_id, op.link_id)
-
-                    completed.append(CompletedOperation(
-                        index=idx,
-                        action="disconnect",
-                        link_id=op.link_id
-                    ))
-
-                    logger.info(f"Disconnected link {op.link_id}")
-
-            except Exception as e:
-                # Execution failed (should be rare after validation)
-                failed = FailedOperation(
-                    index=idx,
-                    action=op.action,
-                    operation=op.model_dump(),
-                    reason=str(e)
-                )
-                logger.error(f"Operation {idx} failed during execution: {str(e)}")
-                break
-
-        # Build result
-        result = OperationResult(completed=completed, failed=failed)
-        return json.dumps(result.model_dump(), indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to manage connections",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await set_connection_impl(app, connections)
 
 
 @mcp.tool()
@@ -1485,25 +723,7 @@ async def delete_node(ctx: Context, node_name: str) -> str:
     if error:
         return error
 
-    try:
-        nodes = await app.gns3.get_nodes(app.current_project_id)
-        node = next((n for n in nodes if n['name'] == node_name), None)
-
-        if not node:
-            return json.dumps(ErrorResponse(
-                error="Node not found",
-                details=f"Node '{node_name}' does not exist"
-            ).model_dump(), indent=2)
-
-        await app.gns3.delete_node(app.current_project_id, node['node_id'])
-
-        return json.dumps({"message": f"Node '{node_name}' deleted successfully"}, indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to delete node",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await delete_node_impl(app, node_name)
 
 
 @mcp.tool()
@@ -1514,30 +734,7 @@ async def list_templates(ctx: Context) -> str:
         JSON array of TemplateInfo objects
     """
     app: AppContext = ctx.request_context.lifespan_context
-
-    try:
-        templates = await app.gns3.get_templates()
-
-        template_models = [
-            TemplateInfo(
-                template_id=t['template_id'],
-                name=t['name'],
-                category=t.get('category', 'default'),
-                node_type=t.get('template_type'),
-                compute_id=t.get('compute_id') or 'local',
-                builtin=t.get('builtin', False),
-                symbol=t.get('symbol')
-            )
-            for t in templates
-        ]
-
-        return json.dumps([t.model_dump() for t in template_models], indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to list templates",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await list_templates_impl(app)
 
 
 @mcp.tool()
@@ -1564,31 +761,7 @@ async def create_node(ctx: Context, template_name: str, x: int, y: int,
     if error:
         return error
 
-    try:
-        templates = await app.gns3.get_templates()
-        template = next((t for t in templates if t['name'] == template_name), None)
-
-        if not template:
-            return json.dumps(ErrorResponse(
-                error="Template not found",
-                details=f"Template '{template_name}' not found. Use list_templates() to see available templates."
-            ).model_dump(), indent=2)
-
-        payload = {"x": x, "y": y, "compute_id": compute_id}
-        if node_name:
-            payload["name"] = node_name
-
-        result = await app.gns3.create_node_from_template(
-            app.current_project_id, template['template_id'], payload
-        )
-
-        return json.dumps({"message": "Node created successfully", "node": result}, indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to create node",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await create_node_impl(app, template_name, x, y, node_name, compute_id)
 
 
 @mcp.tool()
@@ -1604,30 +777,7 @@ async def list_drawings(ctx: Context) -> str:
     if error:
         return error
 
-    try:
-        drawings = await app.gns3.get_drawings(app.current_project_id)
-
-        drawing_models = [
-            DrawingInfo(
-                drawing_id=d['drawing_id'],
-                project_id=d['project_id'],
-                x=d['x'],
-                y=d['y'],
-                z=d.get('z', 0),
-                rotation=d.get('rotation', 0),
-                svg=d['svg'],
-                locked=d.get('locked', False)
-            )
-            for d in drawings
-        ]
-
-        return json.dumps([d.model_dump() for d in drawing_models], indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to list drawings",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await list_drawings_impl(app)
 
 
 @mcp.tool()
@@ -1716,74 +866,11 @@ async def create_drawing(ctx: Context,
     if error:
         return error
 
-    try:
-        drawing_type = drawing_type.lower()
-
-        # Generate appropriate SVG based on type
-        if drawing_type == "rectangle":
-            if width is None or height is None:
-                return json.dumps(ErrorResponse(
-                    error="Missing required parameters",
-                    details="Rectangle requires 'width' and 'height' parameters"
-                ).model_dump(), indent=2)
-
-            svg = create_rectangle_svg(width, height, fill_color, border_color, border_width)
-            message = "Rectangle created successfully"
-
-        elif drawing_type == "ellipse":
-            if rx is None or ry is None:
-                return json.dumps(ErrorResponse(
-                    error="Missing required parameters",
-                    details="Ellipse requires 'rx' and 'ry' parameters"
-                ).model_dump(), indent=2)
-
-            svg = create_ellipse_svg(rx, ry, fill_color, border_color, border_width)
-            message = "Ellipse created successfully"
-
-        elif drawing_type == "line":
-            if x2 is None or y2 is None:
-                return json.dumps(ErrorResponse(
-                    error="Missing required parameters",
-                    details="Line requires 'x2' and 'y2' parameters (offset from start point)"
-                ).model_dump(), indent=2)
-
-            svg = create_line_svg(x2, y2, color, border_width)
-            message = "Line created successfully"
-
-        elif drawing_type == "text":
-            if text is None:
-                return json.dumps(ErrorResponse(
-                    error="Missing required parameters",
-                    details="Text drawing requires 'text' parameter"
-                ).model_dump(), indent=2)
-
-            svg = create_text_svg(text, font_size, font_weight, font_family, color)
-            message = "Text created successfully"
-
-        else:
-            return json.dumps(ErrorResponse(
-                error="Invalid drawing type",
-                details=f"drawing_type must be 'rectangle', 'ellipse', 'line', or 'text', got '{drawing_type}'"
-            ).model_dump(), indent=2)
-
-        # Create drawing in GNS3
-        drawing_data = {
-            "x": x,
-            "y": y,
-            "z": z,
-            "svg": svg,
-            "rotation": 0
-        }
-
-        result = await app.gns3.create_drawing(app.current_project_id, drawing_data)
-
-        return json.dumps({"message": message, "drawing": result}, indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to create drawing",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await create_drawing_impl(
+        app, drawing_type, x, y, z, width, height, rx, ry,
+        fill_color, border_color, border_width,
+        x2, y2, text, font_size, font_weight, font_family, color
+    )
 
 
 @mcp.tool()
@@ -1802,15 +889,7 @@ async def delete_drawing(ctx: Context, drawing_id: str) -> str:
     if error:
         return error
 
-    try:
-        await app.gns3.delete_drawing(app.current_project_id, drawing_id)
-        return json.dumps({"message": f"Drawing {drawing_id} deleted successfully"}, indent=2)
-
-    except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to delete drawing",
-            details=str(e)
-        ).model_dump(), indent=2)
+    return await delete_drawing_impl(app, drawing_id)
 
 
 # export_topology_diagram tool now registered from export_tools module

@@ -10,9 +10,47 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.10.0
+## Current Version: v0.11.0
 
-**Latest Release:** v0.10.0 - Testing Infrastructure (Feature)
+**Latest Release:** v0.11.0 - Code Organization Refactoring (Refactor)
+- **NEW**: Console manager unit tests for critical async code
+  - 38 unit tests covering ConsoleManager class (560 LOC test file)
+  - 76% coverage on console_manager.py (374 LOC, critical async telnet session handling)
+  - Mocked telnetlib3 connections for isolated unit testing
+  - Test categories: connection management (8), session lifecycle (6), buffer management (5), data processing (4), convenience methods (6), concurrent access (2), helper functions (5), dataclass (4)
+- **REFACTORED**: Extracted 19 tool implementations to 6 category modules
+  - Created `mcp-server/server/tools/` directory structure
+  - `project_tools.py` (95 LOC): list_projects, open_project
+  - `node_tools.py` (460 LOC): list_nodes, get_node_details, set_node, create_node, delete_node
+  - `console_tools.py` (485 LOC): send_console, read_console, disconnect_console, get_console_status, send_and_wait_console, send_keystroke
+  - `link_tools.py` (290 LOC): get_links, set_connection
+  - `drawing_tools.py` (230 LOC): list_drawings, create_drawing, delete_drawing
+  - `template_tools.py` (45 LOC): list_templates
+- **IMPROVED**: Main.py delegation pattern for maintainability
+  - All `@mcp.tool()` decorators remain in main.py (centralized tool registration)
+  - Tool functions delegate to `{name}_impl(app, ...)` in category modules
+  - Shared `_auto_connect_console()` helper extracted to console_tools.py
+- **IMPROVED**: Reduced main.py from 1,836 to 914 LOC (50% reduction, 922 lines saved)
+  - Better code organization and discoverability
+  - Easier to maintain and test individual tool categories
+  - No changes to tool interfaces or behavior
+- **Files added**:
+  - `tests/unit/test_console_manager.py`: 38 tests for console manager (560 LOC)
+  - `mcp-server/server/tools/__init__.py`: tools directory marker
+  - `mcp-server/server/tools/project_tools.py`: project management tools
+  - `mcp-server/server/tools/node_tools.py`: node management tools
+  - `mcp-server/server/tools/console_tools.py`: console interaction tools
+  - `mcp-server/server/tools/link_tools.py`: link/connection tools
+  - `mcp-server/server/tools/drawing_tools.py`: drawing object tools
+  - `mcp-server/server/tools/template_tools.py`: template tools
+- **Files changed**:
+  - `main.py`: Import tool implementations, delegate to _impl() functions (1,836 → 914 LOC)
+  - `manifest.json`: Updated to v0.11.0
+  - `CLAUDE.md`: This version entry
+- **NO BREAKING CHANGES**: All tool interfaces remain unchanged
+- **Rationale**: Console manager tests address P0 priority gap (0% coverage on 374 LOC critical code). Tool extraction improves maintainability without changing functionality. Addresses architecture review recommendations.
+
+**Previous:** v0.10.0 - Testing Infrastructure (Feature)
 - **NEW**: Comprehensive unit testing infrastructure with pytest
   - pytest 8.4.2 with plugins (pytest-asyncio, pytest-mock, pytest-cov)
   - 134 unit tests covering critical modules
