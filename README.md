@@ -2,13 +2,38 @@
 
 Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS3 projects, nodes, and device consoles through Claude Desktop or any MCP-compatible client.
 
-## What's New in v0.3.0
+## What's New in v0.6.2
 
-Version 0.3.0 is a major refactoring with **breaking changes** that significantly improves reliability, performance, and type safety.
+Version 0.6.2 fixes label rendering in topology exports to match the official GNS3 GUI.
+
+### Improvements
+
+- **Fixed Label Positioning**: `export_topology_diagram()` now renders labels exactly as GNS3 GUI does
+- **Auto-Centering**: Labels with x=None properly center above nodes at y=-25
+- **Dynamic Text Anchor**: Text alignment (start/middle/end) automatically set based on label position
+- **Accurate Rendering**: No more incorrect offset additions - uses GNS3-stored positions directly
+
+See [CLAUDE.md - Label Rendering Implementation](CLAUDE.md#label-rendering-implementation-v062) for technical details.
+
+## Version History
+
+### v0.6.1 - Newline Normalization & Special Keystrokes
+- Console newlines auto-converted to \r\n (CR+LF) for device compatibility
+- New `send_keystroke()` tool for TUI navigation and vim editing
+- Fixed `detect_console_state()` to check only last non-empty line
+
+### v0.6.0 - Interactive Console Tools
+- New `send_and_wait_console()` - wait for prompt patterns with timeout
+- New `detect_console_state()` - auto-detect device type and console state
+- Added DEVICE_PATTERNS library for Cisco IOS, MikroTik, Juniper, Arista, Linux
+
+### v0.5.0 - Topology Export
+- New `export_topology_diagram()` - export as SVG/PNG with port status indicators
+- Drawing object support: rectangles, ellipses, text labels
+
+### v0.3.0 - Type Safety & Performance (Breaking Changes)
 
 **IMPORTANT**: If upgrading from v0.2.x, see [MIGRATION_v0.3.md](MIGRATION_v0.3.md) for complete migration guide.
-
-### Key Improvements
 
 - **Type-Safe Operations**: Pydantic v2 models with validation for all inputs/outputs
 - **Two-Phase Validation**: Prevents partial topology changes - validates ALL operations before executing ANY
@@ -16,18 +41,16 @@ Version 0.3.0 is a major refactoring with **breaking changes** that significantl
 - **Multi-Adapter Support**: Explicit `adapter_a`/`adapter_b` parameters for routers with multiple interface types
 - **JSON Outputs**: All tools now return structured JSON instead of formatted strings
 - **Better Error Messages**: Detailed validation errors with suggested fixes
-- **New Tool**: `get_console_status()` makes auto-connect behavior transparent
 
-### Breaking Changes
-
-1. **All tool outputs now return JSON** - Update parsing code if calling from scripts
-2. **set_connection() requires adapters** - Add `adapter_a` and `adapter_b` to connect operations
-3. **Error format changed** - Errors now return JSON with `error` and `details` fields
-
-See [MIGRATION_v0.3.md](MIGRATION_v0.3.md) for detailed migration instructions and examples.
+**Breaking Changes:**
+1. All tool outputs now return JSON - Update parsing code if calling from scripts
+2. set_connection() requires adapters - Add `adapter_a` and `adapter_b` to connect operations
+3. Error format changed - Errors now return JSON with `error` and `details` fields
 
 ## Features
 
+- **Topology Export** (v0.5.0): Export diagrams as SVG/PNG matching official GNS3 rendering (v0.6.2)
+- **Interactive Console Tools** (v0.6.0): Auto-detect device types, wait for prompts, send special keystrokes
 - **Project Management**: List, open GNS3 projects
 - **Unified Node Control** (v0.2.0): Single tool for start/stop/restart/configure nodes
 - **Auto-Connect Console** (v0.2.0): Automatic session management by node name
@@ -35,6 +58,7 @@ See [MIGRATION_v0.3.md](MIGRATION_v0.3.md) for detailed migration instructions a
 - **Output Diff Tracking**: Read full buffer or only new output since last check
 - **Link Management** (v0.2.0): Batch connect/disconnect network connections with two-phase validation (v0.3.0)
 - **Node Configuration** (v0.2.0): Position, lock, configure switch ports
+- **Drawing Objects** (v0.5.0): Create rectangles, ellipses, text labels for documentation
 - **Desktop Extension**: One-click installation in Claude Desktop
 - **Multi-Session**: Support multiple concurrent console connections
 - **Performance Caching** (v0.3.0): 30s TTL cache for faster operations

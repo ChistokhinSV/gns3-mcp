@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.5.1",
+  "version": "0.6.2",
   "description": "Control and automate GNS3 network labs through Claude with type-safe operations",
-  "long_description": "Version 0.5.1: Fixed node label alignment - labels now right-aligned and vertically centered within bounding box (matching drawing labels). Estimates box dimensions based on text length and font size. Version 0.5.0: Added port status indicators - topology export now shows small colored circles on connection lines (green=active, red=shutdown/stopped). Indicators positioned 15px beyond node edge on each link. Status based on node state and link suspension. Version 0.4.9: Fixed font preservation - topology export now preserves font-family, font-size, and font-weight from GNS3 for both node labels and text drawings. Version 0.4.8: MAJOR FIX - Corrected label positioning interpretation: GNS3 stores offsets from node top-left to label box top-left (not from center). Text drawings now right-aligned (text-anchor=end). Version 0.4.7: Fixed text drawing alignment - text elements now vertically centered with proper horizontal positioning. Version 0.4.6: Fixed topology export - node labels now use correct positioning, links connect to node centers instead of top-left corners. Version 0.4.5: CRITICAL FIX - All GNS3 coordinates use top-left corner origin (nodes, drawings, labels). Fixed topology export positioning. Version 0.4.4: Fixed topology export to use correct icon sizes (PNG: 78×78, SVG: 58×58). Version 0.4.3: Fixed topology export to respect actual GNS3 label positions (x, y, rotation, style). Version 0.4.2: Added export_topology_diagram for SVG/PNG screenshots with embedded icons. Version 0.4.1: Added delete_drawing and create_ellipse tools. Version 0.4.0: Node creation from templates, node deletion, drawing objects (rectangles, text, shapes). NEW TOOLS: delete_node, list_templates, create_node, list_drawings, create_rectangle, create_text, delete_drawing, create_ellipse, export_topology_diagram. Version 0.3.2: Enhanced set_node with hardware configuration (rename, RAM, CPUs, HDD image, adapters, console type). Version 0.3.0: Type-safe Pydantic models, two-phase link validation, performance caching, multi-adapter support. Features: project/node/link management, auto-connecting consoles, template-based node creation, colored rectangles, ellipses/circles, formatted text labels, and topology export to SVG/PNG with correct coordinate system, accurate label/link positioning, and port status indicators. Supports GNS3 v3 API.",
+  "long_description": "Version 0.6.2: FIXED - Node label positioning in export_topology_diagram() now matches official GNS3 GUI rendering. Labels no longer offset incorrectly, text-anchor dynamically set based on position. Version 0.6.1: FIXED - All newlines automatically converted to \\r\\n (CR+LF) for console compatibility. Copy-paste multi-line text directly - newlines just work! send_console() and send_and_wait_console() normalize all line endings (\\n, \\r, \\r\\n → \\r\\n). NEW: send_keystroke() for TUI navigation and vim editing (arrows, enter sends \\r\\n, backspace, delete, tab, esc, ctrl sequences, f1-f12). FIXED: detect_console_state() checks only last non-empty line (not 5 lines), preventing old prompt detection. FIXED: MikroTik password patterns now match 'new password>' not 'new password:'. Version 0.6.0: Added interactive console tools - send_and_wait_console() waits for prompt pattern (regex, 0.5s polling), detect_console_state() auto-detects device type (Cisco IOS, MikroTik, Juniper, Arista, Linux) and identifies 9 console states with confidence scoring. Version 0.5.0: Port status indicators on topology export. Version 0.3.0: Type-safe Pydantic models, two-phase link validation, performance caching. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -96,6 +96,18 @@
     {
       "name": "get_console_status",
       "description": "Check console connection status for a node (returns JSON ConsoleStatus)"
+    },
+    {
+      "name": "send_and_wait_console",
+      "description": "Send command and wait for specific prompt pattern (returns JSON with output, pattern_found, timeout_occurred)"
+    },
+    {
+      "name": "detect_console_state",
+      "description": "Analyze console output to detect device type and current state (returns JSON with state, device type, confidence)"
+    },
+    {
+      "name": "send_keystroke",
+      "description": "Send special keystroke to console (arrows, enter, backspace, delete, tab, esc, ctrl sequences, f1-f12)"
     },
     {
       "name": "set_connection",

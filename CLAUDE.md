@@ -10,9 +10,65 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.3.0
+## Current Version: v0.6.2
 
-**Latest Release:** v0.3.0 - Major Refactoring (Breaking Changes)
+**Latest Release:** v0.6.2 - Label Rendering Fix (Bugfix)
+- **Fixed label positioning**: `export_topology_diagram()` now matches official GNS3 GUI rendering
+- **Auto-centering**: Labels with x=None properly center above nodes (y=-25)
+- **Dynamic text-anchor**: Text alignment (start/middle/end) based on label position
+- **No offset additions**: Uses GNS3-stored positions directly, no incorrect calculations
+- See [Label Rendering Implementation](#label-rendering-implementation-v062) section for details
+
+**Previous:** v0.6.1 - Newline Normalization & Special Keystrokes
+- **FIXED**: All newlines automatically converted to \r\n (CR+LF) for console compatibility
+  - Copy-paste multi-line text directly - newlines just work
+  - `send_console()` and `send_and_wait_console()` normalize all line endings (\n, \r, \r\n → \r\n)
+  - Add `raw=True` parameter to disable processing
+- **NEW**: `send_keystroke()` - Send special keys for TUI navigation and vim editing
+  - Navigation: up, down, left, right, home, end, pageup, pagedown
+  - Editing: enter (sends \r\n), backspace, delete, tab, esc
+  - Control: ctrl_c, ctrl_d, ctrl_z, ctrl_a, ctrl_e
+  - Function keys: f1-f12
+- **FIXED**: `detect_console_state()` now checks only last non-empty line (not 5 lines)
+  - Prevents detecting old prompts instead of current state
+  - Fixed MikroTik password patterns: "new password>" not "new password:"
+
+**Previous:** v0.6.0 - Interactive Console Tools
+- **NEW**: `send_and_wait_console()` - Send command and wait for prompt pattern
+  - Regex pattern matching with 0.5s polling interval
+  - Timeout support for reliable automation
+- **NEW**: `detect_console_state()` - Auto-detect device type and console state
+  - Detects: Cisco IOS, MikroTik, Juniper, Arista, Linux
+  - Identifies 9 console states with confidence scoring
+- **ENHANCED**: Console tool docstrings with timing guidance
+- Added DEVICE_PATTERNS library for auto-detection
+
+**Previous:** v0.5.1 - Label Alignment
+- Fixed node label alignment - right-aligned and vertically centered
+- Note: v0.6.2 supersedes this with accurate GNS3-matching positioning
+
+**Previous:** v0.5.0 - Port Status Indicators
+- Topology export shows port status indicators
+  - Green = port active (node started, link not suspended)
+  - Red = port stopped (node stopped or link suspended)
+- Enhanced `export_topology_diagram()` with visual status
+
+**Previous:** v0.4.2 - Topology Export
+- **NEW**: `export_topology_diagram()` - Export topology as SVG/PNG
+- Renders nodes, links, and drawings
+- Auto-fits to content with padding
+- Supports custom crop regions
+
+**Previous:** v0.4.0 - Node Creation & Drawing Objects
+- **NEW**: `delete_node` - Remove nodes from projects
+- **NEW**: `list_templates` - List available GNS3 templates
+- **NEW**: `create_node` - Create nodes from templates at specified coordinates
+- **NEW**: `list_drawings` - List drawing objects in project
+- **NEW**: `create_rectangle` - Create colored rectangle drawings
+- **NEW**: `create_text` - Create text labels with formatting
+- **NEW**: `create_ellipse` - Create ellipse/circle drawings
+
+**Previous:** v0.3.0 - Major Refactoring (Breaking Changes)
 - **Type-safe operations**: Pydantic v2 models for all data structures
 - **Two-phase validation**: Prevents partial topology changes in `set_connection()`
 - **Performance caching**: 10× faster with TTL-based cache (30s for nodes/links, 60s for projects)
@@ -450,6 +506,181 @@ for node in nodes:
 }
 ```
 
+## Label Rendering Implementation (v0.6.2)
+
+### Overview
+
+The `export_topology_diagram()` tool creates SVG/PNG diagrams that visually match the official GNS3 GUI rendering. Version 0.6.2 fixed label positioning to accurately replicate GNS3's label behavior.
+
+### GNS3 Label Coordinate System
+
+**Official GNS3 Behavior** (from `gns3-gui/gns3/items/node_item.py`):
+
+```python
+# GNS3 stores labels with these properties:
+label = {
+    "text": "NodeName",           # Label text
+    "x": 10,                      # X offset from node top-left (or None for auto-center)
+    "y": -25,                     # Y offset from node top-left (typically -25 for above node)
+    "rotation": 0,                # Rotation angle in degrees
+    "style": "font-family: TypeWriter;font-size: 10.0;font-weight: bold;fill: #000000;fill-opacity: 1.0;"
+}
+```
+
+**Key Concepts:**
+1. **Node coordinates**: Top-left corner of icon (x, y)
+2. **Icon sizes**: PNG images = 78×78, SVG icons = 58×58
+3. **Label position**: Offset from node top-left corner
+4. **Auto-centering**: When `x` is `None`, GNS3 centers label above node
+
+### Label Positioning Algorithm
+
+**Auto-Centered Labels** (x is None):
+```python
+if label_x_offset is None:
+    # Calculate text width estimate
+    estimated_width = len(label_text) * font_size * 0.6
+
+    # Center horizontally on node
+    label_x = icon_size / 2  # Center of node
+    label_y = -25            # Standard above-node position
+    text_anchor = "middle"   # SVG text anchor
+```
+
+**Manual-Positioned Labels** (x/y are set):
+```python
+else:
+    # Use GNS3 position directly - NO additional calculations
+    label_x = label_x_offset
+    label_y = label_y_offset
+
+    # Determine text anchor based on position relative to node center
+    if abs(label_x_offset - icon_size / 2) < 5:
+        text_anchor = "middle"  # Centered
+    elif label_x_offset > icon_size / 2:
+        text_anchor = "end"     # Right of center (right-aligned)
+    else:
+        text_anchor = "start"   # Left of center (left-aligned)
+```
+
+### Common Label Rendering Mistakes
+
+**❌ WRONG - v0.6.1 and earlier:**
+```python
+# DON'T add estimated dimensions to stored position!
+estimated_width = len(label_text) * font_size * 0.6
+estimated_height = font_size * 1.5
+label_x = label_x_offset + estimated_width  # ❌ Adds offset incorrectly
+label_y = label_y_offset + estimated_height / 2  # ❌ Vertical misalignment
+```
+
+**✅ CORRECT - v0.6.2:**
+```python
+# Use stored position directly
+label_x = label_x_offset  # ✅ GNS3 position is already correct
+label_y = label_y_offset  # ✅ No additional calculations needed
+```
+
+### SVG Rendering Details
+
+**CSS Styles:**
+```css
+.node-label {
+    /* NO fixed text-anchor here - applied per-label dynamically */
+    dominant-baseline: text-before-edge;  /* Vertical alignment */
+}
+```
+
+**SVG Text Element:**
+```svg
+<text class="node-label"
+      x="{label_x}"
+      y="{label_y}"
+      text-anchor="{text_anchor}"  <!-- Dynamic: start/middle/end -->
+      transform="rotate({rotation} {label_x} {label_y})"
+      style="{label_style}">
+    {label_text}
+</text>
+```
+
+### Font Style Formats
+
+GNS3 uses two font format representations:
+
+**Qt Font String** (internal GNS3 settings):
+```python
+"TypeWriter,10,-1,5,75,0,0,0,0,0"
+# Format: Family,Size,Weight,Style,Weight2,...
+```
+
+**SVG Style String** (stored in .gns3 project file):
+```python
+"font-family: TypeWriter;font-size: 10.0;font-weight: bold;fill: #000000;fill-opacity: 1.0;"
+```
+
+The MCP server preserves the SVG style string from GNS3 data, ensuring visual consistency.
+
+### Label Rotation
+
+Labels support rotation around their anchor point:
+
+```python
+# Rotation transform applied to text element
+if label_rotation != 0:
+    label_transform = f'transform="rotate({label_rotation} {label_x} {label_y})"'
+```
+
+**Rotation is around**: The label's actual position (label_x, label_y), NOT the node center.
+
+### Comparison: Official GNS3 vs MCP Export
+
+**Before v0.6.2 (Incorrect):**
+- Labels offset too far to the right (added estimated_width)
+- Labels positioned too low (added half estimated_height)
+- All labels right-aligned (fixed text-anchor: end)
+
+**After v0.6.2 (Correct):**
+- ✅ Labels match GNS3 GUI positions exactly
+- ✅ Auto-centered labels work correctly
+- ✅ Dynamic text-anchor based on position
+- ✅ Rotation works as expected
+
+### Testing Label Rendering
+
+**Export from GNS3 GUI:**
+```
+File → Export portable picture → Save as PNG
+```
+
+**Export from MCP Server:**
+```python
+export_topology_diagram(
+    output_path="C:/path/to/output",
+    format="both"  # Creates .svg and .png
+)
+```
+
+**Visual Comparison Checklist:**
+- [ ] Node labels in identical positions
+- [ ] Label text not offset to the right
+- [ ] Auto-centered labels (x=None) above nodes at y=-25
+- [ ] Font matches: TypeWriter, 10pt, bold, black
+- [ ] Rotated labels render correctly
+- [ ] Left/center/right aligned labels match position
+
+### Implementation Files
+
+**Label rendering logic:**
+- `mcp-server/server/main.py` lines 2338-2403
+  - Label position calculation (2355-2375)
+  - SVG text generation (2377-2403)
+  - CSS styles (2117)
+
+**Reference implementation:**
+- `gns3-gui/gns3/items/node_item.py` lines 343-393
+  - Official GNS3 label centering logic (_centerLabel)
+  - Label update and positioning (_updateLabel)
+
 ## Git Workflow
 
 ### Commit Messages
@@ -582,3 +813,5 @@ git add . && git commit -m "feat: description"
 ```
 - use https://apiv3.gns3.net/ as a source of documentation for GNS3 v3 api
 - rebuild desktop extensions after finishing modifications of the tools and skills
+- remember to restart chat when need to update mcp server
+- keep version history in CLAUDE.md

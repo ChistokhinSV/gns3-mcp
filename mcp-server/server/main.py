@@ -1,25 +1,48 @@
-"""GNS3 MCP Server v0.4.2
+"""GNS3 MCP Server v0.6.2
 
 Model Context Protocol server for GNS3 lab automation.
 Provides tools for managing projects, nodes, links, console access, and drawings.
 
-Version 0.4.2 - Topology Export:
-- NEW: export_topology_diagram() - Export topology as SVG/PNG with nodes, links, drawings
+Version 0.6.2 - Label Rendering Fix:
+- FIXED: Node label positioning in export_topology_diagram() now matches official GNS3
+  * Labels use GNS3-stored positions directly (no incorrect offset additions)
+  * Dynamic text-anchor based on label position (start/middle/end)
+  * Auto-centering when x is None (matches GNS3 behavior)
+  * Removes dominant-baseline from CSS, applies text-before-edge
 
-Version 0.4.1 - Drawing Management:
-- NEW: delete_drawing() - Delete drawing objects
-- NEW: create_ellipse() - Create circles and ellipses
+Version 0.6.1 - Newline Normalization & Special Keystrokes:
+- FIXED: All newlines automatically converted to \r\n (CR+LF) for console compatibility
+  * Copy-paste multi-line text directly - newlines just work
+  * send_console() and send_and_wait_console() normalize all line endings
+  * Handles \n, \r, \r\n uniformly → all become \r\n
+  * Add raw=True parameter to disable processing
+- NEW: send_keystroke() - Send special keys for TUI navigation and vim editing
+  * Navigation: up, down, left, right, home, end, pageup, pagedown
+  * Editing: enter (sends \r\n), backspace, delete, tab, esc
+  * Control: ctrl_c, ctrl_d, ctrl_z, ctrl_a, ctrl_e
+  * Function keys: f1-f12
+- FIXED: detect_console_state() now checks only last non-empty line (not 5 lines)
+  * Prevents detecting old prompts instead of current state
+  * Fixed MikroTik password patterns: "new password>" not "new password:"
+
+Version 0.6.0 - Interactive Console Tools:
+- NEW: send_and_wait_console() - Send command and wait for prompt pattern
+- NEW: detect_console_state() - Auto-detect device type and console state
+- ENHANCED: Console tool docstrings with timing guidance
+- Added DEVICE_PATTERNS library for auto-detection
+
+Version 0.5.1 - Label Alignment:
+- Fixed node label alignment - right-aligned and vertically centered
+
+Version 0.5.0 - Port Status Indicators:
+- Topology export shows port status (green=active, red=stopped)
+
+Version 0.4.2 - Topology Export:
+- NEW: export_topology_diagram() - Export topology as SVG/PNG
 
 Version 0.4.0 - Node Creation & Drawing Objects:
-- NEW: delete_node() - Delete nodes from project
-- NEW: list_templates() - List available GNS3 templates
-- NEW: create_node() - Create nodes from templates
-- NEW: list_drawings() - List drawing objects (rectangles, text, shapes)
-- NEW: create_rectangle() - Create colored rectangles with customizable borders
-- NEW: create_text() - Create formatted text labels (bold, font size, color)
-
-Version 0.3.2 - Hardware Configuration:
-- set_node() supports hardware configuration (rename, RAM, CPUs, HDD, adapters)
+- NEW: delete_node, list_templates, create_node
+- NEW: list_drawings, create_rectangle, create_text, create_ellipse
 
 Version 0.3.0 - Type Safety & Caching:
 - Type-safe Pydantic models, two-phase validation, performance caching
@@ -56,6 +79,63 @@ logging.basicConfig(
     datefmt='%H:%M:%S %d.%m.%Y'
 )
 logger = logging.getLogger(__name__)
+
+
+# Device Pattern Library for Console State Detection
+# Used by detect_console_state() and execute_console_sequence()
+DEVICE_PATTERNS = {
+    "cisco_ios": {
+        "login": r"[Uu]sername:",
+        "password": r"[Pp]assword:",
+        "user_mode": r"[\w\-]+>",
+        "privileged": r"[\w\-]+#",
+        "config": r"\(config[^\)]*\)#",
+        "errors": [r"% Invalid", r"% Unknown", r"% Incomplete"]
+    },
+    "mikrotik": {
+        "login": r"Login:",
+        "password": r"Password:",
+        "new_password": r"[Nn]ew [Pp]assword\s*>",
+        "repeat_password": r"[Rr]epeat.*[Pp]assword\s*>",
+        "prompt": r"\[[\w\-]+@[\w\-]+\]\s*[>]",
+        "errors": [r"failure", r"bad command", r"expected"]
+    },
+    "juniper": {
+        "login": r"login:",
+        "password": r"[Pp]assword:",
+        "user_mode": r"[\w\-]+>",
+        "privileged": r"[\w\-]+#",
+        "config": r"\[edit[^\]]*\]",
+        "errors": [r"error:", r"syntax error", r"unknown command"]
+    },
+    "arista": {
+        "login": r"[Ll]ogin:",
+        "password": r"[Pp]assword:",
+        "user_mode": r"[\w\-]+>",
+        "privileged": r"[\w\-]+#",
+        "config": r"\(config[^\)]*\)#",
+        "errors": [r"% Invalid", r"% Incomplete"]
+    },
+    "linux": {
+        "login": r"login:",
+        "password": r"[Pp]assword:",
+        "prompt": r"[$#]",
+        "root_prompt": r"#",
+        "errors": [r"command not found", r"permission denied", r"No such file"]
+    }
+}
+
+# Common error patterns across all devices
+COMMON_ERROR_PATTERNS = [
+    r"% Invalid",
+    r"% Unknown",
+    r"% Incomplete",
+    r"^Error:",
+    r"[Ff]ailed",
+    r"[Ff]ailure",
+    r"syntax error",
+    r"bad command"
+]
 
 
 # SVG Generation Helpers
@@ -829,12 +909,40 @@ async def _auto_connect_console(app: AppContext, node_name: str) -> Optional[str
 
 
 @mcp.tool()
-async def send_console(ctx: Context, node_name: str, data: str) -> str:
+async def send_console(ctx: Context, node_name: str, data: str, raw: bool = False) -> str:
     """Send data to console (auto-connects if needed)
 
+    Sends data immediately to console without waiting for response.
+    For interactive workflows, use read_console() after sending to verify output.
+
+    Timing Considerations:
+    - Console output appears in background buffer (read via read_console)
+    - Allow 0.5-2 seconds after send before reading for command processing
+    - Interactive prompts (login, password) may need 1-3 seconds to appear
+    - Boot/initialization sequences may take 30-60 seconds
+
+    Auto-connect Behavior:
+    - First send/read automatically connects to console (no manual connect needed)
+    - Connection persists until disconnect_console() or 30-minute timeout
+    - Check connection state with get_console_status()
+
+    Escape Sequence Processing:
+    - By default, processes common escape sequences (\n, \r, \t, \x1b)
+    - Use raw=True to send data without processing (for binary data)
+
     Args:
-        node_name: Name of the node
-        data: Data to send (commands or keystrokes)
+        node_name: Name of the node (e.g., "Router1")
+        data: Data to send - include newline for commands (e.g., "enable\n")
+              Send just "\n" to wake console and check for prompts
+        raw: If True, send data without escape sequence processing (default: False)
+
+    Returns:
+        "Sent successfully" or error message
+
+    Example - Wake console and check state:
+        send_console("R1", "\n")
+        await 1 second
+        read_console("R1", diff=True)  # See what prompt appeared
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -842,6 +950,21 @@ async def send_console(ctx: Context, node_name: str, data: str) -> str:
     error = await _auto_connect_console(app, node_name)
     if error:
         return error
+
+    # Process escape sequences unless raw mode
+    if not raw:
+        # First handle escape sequences (backslash-escaped strings)
+        data = data.replace('\\r\\n', '\r\n')  # \r\n → CR+LF
+        data = data.replace('\\n', '\n')       # \n → LF
+        data = data.replace('\\r', '\r')       # \r → CR
+        data = data.replace('\\t', '\t')       # \t → tab
+        data = data.replace('\\x1b', '\x1b')   # \x1b → ESC
+
+        # Then normalize all newlines to \r\n for console compatibility
+        # This handles copy-pasted multi-line text
+        data = data.replace('\r\n', '\n')      # Normalize CRLF to LF first
+        data = data.replace('\r', '\n')        # Normalize CR to LF
+        data = data.replace('\n', '\r\n')      # Convert all LF to CRLF
 
     success = await app.console.send_by_node(node_name, data)
     return "Sent successfully" if success else "Failed to send"
@@ -851,12 +974,41 @@ async def send_console(ctx: Context, node_name: str, data: str) -> str:
 async def read_console(ctx: Context, node_name: str, diff: bool = False) -> str:
     """Read console output (auto-connects if needed)
 
+    Reads accumulated output from background console buffer. Output accumulates
+    while device runs - this function retrieves it without blocking.
+
+    Buffer Behavior:
+    - Background task continuously reads console into 10MB buffer
+    - Full buffer (diff=False): Returns all console output since connection
+    - Diff mode (diff=True): Returns only NEW output since last read
+    - Read position advances with each diff=True read
+
+    Timing Recommendations:
+    - After send_console(): Wait 0.5-2s before reading for command output
+    - After node start: Wait 30-60s for boot messages
+    - Interactive prompts: Wait 1-3s for prompt to appear
+
+    State Detection Tips:
+    - Look for prompt patterns: "Router>", "Login:", "Password:", "#"
+    - Check for "% " at start of line (IOS error messages)
+    - Look for "[OK]" or "failed" for command results
+    - MikroTik prompts: "[admin@RouterOS] > " or similar
+
     Args:
         node_name: Name of the node
-        diff: If True, return only new output since last read
+        diff: If True, return only new output since last read (recommended for
+              interactive sessions to avoid seeing old output)
 
     Returns:
-        Console output
+        Console output (ANSI escape codes stripped, line endings normalized)
+        or "No output available" if buffer empty
+
+    Example - Check for specific prompt:
+        output = read_console("R1", diff=True)
+        if "Login:" in output:
+            send_console("R1", "admin\\n")
+        elif "Router>" in output:
+            send_console("R1", "enable\\n")
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -898,13 +1050,39 @@ async def disconnect_console(ctx: Context, node_name: str) -> str:
 async def get_console_status(ctx: Context, node_name: str) -> str:
     """Check console connection status for a node
 
-    Makes auto-connect behavior transparent by showing connection state.
+    Shows connection state and buffer size. Does NOT show current prompt or
+    device readiness - use read_console(diff=True) to check current state.
+
+    Returns:
+        JSON with ConsoleStatus:
+        {
+            "connected": true/false,
+            "node_name": "Router1",
+            "session_id": "uuid",  # null if not connected
+            "host": "192.168.1.20",  # null if not connected
+            "port": 5000,  # null if not connected
+            "buffer_size": 1024,  # bytes accumulated
+            "created_at": "2025-10-23T10:30:00"  # null if not connected
+        }
+
+    Use Cases:
+    - Check if already connected before manual operations
+    - Verify auto-connect succeeded
+    - Monitor buffer size (>10MB triggers trim to 5MB)
+
+    Note: Connection state does NOT indicate device readiness. A connected
+    console may still be at login prompt, booting, or waiting for input.
+    Use read_console() to check current prompt state.
 
     Args:
         node_name: Name of the node
 
-    Returns:
-        JSON with ConsoleStatus object
+    Example:
+        status = get_console_status("R1")
+        if status["connected"]:
+            print(f"Buffer size: {status['buffer_size']} bytes")
+        else:
+            print("Not connected - next send/read will auto-connect")
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -929,6 +1107,400 @@ async def get_console_status(ctx: Context, node_name: str) -> str:
         )
 
     return json.dumps(status.model_dump(), indent=2)
+
+
+@mcp.tool()
+async def send_and_wait_console(
+    ctx: Context,
+    node_name: str,
+    command: str,
+    wait_pattern: Optional[str] = None,
+    timeout: int = 30,
+    raw: bool = False
+) -> str:
+    """Send command and wait for specific prompt pattern
+
+    Combines send + wait + read into single operation. Useful for interactive
+    workflows where you need to verify prompt before proceeding.
+
+    Workflow:
+    1. Send command to console
+    2. If wait_pattern provided: poll console until pattern appears or timeout
+    3. Return all output accumulated during wait
+
+    Args:
+        node_name: Name of the node
+        command: Command to send (include \n for newline)
+        wait_pattern: Optional regex pattern to wait for (e.g., "Router[>#]", "Login:")
+                      If None, waits 2 seconds and returns output
+        timeout: Maximum seconds to wait for pattern (default: 30)
+        raw: If True, send command without escape sequence processing (default: False)
+
+    Returns:
+        JSON with:
+        {
+            "output": "console output",
+            "pattern_found": true/false,
+            "timeout_occurred": true/false,
+            "wait_time": 2.5  # seconds actually waited
+        }
+
+    Example - Wait for login prompt:
+        result = send_and_wait_console(
+            "R1",
+            "\n",
+            wait_pattern="Login:",
+            timeout=10
+        )
+        # Returns when "Login:" appears or after 10 seconds
+
+    Example - Send command and wait for prompt:
+        result = send_and_wait_console(
+            "R1",
+            "show ip interface brief\n",
+            wait_pattern="Router#",
+            timeout=10
+        )
+        # Returns when "Router#" appears (command finished)
+
+    Example - No pattern (just wait 2s):
+        result = send_and_wait_console("R1", "enable\n")
+        # Sends command, waits 2s, returns output
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    # Auto-connect
+    error = await _auto_connect_console(app, node_name)
+    if error:
+        return json.dumps({
+            "error": error,
+            "output": "",
+            "pattern_found": False,
+            "timeout_occurred": False
+        }, indent=2)
+
+    # Process escape sequences unless raw mode
+    if not raw:
+        # First handle escape sequences (backslash-escaped strings)
+        command = command.replace('\\r\\n', '\r\n')  # \r\n → CR+LF
+        command = command.replace('\\n', '\n')       # \n → LF
+        command = command.replace('\\r', '\r')       # \r → CR
+        command = command.replace('\\t', '\t')       # \t → tab
+        command = command.replace('\\x1b', '\x1b')   # \x1b → ESC
+
+        # Then normalize all newlines to \r\n for console compatibility
+        command = command.replace('\r\n', '\n')      # Normalize CRLF to LF first
+        command = command.replace('\r', '\n')        # Normalize CR to LF
+        command = command.replace('\n', '\r\n')      # Convert all LF to CRLF
+
+    # Send command
+    success = await app.console.send_by_node(node_name, command)
+    if not success:
+        return json.dumps({
+            "error": "Failed to send command",
+            "output": "",
+            "pattern_found": False,
+            "timeout_occurred": False
+        }, indent=2)
+
+    # Wait for pattern or timeout
+    import time
+    start_time = time.time()
+    pattern_found = False
+    timeout_occurred = False
+
+    if wait_pattern:
+        import re
+        try:
+            pattern_re = re.compile(wait_pattern)
+        except re.error as e:
+            return json.dumps({
+                "error": f"Invalid regex pattern: {str(e)}",
+                "output": "",
+                "pattern_found": False,
+                "timeout_occurred": False
+            }, indent=2)
+
+        # Poll console every 0.5s
+        while (time.time() - start_time) < timeout:
+            await asyncio.sleep(0.5)
+            output = app.console.get_diff_by_node(node_name) or ""
+
+            if pattern_re.search(output):
+                pattern_found = True
+                break
+
+        if not pattern_found:
+            timeout_occurred = True
+    else:
+        # No pattern - just wait 2 seconds
+        await asyncio.sleep(2)
+
+    wait_time = time.time() - start_time
+
+    # Get all output since command was sent
+    output = app.console.get_diff_by_node(node_name) or ""
+
+    return json.dumps({
+        "output": output,
+        "pattern_found": pattern_found,
+        "timeout_occurred": timeout_occurred,
+        "wait_time": round(wait_time, 2)
+    }, indent=2)
+
+
+@mcp.tool()
+async def send_keystroke(ctx: Context, node_name: str, key: str) -> str:
+    """Send special keystroke to console (auto-connects if needed)
+
+    Sends special keys like arrows, function keys, control sequences for
+    navigating menus, editing in vim, or TUI applications.
+
+    Supported Keys:
+    - Navigation: "up", "down", "left", "right", "home", "end", "pageup", "pagedown"
+    - Editing: "enter", "backspace", "delete", "tab", "esc"
+    - Control: "ctrl_c", "ctrl_d", "ctrl_z", "ctrl_a", "ctrl_e"
+    - Function: "f1" through "f12"
+
+    Args:
+        node_name: Name of the node
+        key: Special key to send (e.g., "up", "enter", "ctrl_c")
+
+    Returns:
+        "Sent successfully" or error message
+
+    Example - Navigate menu:
+        send_keystroke("R1", "down")
+        send_keystroke("R1", "down")
+        send_keystroke("R1", "enter")
+
+    Example - Exit vim:
+        send_keystroke("R1", "esc")
+        send_console("R1", ":wq\n")
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    # Auto-connect if needed
+    error = await _auto_connect_console(app, node_name)
+    if error:
+        return error
+
+    # Map key names to escape sequences
+    SPECIAL_KEYS = {
+        # Navigation
+        'up': '\x1b[A',
+        'down': '\x1b[B',
+        'right': '\x1b[C',
+        'left': '\x1b[D',
+        'home': '\x1b[H',
+        'end': '\x1b[F',
+        'pageup': '\x1b[5~',
+        'pagedown': '\x1b[6~',
+
+        # Editing
+        'enter': '\r\n',
+        'backspace': '\x7f',
+        'delete': '\x1b[3~',
+        'tab': '\t',
+        'esc': '\x1b',
+
+        # Control sequences
+        'ctrl_c': '\x03',
+        'ctrl_d': '\x04',
+        'ctrl_z': '\x1a',
+        'ctrl_a': '\x01',
+        'ctrl_e': '\x05',
+
+        # Function keys
+        'f1': '\x1bOP',
+        'f2': '\x1bOQ',
+        'f3': '\x1bOR',
+        'f4': '\x1bOS',
+        'f5': '\x1b[15~',
+        'f6': '\x1b[17~',
+        'f7': '\x1b[18~',
+        'f8': '\x1b[19~',
+        'f9': '\x1b[20~',
+        'f10': '\x1b[21~',
+        'f11': '\x1b[23~',
+        'f12': '\x1b[24~',
+    }
+
+    key_lower = key.lower()
+    if key_lower not in SPECIAL_KEYS:
+        return f"Unknown key: {key}. Supported keys: {', '.join(sorted(SPECIAL_KEYS.keys()))}"
+
+    keystroke = SPECIAL_KEYS[key_lower]
+    success = await app.console.send_by_node(node_name, keystroke)
+    return "Sent successfully" if success else "Failed to send"
+
+
+@mcp.tool()
+async def detect_console_state(ctx: Context, node_name: str) -> str:
+    """Analyze console output to determine current device state
+
+    Inspects recent console output to identify device state using pattern library
+    for common devices (Cisco, MikroTik, Juniper, Arista, Linux). Auto-detects
+    device type with fallback to generic patterns.
+
+    Detected States:
+    - "login_prompt": Device asking for username (patterns: "Login:", "login:")
+    - "password_prompt": Device asking for password (patterns: "Password:", "password:")
+    - "new_password_prompt": MikroTik asking to set new password
+    - "repeat_password_prompt": MikroTik asking to repeat new password
+    - "command_prompt_user": User mode CLI (patterns: ">", "$")
+    - "command_prompt_privileged": Privileged mode CLI (patterns: "#")
+    - "config_mode": Configuration mode (patterns: "(config)", "[edit]")
+    - "booting": Device still booting (patterns: "Loading", "Booting")
+    - "unknown": Cannot determine state
+
+    Args:
+        node_name: Name of the node
+
+    Returns:
+        JSON with:
+        {
+            "state": "command_prompt_privileged",
+            "prompt_text": "Router#",
+            "ready_for_commands": true,
+            "detected_device": "cisco_ios",  # or null if generic
+            "last_lines": "show ip int brief\\n...\\nRouter#",
+            "confidence": "high"  # high/medium/low
+        }
+
+    Example Workflow:
+        # Wake console
+        send_console("R1", "\\n")
+        await 2 seconds
+
+        # Check state
+        state = detect_console_state("R1")
+
+        if state["state"] == "login_prompt":
+            send_console("R1", "admin\\n")
+        elif state["state"] == "password_prompt":
+            send_console("R1", "\\n")  # Empty password
+        elif state["ready_for_commands"]:
+            send_console("R1", "show version\\n")
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    # Auto-connect
+    error = await _auto_connect_console(app, node_name)
+    if error:
+        return json.dumps({
+            "state": "unknown",
+            "error": error,
+            "ready_for_commands": False
+        }, indent=2)
+
+    # Get recent output (last 1000 chars)
+    full_output = app.console.get_output_by_node(node_name) or ""
+    recent_output = full_output[-1000:] if len(full_output) > 1000 else full_output
+
+    # Extract last few lines for analysis and debugging
+    lines = recent_output.split('\n')
+    last_lines = '\n'.join(lines[-5:]) if len(lines) >= 5 else recent_output
+
+    # Get the last non-empty line (current prompt)
+    current_line = ""
+    for line in reversed(lines):
+        if line.strip():
+            current_line = line
+            break
+
+    # Pattern matching for state detection
+    import re
+
+    state = "unknown"
+    prompt_text = ""
+    confidence = "low"
+    ready = False
+    detected_device = None
+
+    # Try device-specific patterns first (higher confidence)
+    for device_name, patterns in DEVICE_PATTERNS.items():
+        # Check for device-specific prompts on current line
+        if device_name == "mikrotik":
+            if re.search(patterns.get("new_password", ""), current_line, re.IGNORECASE):
+                state = "new_password_prompt"
+                prompt_text = "new password>"
+                confidence = "high"
+                ready = False
+                detected_device = device_name
+                break
+            elif re.search(patterns.get("repeat_password", ""), current_line, re.IGNORECASE):
+                state = "repeat_password_prompt"
+                prompt_text = "repeat new password>"
+                confidence = "high"
+                ready = False
+                detected_device = device_name
+                break
+            elif re.search(patterns.get("prompt", ""), current_line):
+                state = "command_prompt_privileged"
+                match = re.search(patterns.get("prompt", ""), current_line)
+                prompt_text = match.group(0) if match else ""
+                confidence = "high"
+                ready = True
+                detected_device = device_name
+                break
+
+    # Generic pattern matching (if no device-specific match)
+    if state == "unknown":
+        # Login prompt (high confidence)
+        if re.search(r'[Ll]ogin\s*:', current_line):
+            state = "login_prompt"
+            match = re.search(r'[Ll]ogin\s*:', current_line)
+            prompt_text = match.group(0) if match else "Login:"
+            confidence = "high"
+            ready = False
+
+        # Password prompt (high confidence)
+        elif re.search(r'[Pp]assword\s*[>:]', current_line):
+            state = "password_prompt"
+            match = re.search(r'[Pp]assword\s*[>:]', current_line)
+            prompt_text = match.group(0) if match else "Password:"
+            confidence = "high"
+            ready = False
+
+        # Privileged mode (high confidence)
+        elif re.search(r'[\w\-]+#\s*$', current_line):
+            state = "command_prompt_privileged"
+            match = re.search(r'[\w\-]+#\s*$', last_lines)
+            prompt_text = match.group(0).strip() if match else ""
+            confidence = "high"
+            ready = True
+
+        # Config mode (high confidence)
+        elif re.search(r'\(config[^\)]*\)[#>]', last_lines) or re.search(r'\[edit[^\]]*\]', last_lines):
+            state = "config_mode"
+            match = re.search(r'(\(config[^\)]*\)[#>]|\[edit[^\]]*\])', last_lines)
+            prompt_text = match.group(0) if match else ""
+            confidence = "high"
+            ready = True
+
+        # User mode (medium confidence)
+        elif re.search(r'[\w\-]+>\s*$', last_lines):
+            state = "command_prompt_user"
+            match = re.search(r'[\w\-]+>\s*$', last_lines)
+            prompt_text = match.group(0).strip() if match else ""
+            confidence = "medium"
+            ready = True
+
+        # Booting indicators (medium confidence)
+        elif re.search(r'(Loading|Booting|Initializing|Starting)', last_lines, re.IGNORECASE):
+            state = "booting"
+            confidence = "medium"
+            ready = False
+
+    return json.dumps({
+        "state": state,
+        "prompt_text": prompt_text,
+        "ready_for_commands": ready,
+        "detected_device": detected_device,
+        "last_lines": last_lines,
+        "confidence": confidence
+    }, indent=2)
 
 
 @mcp.tool()
@@ -1549,7 +2121,7 @@ async def export_topology_diagram(ctx: Context, output_path: str,
       .node-stopped {{ fill: #ff9999; }}
       .node-started {{ fill: #99ff99; }}
       .node-suspended {{ fill: #ffff99; }}
-      .node-label {{ text-anchor: end; dominant-baseline: central; }}
+      .node-label {{ dominant-baseline: text-before-edge; }}
       .link {{ stroke: #666; stroke-width: 2; fill: none; }}
     </style>
   </defs>
@@ -1779,7 +2351,6 @@ async def export_topology_diagram(ctx: Context, output_path: str,
             label_rotation = label_info.get('rotation', 0)
             label_style = label_info.get('style', '')
 
-            # Estimate label bounding box dimensions
             # Extract font size from style, default to 10
             import re
             font_size = 10.0
@@ -1788,13 +2359,27 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 if font_match:
                     font_size = float(font_match.group(1))
 
-            # Estimate label box dimensions (rough approximation)
-            estimated_width = len(label_text) * font_size * 0.6
-            estimated_height = font_size * 1.5
-
-            # Position text at right edge and vertical center of bounding box
-            label_x = label_x_offset + estimated_width
-            label_y = label_y_offset + estimated_height / 2
+            # GNS3 Label Positioning:
+            # - When x is None, GNS3 auto-centers the label above the node
+            # - When x/y are set, they represent the label position directly (not bounding box)
+            # - Official GNS3 uses text position, not bounding box corner
+            if label_x_offset is None:
+                # Auto-center label above node (mimic official GNS3 behavior)
+                estimated_width = len(label_text) * font_size * 0.6
+                label_x = icon_size / 2  # Center of node
+                label_y = -25  # Standard position above node
+                text_anchor = "middle"
+            else:
+                # Use GNS3-stored position directly (no offset additions)
+                label_x = label_x_offset
+                label_y = label_y_offset
+                # Determine text anchor based on position relative to node center
+                if abs(label_x_offset - icon_size / 2) < 5:
+                    text_anchor = "middle"  # Centered
+                elif label_x_offset > icon_size / 2:
+                    text_anchor = "end"  # Right of center
+                else:
+                    text_anchor = "start"  # Left of center
 
             # Parse style string into SVG attributes
             style_attrs = ''
@@ -1812,7 +2397,7 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 # Use actual or fallback icon
                 svg_content += f'''  <g transform="translate({x}, {y})">
     <image href="{icon_data}" x="0" y="0" width="{icon_size}" height="{icon_size}"/>
-    <text class="node-label" x="{label_x}" y="{label_y}"{label_transform}{style_attrs}>{label_text}</text>
+    <text class="node-label" x="{label_x}" y="{label_y}" text-anchor="{text_anchor}"{label_transform}{style_attrs}>{label_text}</text>
   </g>
 '''
             else:
@@ -1820,7 +2405,7 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 status_class = f"node-{status}"
                 svg_content += f'''  <g transform="translate({x}, {y})">
     <rect class="node {status_class}" x="0" y="0" width="80" height="80" rx="5"/>
-    <text class="node-label" x="{label_x}" y="{label_y}"{label_transform}{style_attrs}>{label_text}</text>
+    <text class="node-label" x="{label_x}" y="{label_y}" text-anchor="{text_anchor}"{label_transform}{style_attrs}>{label_text}</text>
   </g>
 '''
 

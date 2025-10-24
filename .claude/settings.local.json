@@ -7,7 +7,10 @@
       "WebFetch(domain:www.anthropic.com)",
       "WebFetch(domain:apiv3.gns3.net)",
       "Bash(git add:*)",
-      "Bash(npx @anthropic-ai/mcpb pack:*)"
+      "Bash(npx @anthropic-ai/mcpb pack:*)",
+      "mcp__gns3-lab__list_nodes",
+      "Read(//c/DOWNLOAD_TEMP/**)",
+      "mcp__gns3-lab__list_templates"
     ],
     "deny": [],
     "ask": []
