@@ -10,9 +10,25 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.8.0
+## Current Version: v0.8.1
 
-**Latest Release:** v0.8.0 - Tool Redesign (Breaking Changes)
+**Latest Release:** v0.8.1 - Documentation Enhancement (Patch)
+- **ENHANCED**: Added best practice guidance for `send_and_wait_console()`
+  - Tool docstring now includes prominent "BEST PRACTICE" section
+  - Recommends checking prompt first with `read_console()` before using wait patterns
+  - Added example showing recommended workflow: check prompt → use in automation
+  - TIP added to `wait_pattern` parameter documentation
+- **SKILL.md**: New section "Using send_and_wait_console for Automation"
+  - 3-step workflow guide with examples
+  - Comparison: when to use send_and_wait vs send+read
+  - Best practices for avoiding common issues (wrong prompts, timeouts, missed output)
+- **Files changed**:
+  - `main.py`: Enhanced `send_and_wait_console()` docstring (lines 1247-1307)
+  - `SKILL.md`: Added automation section and best practices (lines 139-184)
+  - `manifest.json`: Updated to v0.8.1
+- **Rationale**: Prevents common user errors from incorrect prompt patterns
+
+**Previous:** v0.8.0 - Tool Redesign (Breaking Changes)
 - **BREAKING**: `read_console()` now defaults to `diff=True` (was `diff=False`)
   - Previous: `read_console(node)` returned full buffer
   - Now: `read_console(node)` returns only new output since last read

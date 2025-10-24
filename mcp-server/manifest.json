@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Control and automate GNS3 network labs through Claude with type-safe operations",
-  "long_description": "Version 0.8.0: REDESIGNED - read_console() now defaults to diff=True (returns only new output), added last_page parameter for last 25 lines. Unified drawing tools into create_drawing() with drawing_type parameter (rectangle/ellipse/text). BREAKING: read_console() default changed from diff=False to diff=True. Removed create_rectangle/create_text/create_ellipse (use create_drawing). Version 0.7.0: NEW - set_connection() accepts adapter names. Version 0.6.5: FIXED - Node actions handle empty API responses. Version 0.6.4: FIXED - Z-order rendering. Version 0.6.3: FIXED - Font fallback chain. Version 0.6.2: FIXED - Label positioning. Version 0.6.0: Interactive console tools. Version 0.5.0: Port status indicators. Version 0.3.0: Type-safe Pydantic models, two-phase validation, caching. Supports GNS3 v3 API.",
+  "long_description": "Version 0.8.1: DOCS - Added best practice guidance for send_and_wait_console() - check prompt first with read_console() before using wait patterns. Version 0.8.0: REDESIGNED - read_console() now defaults to diff=True (returns only new output), added last_page parameter for last 25 lines. Unified drawing tools into create_drawing() with drawing_type parameter (rectangle/ellipse/line/text). BREAKING: read_console() default changed from diff=False to diff=True. Removed create_rectangle/create_text/create_ellipse (use create_drawing). Version 0.7.0: NEW - set_connection() accepts adapter names. Version 0.6.5: FIXED - Node actions handle empty API responses. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"

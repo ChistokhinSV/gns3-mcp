@@ -1249,6 +1249,12 @@ async def send_and_wait_console(
     Combines send + wait + read into single operation. Useful for interactive
     workflows where you need to verify prompt before proceeding.
 
+    BEST PRACTICE: Before using this tool, first check what the prompt looks like:
+    1. Send "\n" with send_console() to wake the console
+    2. Use read_console() to see the current prompt (e.g., "Router#", "[admin@MikroTik] >")
+    3. Use that exact prompt pattern in wait_pattern parameter
+    4. This ensures you wait for the right prompt and don't miss command output
+
     Workflow:
     1. Send command to console
     2. If wait_pattern provided: poll console until pattern appears or timeout
@@ -1259,6 +1265,7 @@ async def send_and_wait_console(
         command: Command to send (include \n for newline)
         wait_pattern: Optional regex pattern to wait for (e.g., "Router[>#]", "Login:")
                       If None, waits 2 seconds and returns output
+                      TIP: Check prompt first with read_console() to get exact pattern
         timeout: Maximum seconds to wait for pattern (default: 30)
         raw: If True, send command without escape sequence processing (default: False)
 
@@ -1271,6 +1278,20 @@ async def send_and_wait_console(
             "wait_time": 2.5  # seconds actually waited
         }
 
+    Example - Best practice workflow:
+        # Step 1: Check the prompt first
+        send_console("R1", "\n")
+        output = read_console("R1")  # Shows "Router#"
+
+        # Step 2: Use that prompt pattern
+        result = send_and_wait_console(
+            "R1",
+            "show ip interface brief\n",
+            wait_pattern="Router#",  # Wait for exact prompt
+            timeout=10
+        )
+        # Returns when "Router#" appears - command is complete
+
     Example - Wait for login prompt:
         result = send_and_wait_console(
             "R1",
@@ -1279,15 +1300,6 @@ async def send_and_wait_console(
             timeout=10
         )
         # Returns when "Login:" appears or after 10 seconds
-
-    Example - Send command and wait for prompt:
-        result = send_and_wait_console(
-            "R1",
-            "show ip interface brief\n",
-            wait_pattern="Router#",
-            timeout=10
-        )
-        # Returns when "Router#" appears (command finished)
 
     Example - No pattern (just wait 2s):
         result = send_and_wait_console("R1", "enable\n")
