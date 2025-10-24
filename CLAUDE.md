@@ -10,9 +10,38 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.9.0
+## Current Version: v0.10.0
 
-**Latest Release:** v0.9.0 - Major Refactoring (Breaking Changes)
+**Latest Release:** v0.10.0 - Testing Infrastructure (Feature)
+- **NEW**: Comprehensive unit testing infrastructure with pytest
+  - pytest 8.4.2 with plugins (pytest-asyncio, pytest-mock, pytest-cov)
+  - 134 unit tests covering critical modules
+  - pytest.ini with coverage settings and test markers
+  - tests/conftest.py with shared fixtures
+- **Test Coverage Achieved**:
+  - models.py: 100% coverage (41 tests)
+  - link_validator.py: 96% coverage (37 tests)
+  - gns3_client.py: 75% coverage (30 tests)
+  - export_tools.py: 19% coverage (26 tests, helper functions fully tested)
+  - Overall: 30% total coverage (focused on critical paths)
+- **NEW**: Extracted export functionality to separate module
+  - `mcp-server/server/export_tools.py` (547 lines)
+  - Reduced `main.py` from 2,410 to 1,836 LOC
+  - Functions: add_font_fallbacks(), create_*_svg(), export_topology_diagram()
+- **Files added**:
+  - `pytest.ini`: pytest configuration with coverage settings
+  - `tests/conftest.py`: shared test fixtures
+  - `tests/unit/test_models.py`: 41 tests for Pydantic models
+  - `tests/unit/test_link_validator.py`: 37 tests for two-phase validation
+  - `tests/unit/test_gns3_client.py`: 30 tests for API client
+  - `tests/unit/test_export_tools.py`: 26 tests for SVG generation
+  - `mcp-server/server/export_tools.py`: extracted export module
+- **Files changed**:
+  - `requirements.txt`: Added pytest dependencies
+  - `mcp-server/server/main.py`: Import export functions from export_tools.py
+- **Rationale**: Testing infrastructure ensures code quality and prevents regressions. Export extraction improves maintainability.
+
+**Previous:** v0.9.0 - Major Refactoring (Breaking Changes)
 - **REMOVED**: Caching infrastructure completely
   - Deleted `cache.py` (274 lines)
   - Removed all cache usage from `main.py` (17 locations)

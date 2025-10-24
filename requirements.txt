@@ -1,6 +1,13 @@
+# Production dependencies
 mcp>=1.2.1
 httpx>=0.28.1
 telnetlib3>=2.0.4
 pydantic>=2.0.0
 python-dotenv>=1.1.1
 cairosvg>=2.7.0
+
+# Development/Testing dependencies
+pytest>=8.4.2
+pytest-asyncio>=1.2.0
+pytest-mock>=3.15.1
+pytest-cov>=7.0.0
