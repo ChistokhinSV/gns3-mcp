@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Control and automate GNS3 network labs through Claude with type-safe operations",
-  "long_description": "Version 0.9.0: MAJOR REFACTORING (BREAKING) - Removed caching infrastructure (force_refresh params removed). Removed detect_console_state() tool. CHANGED: read_console(mode='diff'/'last_page'/'all') replaces bool params. Simplified: direct API calls, better for local labs. Version 0.8.1: DOCS - send_and_wait_console() best practices. Version 0.8.0: read_console() defaults to diff=True, unified create_drawing(). Version 0.7.0: set_connection() accepts adapter names. Supports GNS3 v3 API.",
+  "long_description": "Version 0.9.1: PATCH - Improved error messages with suggested_action (15 locations), standardized tool descriptions with return types, better adapter error messages, fixed read_console() validation consistency. Version 0.9.0: MAJOR REFACTORING (BREAKING) - Removed caching, detect_console_state(). CHANGED: read_console(mode='diff'/'last_page'/'all'). Version 0.8.1: send_and_wait_console() best practices. Version 0.7.0: set_connection() accepts adapter names. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -79,15 +79,15 @@
     },
     {
       "name": "set_node",
-      "description": "Configure node properties and/or control state (start/stop/suspend/reload/restart)"
+      "description": "Configure node properties and/or control state (returns JSON status message)"
     },
     {
       "name": "send_console",
-      "description": "Send commands to node console (auto-connects if needed)"
+      "description": "Send commands to node console (returns status string, auto-connects if needed)"
     },
     {
       "name": "read_console",
-      "description": "Read console output with mode parameter (mode='diff'/'last_page'/'all', default='diff')"
+      "description": "Read console output with mode parameter (returns console output string, mode='diff'/'last_page'/'all')"
     },
     {
       "name": "disconnect_console",
@@ -103,15 +103,15 @@
     },
     {
       "name": "send_keystroke",
-      "description": "Send special keystroke to console (arrows, enter, backspace, delete, tab, esc, ctrl sequences, f1-f12)"
+      "description": "Send special keystroke to console (returns status string)"
     },
     {
       "name": "set_connection",
-      "description": "Batch manage network connections with two-phase validation (requires adapters)"
+      "description": "Batch manage network connections with two-phase validation (returns JSON OperationResult)"
     },
     {
       "name": "delete_node",
-      "description": "Delete a node from the current project"
+      "description": "Delete a node from the current project (returns JSON confirmation)"
     },
     {
       "name": "list_templates",
@@ -119,7 +119,7 @@
     },
     {
       "name": "create_node",
-      "description": "Create a new node from a template at specified coordinates"
+      "description": "Create a new node from a template at specified coordinates (returns JSON with NodeInfo)"
     },
     {
       "name": "list_drawings",
@@ -127,15 +127,15 @@
     },
     {
       "name": "create_drawing",
-      "description": "Create a drawing object (rectangle, ellipse, line, or text) with customizable properties"
+      "description": "Create a drawing object (returns JSON DrawingInfo, types: rectangle/ellipse/line/text)"
     },
     {
       "name": "delete_drawing",
-      "description": "Delete a drawing object from the current project"
+      "description": "Delete a drawing object from the current project (returns JSON confirmation)"
     },
     {
       "name": "export_topology_diagram",
-      "description": "Export topology as SVG and/or PNG diagram with nodes, links, and drawings"
+      "description": "Export topology as SVG and/or PNG diagram (returns JSON with file paths and diagram info)"
     }
   ],
   "compatibility": {

@@ -128,7 +128,15 @@ class LinkValidator:
 
             # Not found - provide helpful error with available names
             available = list(self.adapter_name_to_num[node_name].keys())
-            return (0, 0, "", f"Port '{identifier}' not found on {node_name}. Available: {available[:10]}")
+            if len(available) <= 15:
+                avail_str = ", ".join(available)
+            else:
+                avail_str = ", ".join(available[:15]) + f"... ({len(available)} total)"
+
+            return (0, 0, "",
+                f"Port '{identifier}' not found on {node_name} (case-sensitive). "
+                f"Available ports: {avail_str}. "
+                f"Tip: Use get_links() to see current connections")
 
         return (0, 0, "", f"Invalid adapter identifier type: {type(identifier)}")
 

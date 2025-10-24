@@ -1,7 +1,13 @@
-"""GNS3 MCP Server v0.9.0
+"""GNS3 MCP Server v0.9.1
 
 Model Context Protocol server for GNS3 lab automation.
 Provides tools for managing projects, nodes, links, console access, and drawings.
+
+Version 0.9.1 - Error Message Improvements (PATCH):
+- IMPROVED: Added suggested_action to 15 critical error messages for better user guidance
+- IMPROVED: Standardized all 20 tool descriptions in manifest with return types
+- IMPROVED: Better adapter error messages (shows 15 ports, notes case-sensitivity, suggests get_links())
+- FIXED: read_console() mode validation now returns plain string (not JSON), consistent with other console tools
 
 Version 0.9.0 - Major Refactoring (BREAKING CHANGES):
 - REMOVED: Caching infrastructure (cache.py, all cache usage, force_refresh parameters)
@@ -733,7 +739,8 @@ async def set_node(ctx: Context,
     if not node:
         return json.dumps(ErrorResponse(
             error="Node not found",
-            details=f"Node '{node_name}' does not exist in current project"
+            details=f"Node '{node_name}' does not exist in current project",
+            suggested_action="Call list_nodes() to see exact node names (case-sensitive)"
         ).model_dump(), indent=2)
 
     node_id = node['node_id']
@@ -901,22 +908,22 @@ async def _auto_connect_console(app: AppContext, node_name: str) -> Optional[str
         return None
 
     if not app.current_project_id:
-        return "No project opened"
+        return "No project opened. Use open_project() first."
 
     # Find node
     nodes = await app.gns3.get_nodes(app.current_project_id)
     node = next((n for n in nodes if n['name'] == node_name), None)
 
     if not node:
-        return f"Node '{node_name}' not found"
+        return f"Node '{node_name}' not found. Use list_nodes() to see available nodes (case-sensitive)."
 
     # Check console type
     console_type = node['console_type']
     if console_type not in ['telnet']:
-        return f"Console type '{console_type}' not supported (only 'telnet' currently supported)"
+        return f"Console type '{console_type}' not supported (only 'telnet' currently supported). Check node configuration."
 
     if not node['console']:
-        return f"Node '{node_name}' has no console configured"
+        return f"Node '{node_name}' has no console configured. Verify node is started with list_nodes()."
 
     # Extract host from GNS3 client config
     host = app.gns3.base_url.split('//')[1].split(':')[0]
@@ -1043,10 +1050,10 @@ async def read_console(ctx: Context, node_name: str, mode: str = "diff") -> str:
 
     # Validate mode parameter
     if mode not in ("diff", "last_page", "all"):
-        return json.dumps(ErrorResponse(
-            error="Invalid mode parameter",
-            details=f"mode must be 'diff', 'last_page', or 'all', got '{mode}'"
-        ).model_dump(), indent=2)
+        return (f"Invalid mode '{mode}'. Valid modes:\n"
+                f"  'diff' - New output since last read (default)\n"
+                f"  'last_page' - Last ~25 lines\n"
+                f"  'all' - Entire buffer")
 
     # Auto-connect if needed
     error = await _auto_connect_console(app, node_name)
