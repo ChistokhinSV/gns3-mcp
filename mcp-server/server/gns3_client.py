@@ -117,6 +117,9 @@ class GNS3Client:
             json={}
         )
         response.raise_for_status()
+        # Handle empty response (204 No Content)
+        if response.status_code == 204 or not response.content:
+            return {}
         return response.json()
 
     async def stop_node(self, project_id: str, node_id: str) -> Dict[str, Any]:
@@ -127,6 +130,9 @@ class GNS3Client:
             json={}
         )
         response.raise_for_status()
+        # Handle empty response (204 No Content)
+        if response.status_code == 204 or not response.content:
+            return {}
         return response.json()
 
     async def suspend_node(self, project_id: str, node_id: str) -> Dict[str, Any]:
@@ -137,6 +143,9 @@ class GNS3Client:
             json={}
         )
         response.raise_for_status()
+        # Handle empty response (204 No Content)
+        if response.status_code == 204 or not response.content:
+            return {}
         return response.json()
 
     async def reload_node(self, project_id: str, node_id: str) -> Dict[str, Any]:
@@ -147,6 +156,9 @@ class GNS3Client:
             json={}
         )
         response.raise_for_status()
+        # Handle empty response (204 No Content)
+        if response.status_code == 204 or not response.content:
+            return {}
         return response.json()
 
     async def update_node(self, project_id: str, node_id: str,

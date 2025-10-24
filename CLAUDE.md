@@ -10,9 +10,21 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.6.3
+## Current Version: v0.6.5
 
-**Latest Release:** v0.6.3 - Font Fallback Chain (Bugfix)
+**Latest Release:** v0.6.5 - Empty Response Handling (Bugfix)
+- **Fixed node actions**: `start_node()`, `stop_node()`, `suspend_node()`, `reload_node()` now handle empty API responses
+- **Issue**: GNS3 API returns HTTP 204 No Content (empty body) for these actions
+- **Error**: Previously failed with "Expecting value: line 1 column 1 (char 0)" JSON parse error
+- **Fix**: Check response status code and content before parsing JSON, return empty dict for 204/empty responses
+- **Impact**: All node control actions now work correctly
+- **Files changed**: `mcp-server/server/gns3_client.py` lines 112-162
+
+**Previous:** v0.6.4 - Z-order Rendering Fix (Bugfix)
+- **Fixed z-order**: Links render below nodes (z=min(nodes)-0.5), drawings/nodes intermixed by z-value
+- **Painter's algorithm**: Ensures correct layering for overlapping elements
+
+**Previous:** v0.6.3 - Font Fallback Chain (Bugfix)
 - **Fixed font rendering**: Added CSS-style font fallback chains for consistent cross-platform SVG/PNG export
 - **TypeWriter fallback**: TypeWriter → Courier New → Courier → Liberation Mono → Consolas → monospace
 - **Display font fallback**: Gerbera Black/decorative → Georgia → Times New Roman → serif
