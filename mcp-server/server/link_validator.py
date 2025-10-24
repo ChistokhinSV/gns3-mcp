@@ -28,6 +28,7 @@ class LinkValidator:
         self.links = links
         self.link_ids = {link['link_id']: link for link in links}
         self.port_usage = self._build_port_usage_map()
+        self._build_adapter_name_maps()
 
     def _build_port_usage_map(self) -> Dict[str, Dict[int, Set[int]]]:
         """Build map of currently used ports
@@ -56,6 +57,80 @@ class LinkValidator:
 
         logger.debug(f"Built port usage map: {usage}")
         return usage
+
+    def _build_adapter_name_maps(self):
+        """Build mapping of adapter names to numbers for each node
+
+        Creates self.adapter_names: {node_name: {(adapter_num, port_num): port_name}}
+        and self.adapter_name_to_num: {node_name: {port_name: (adapter_num, port_num)}}
+        """
+        self.adapter_names = {}
+        self.adapter_name_to_num = {}
+
+        for node_name, node in self.nodes.items():
+            if 'ports' not in node or not node['ports']:
+                continue
+
+            self.adapter_names[node_name] = {}
+            self.adapter_name_to_num[node_name] = {}
+
+            for port in node['ports']:
+                adapter_num = port.get('adapter_number', 0)
+                port_num = port.get('port_number', 0)
+                port_name = port.get('name', f'port{port_num}')
+
+                # Map (adapter, port) -> name
+                self.adapter_names[node_name][(adapter_num, port_num)] = port_name
+
+                # Map name -> (adapter, port)
+                self.adapter_name_to_num[node_name][port_name] = (adapter_num, port_num)
+
+    def resolve_adapter_identifier(self, node_name: str, identifier: any) -> Tuple[int, int, str, Optional[str]]:
+        """Resolve adapter identifier (name or number) to (adapter_num, port_num, name, error)
+
+        Args:
+            node_name: Node name
+            identifier: Either:
+                - int: adapter number (assumes port 0)
+                - str: port name like "eth0", "GigabitEthernet0/0", "Ethernet0"
+
+        Returns:
+            Tuple of (adapter_number, port_number, port_name, error_message)
+            If error_message is not None, resolution failed
+        """
+        if node_name not in self.nodes:
+            return (0, 0, "", f"Node '{node_name}' not found")
+
+        # If it's an int, it's an adapter number (port 0)
+        if isinstance(identifier, int):
+            adapter_num = identifier
+            port_num = 0
+
+            # Try to get the actual port name
+            if node_name in self.adapter_names:
+                port_name = self.adapter_names[node_name].get(
+                    (adapter_num, port_num),
+                    f"adapter{adapter_num}/port{port_num}"
+                )
+            else:
+                port_name = f"adapter{adapter_num}/port{port_num}"
+
+            return (adapter_num, port_num, port_name, None)
+
+        # It's a string - try to resolve as port name
+        if isinstance(identifier, str):
+            if node_name not in self.adapter_name_to_num:
+                return (0, 0, "", f"Node '{node_name}' has no port information")
+
+            if identifier in self.adapter_name_to_num[node_name]:
+                adapter_num, port_num = self.adapter_name_to_num[node_name][identifier]
+                return (adapter_num, port_num, identifier, None)
+
+            # Not found - provide helpful error with available names
+            available = list(self.adapter_name_to_num[node_name].keys())
+            return (0, 0, "", f"Port '{identifier}' not found on {node_name}. Available: {available[:10]}")
+
+        return (0, 0, "", f"Invalid adapter identifier type: {type(identifier)}")
 
     def validate_connect(self,
                         node_a_name: str,

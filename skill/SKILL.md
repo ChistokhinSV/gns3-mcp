@@ -239,11 +239,22 @@ connections = [
     # Disconnect a link
     {"action": "disconnect", "link_id": "abc123"},
 
-    # Connect two nodes
-    {"action": "connect", "node_a": "R1", "port_a": 0,
-     "node_b": "R2", "port_b": 1}
+    # Connect two nodes (using adapter names - recommended)
+    {"action": "connect",
+     "node_a": "R1", "adapter_a": "eth0", "port_a": 0,
+     "node_b": "R2", "adapter_b": "GigabitEthernet0/0", "port_b": 1},
+
+    # Or using adapter numbers (legacy)
+    {"action": "connect",
+     "node_a": "R1", "adapter_a": 0, "port_a": 0,
+     "node_b": "R2", "adapter_b": 0, "port_b": 1}
 ]
 ```
+
+**Adapter Names vs Numbers:**
+- **Adapter names** (recommended): Use port names like "eth0", "GigabitEthernet0/0", "Ethernet0"
+- **Adapter numbers** (legacy): Use numeric adapter index (0, 1, 2, ...)
+- Response always shows **both**: `"adapter_a": 0, "port_a_name": "eth0"`
 
 **Returns:**
 ```json
@@ -251,35 +262,33 @@ connections = [
   "completed": [
     {"index": 0, "action": "disconnect", "link_id": "abc123"},
     {"index": 1, "action": "connect", "link_id": "new-id",
-     "node_a": "R1", "port_a": 0, "node_b": "R2", "port_b": 1}
+     "node_a": "R1", "node_b": "R2",
+     "adapter_a": 0, "port_a": 0, "port_a_name": "eth0",
+     "adapter_b": 0, "port_b": 1, "port_b_name": "GigabitEthernet0/0"}
   ],
-  "failed": {
-    "index": 2,
-    "action": "connect",
-    "reason": "Port already in use"
-  }
+  "failed": null
 }
 ```
 
 **Best Practices:**
-- **Always** call `get_links()` first to check current topology
+- **Always** call `get_links()` first to check current topology and see port names
+- Use **adapter names** for readability (e.g., "eth0" instead of 0)
 - Get link IDs from output (in brackets) for disconnection
 - Disconnect existing links before connecting to occupied ports
 - Operations stop at first failure for predictable state
-- Adapter 0 is used by default (suitable for most devices)
 
 **Example - Rewire topology:**
 ```python
 # 1. Check current topology
 get_links()
-# Output: Link [abc-123]: R1 port 0 <-> NAT1 port 0 (ethernet)
-#         Link [def-456]: R2 port 0 <-> Switch1 port 1 (ethernet)
+# Output shows port names: eth0, GigabitEthernet0/0, etc.
 
-# 2. Disconnect old link and create new one
+# 2. Disconnect old link and create new one (using port names)
 set_connection([
     {"action": "disconnect", "link_id": "abc-123"},
-    {"action": "connect", "node_a": "R1", "port_a": 0,
-     "node_b": "Switch1", "port_b": 3}
+    {"action": "connect",
+     "node_a": "R1", "adapter_a": "eth0", "port_a": 0,
+     "node_b": "Switch1", "adapter_b": "Ethernet3", "port_b": 3}
 ])
 ```
 

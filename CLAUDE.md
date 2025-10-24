@@ -10,9 +10,22 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.6.5
+## Current Version: v0.7.0
 
-**Latest Release:** v0.6.5 - Empty Response Handling (Bugfix)
+**Latest Release:** v0.7.0 - Adapter Name Support (Feature)
+- **NEW**: `set_connection()` now accepts adapter names in addition to numeric indexes
+- **Adapter names**: Use port names like "eth0", "GigabitEthernet0/0", "Ethernet0" for better readability
+- **Backward compatible**: Numeric adapter indexes still work (0, 1, 2, ...)
+- **Enhanced responses**: Include both human-readable port names AND adapter/port numbers
+- **Example**: `"adapter_a": 0, "port_a_name": "eth0"` in confirmation
+- **Files changed**:
+  - `link_validator.py`: Added `resolve_adapter_identifier()` method with port name mapping
+  - `models.py`: Updated `ConnectOperation` to accept `Union[str, int]` for adapters
+  - `main.py`: Resolution and validation logic for adapter names
+  - `SKILL.md`: Updated documentation with adapter name examples
+- **Use case**: More intuitive link creation - `adapter_a: "eth0"` instead of `adapter_a: 0`
+
+**Previous:** v0.6.5 - Empty Response Handling (Bugfix)
 - **Fixed node actions**: `start_node()`, `stop_node()`, `suspend_node()`, `reload_node()` now handle empty API responses
 - **Issue**: GNS3 API returns HTTP 204 No Content (empty body) for these actions
 - **Error**: Previously failed with "Expecting value: line 1 column 1 (char 0)" JSON parse error

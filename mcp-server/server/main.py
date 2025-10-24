@@ -1588,8 +1588,6 @@ async def detect_console_state(ctx: Context, node_name: str) -> str:
 async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str:
     """Manage network connections (links) in batch with two-phase validation
 
-    BREAKING CHANGE v0.3.0: Now requires adapter_a and adapter_b parameters.
-
     Two-phase execution prevents partial topology changes:
     1. VALIDATE ALL operations (check nodes exist, ports free, adapters valid)
     2. EXECUTE ALL operations (only if all valid - atomic)
@@ -1607,8 +1605,8 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
                 "node_b": "Router2",
                 "port_a": 0,
                 "port_b": 1,
-                "adapter_a": 0,  # REQUIRED in v0.3.0 (default 0 if omitted)
-                "adapter_b": 0   # REQUIRED in v0.3.0 (default 0 if omitted)
+                "adapter_a": "eth0",  # Port name OR adapter number (int)
+                "adapter_b": "GigabitEthernet0/0"  # Port name OR adapter number
             }
             Disconnect: {
                 "action": "disconnect",
@@ -1617,6 +1615,7 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
 
     Returns:
         JSON with OperationResult (completed and failed operations)
+        Includes both port names and adapter/port numbers in confirmation
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -1650,14 +1649,51 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
         # PHASE 1: VALIDATE ALL operations (no state changes)
         validator = LinkValidator(nodes, links)
 
+        # Resolve adapter names to numbers and validate
+        resolved_ops = []
         for idx, op in enumerate(parsed_ops):
             if isinstance(op, ConnectOperation):
+                # Resolve adapter_a
+                adapter_a_num, port_a_num, port_a_name, error = validator.resolve_adapter_identifier(
+                    op.node_a, op.adapter_a
+                )
+                if error:
+                    return json.dumps(ErrorResponse(
+                        error=f"Failed to resolve adapter for {op.node_a}",
+                        details=error,
+                        operation_index=idx
+                    ).model_dump(), indent=2)
+
+                # Resolve adapter_b
+                adapter_b_num, port_b_num, port_b_name, error = validator.resolve_adapter_identifier(
+                    op.node_b, op.adapter_b
+                )
+                if error:
+                    return json.dumps(ErrorResponse(
+                        error=f"Failed to resolve adapter for {op.node_b}",
+                        details=error,
+                        operation_index=idx
+                    ).model_dump(), indent=2)
+
+                # Store resolved values
+                resolved_ops.append({
+                    'op': op,
+                    'adapter_a_num': adapter_a_num,
+                    'port_a_num': port_a_num,
+                    'port_a_name': port_a_name,
+                    'adapter_b_num': adapter_b_num,
+                    'port_b_num': port_b_num,
+                    'port_b_name': port_b_name
+                })
+
+                # Validate with resolved numbers
                 validation_error = validator.validate_connect(
                     op.node_a, op.node_b,
                     op.port_a, op.port_b,
-                    op.adapter_a, op.adapter_b
+                    adapter_a_num, adapter_b_num
                 )
             else:  # DisconnectOperation
+                resolved_ops.append({'op': op})
                 validation_error = validator.validate_disconnect(op.link_id)
 
             if validation_error:
@@ -1674,10 +1710,11 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
         failed = None
         node_map = {n['name']: n for n in nodes}
 
-        for idx, op in enumerate(parsed_ops):
+        for idx, resolved in enumerate(resolved_ops):
+            op = resolved['op']
             try:
                 if isinstance(op, ConnectOperation):
-                    # Build link spec with adapter support (FIXES hardcoded adapter_number=0)
+                    # Build link spec with resolved adapter numbers
                     node_a = node_map[op.node_a]
                     node_b = node_map[op.node_b]
 
@@ -1685,12 +1722,12 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
                         "nodes": [
                             {
                                 "node_id": node_a["node_id"],
-                                "adapter_number": op.adapter_a,
+                                "adapter_number": resolved['adapter_a_num'],
                                 "port_number": op.port_a
                             },
                             {
                                 "node_id": node_b["node_id"],
-                                "adapter_number": op.adapter_b,
+                                "adapter_number": resolved['adapter_b_num'],
                                 "port_number": op.port_b
                             }
                         ]
@@ -1706,12 +1743,14 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
                         node_b=op.node_b,
                         port_a=op.port_a,
                         port_b=op.port_b,
-                        adapter_a=op.adapter_a,
-                        adapter_b=op.adapter_b
+                        adapter_a=resolved['adapter_a_num'],
+                        adapter_b=resolved['adapter_b_num'],
+                        port_a_name=resolved['port_a_name'],
+                        port_b_name=resolved['port_b_name']
                     ))
 
-                    logger.info(f"Connected {op.node_a} adapter {op.adapter_a} port {op.port_a} <-> "
-                              f"{op.node_b} adapter {op.adapter_b} port {op.port_b}")
+                    logger.info(f"Connected {op.node_a} {resolved['port_a_name']} (adapter {resolved['adapter_a_num']}) <-> "
+                              f"{op.node_b} {resolved['port_b_name']} (adapter {resolved['adapter_b_num']})")
 
                 else:  # Disconnect
                     await app.gns3.delete_link(app.current_project_id, op.link_id)

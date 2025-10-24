@@ -4,7 +4,7 @@ Type-safe data models for all GNS3 entities and operations.
 """
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Literal, List, Optional, Dict, Any
+from typing import Literal, List, Optional, Dict, Any, Union
 from datetime import datetime
 
 
@@ -147,8 +147,8 @@ class ConnectOperation(BaseModel):
     node_b: str = Field(description="Name of second node")
     port_a: int = Field(ge=0, description="Port number on node A")
     port_b: int = Field(ge=0, description="Port number on node B")
-    adapter_a: int = Field(default=0, ge=0, description="Adapter number on node A")
-    adapter_b: int = Field(default=0, ge=0, description="Adapter number on node B")
+    adapter_a: Union[str, int] = Field(default=0, description="Adapter on node A (name like 'eth0' or number)")
+    adapter_b: Union[str, int] = Field(default=0, description="Adapter on node B (name like 'eth0' or number)")
 
     class Config:
         json_schema_extra = {
@@ -158,8 +158,8 @@ class ConnectOperation(BaseModel):
                 "node_b": "Router2",
                 "port_a": 0,
                 "port_b": 1,
-                "adapter_a": 0,
-                "adapter_b": 0
+                "adapter_a": "eth0",
+                "adapter_b": "GigabitEthernet0/0"
             }
         }
 
@@ -193,6 +193,9 @@ class CompletedOperation(BaseModel):
     port_b: Optional[int] = None
     adapter_a: Optional[int] = None
     adapter_b: Optional[int] = None
+    # Human-readable port names
+    port_a_name: Optional[str] = None
+    port_b_name: Optional[str] = None
 
 
 class FailedOperation(BaseModel):
