@@ -10,9 +10,17 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.6.2
+## Current Version: v0.6.3
 
-**Latest Release:** v0.6.2 - Label Rendering Fix (Bugfix)
+**Latest Release:** v0.6.3 - Font Fallback Chain (Bugfix)
+- **Fixed font rendering**: Added CSS-style font fallback chains for consistent cross-platform SVG/PNG export
+- **TypeWriter fallback**: TypeWriter → Courier New → Courier → Liberation Mono → Consolas → monospace
+- **Display font fallback**: Gerbera Black/decorative → Georgia → Times New Roman → serif
+- **Implementation**: `add_font_fallbacks()` helper function processes SVG style strings
+- **Applied to**: Node labels and drawing text elements
+- **Why needed**: Qt (GNS3 GUI) auto-resolves "TypeWriter" to system monospace, but SVG renderers need explicit fallbacks
+
+**Previous:** v0.6.2 - Label Rendering Fix (Bugfix)
 - **Fixed label positioning**: `export_topology_diagram()` now matches official GNS3 GUI rendering
 - **Auto-centering**: Labels with x=None properly center above nodes (y=-25)
 - **Dynamic text-anchor**: Text alignment (start/middle/end) based on label position

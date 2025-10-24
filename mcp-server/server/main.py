@@ -1,7 +1,13 @@
-"""GNS3 MCP Server v0.6.2
+"""GNS3 MCP Server v0.6.3
 
 Model Context Protocol server for GNS3 lab automation.
 Provides tools for managing projects, nodes, links, console access, and drawings.
+
+Version 0.6.3 - Font Fallback Chain:
+- FIXED: Font fallback for consistent cross-platform rendering in SVG/PNG exports
+  * TypeWriter → Courier New → Courier → Liberation Mono → Consolas → monospace
+  * Other fonts get appropriate fallback chains (serif, sans-serif)
+  * Ensures consistent appearance regardless of system font availability
 
 Version 0.6.2 - Label Rendering Fix:
 - FIXED: Node label positioning in export_topology_diagram() now matches official GNS3
@@ -136,6 +142,74 @@ COMMON_ERROR_PATTERNS = [
     r"syntax error",
     r"bad command"
 ]
+
+
+def add_font_fallbacks(style_string: str) -> str:
+    """
+    Add CSS-style font fallbacks to SVG style strings for consistent rendering.
+
+    Ensures consistent font appearance across different systems by adding fallback
+    fonts when a single font family is specified. Qt (used by GNS3 GUI) handles
+    font fallback automatically, but SVG renderers need explicit fallback chains.
+
+    Args:
+        style_string: SVG style string (e.g., "font-family: TypeWriter;font-size: 10;")
+
+    Returns:
+        Modified style string with fallback fonts added
+
+    Examples:
+        >>> add_font_fallbacks("font-family: TypeWriter;font-size: 10;")
+        "font-family: TypeWriter, 'Courier New', Courier, 'Liberation Mono', Consolas, monospace;font-size: 10;"
+
+        >>> add_font_fallbacks("font-family: Gerbera Black;font-size: 22;")
+        "font-family: 'Gerbera Black', Georgia, 'Times New Roman', serif;font-size: 22;"
+    """
+    if not style_string or "font-family:" not in style_string:
+        return style_string
+
+    # Parse style string into key-value pairs
+    parts = []
+    for part in style_string.split(";"):
+        if not part.strip():
+            continue
+
+        if ":" in part:
+            key, val = part.split(":", 1)
+            key = key.strip()
+            val = val.strip()
+
+            if key == "font-family":
+                # Check if already has fallbacks (contains comma)
+                if "," in val:
+                    parts.append(f"{key}: {val}")
+                else:
+                    # Single font - add fallbacks based on font type
+                    font_name = val.strip()
+
+                    # TypeWriter and monospace fonts
+                    if font_name.lower() in ["typewriter", "courier", "monaco", "consolas"]:
+                        fallback = f"{font_name}, 'Courier New', Courier, 'Liberation Mono', Consolas, monospace"
+                    # Decorative/Display fonts
+                    elif "gerbera" in font_name.lower() or "black" in font_name.lower():
+                        # Quote font names with spaces
+                        if " " in font_name:
+                            font_name = f"'{font_name}'"
+                        fallback = f"{font_name}, Georgia, 'Times New Roman', serif"
+                    # Sans-serif fonts
+                    elif any(x in font_name.lower() for x in ["arial", "helvetica", "verdana", "sans"]):
+                        fallback = f"{font_name}, Arial, Helvetica, 'Liberation Sans', sans-serif"
+                    # Default: assume serif
+                    else:
+                        fallback = f"{font_name}, Georgia, 'Times New Roman', serif"
+
+                    parts.append(f"{key}: {fallback}")
+            else:
+                parts.append(f"{key}: {val}")
+        else:
+            parts.append(part.strip())
+
+    return ";".join(parts) + ";" if parts else style_string
 
 
 # SVG Generation Helpers
@@ -2155,9 +2229,20 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                 fill_match = re.search(r'fill="([^"]*)"', svg_inner)
 
                 # Build attributes string preserving existing font settings
+                # Add font fallbacks for consistent cross-platform rendering
                 attrs = []
                 if font_family_match:
-                    attrs.append(f'font-family="{font_family_match.group(1)}"')
+                    font_family = font_family_match.group(1)
+                    # Convert SVG attribute format to CSS style format for fallback processing
+                    temp_style = f"font-family: {font_family};"
+                    temp_style_with_fallbacks = add_font_fallbacks(temp_style)
+                    # Extract the fallback chain back
+                    fallback_match = re.search(r'font-family:\s*([^;]+)', temp_style_with_fallbacks)
+                    if fallback_match:
+                        font_family_with_fallbacks = fallback_match.group(1).strip()
+                        attrs.append(f'font-family="{font_family_with_fallbacks}"')
+                    else:
+                        attrs.append(f'font-family="{font_family}"')
                 if font_size_match:
                     attrs.append(f'font-size="{font_size_match.group(1)}"')
                 if font_weight_match:
@@ -2382,9 +2467,11 @@ async def export_topology_diagram(ctx: Context, output_path: str,
                     text_anchor = "start"  # Left of center
 
             # Parse style string into SVG attributes
+            # Add font fallbacks for consistent cross-platform rendering
             style_attrs = ''
             if label_style:
-                style_attrs = f' style="{label_style}"'
+                label_style_with_fallbacks = add_font_fallbacks(label_style)
+                style_attrs = f' style="{label_style_with_fallbacks}"'
 
             # Build label transform (rotation around label origin)
             label_transform = ''
