@@ -129,6 +129,43 @@ class SendConfigSetRequest(BaseModel):
     )
 
 
+class ReadBufferRequest(BaseModel):
+    """Request to read SSH buffer with optional grep filtering"""
+    node_name: str = Field(..., description="Node identifier")
+    mode: str = Field(
+        default="diff",
+        description="Output mode: diff, last_page, num_pages, all"
+    )
+    pages: int = Field(
+        default=1,
+        description="Number of pages (only with mode='num_pages')"
+    )
+    pattern: Optional[str] = Field(
+        default=None,
+        description="Regex pattern to filter output (grep-style)"
+    )
+    case_insensitive: bool = Field(
+        default=False,
+        description="Ignore case when matching (grep -i)"
+    )
+    invert: bool = Field(
+        default=False,
+        description="Return non-matching lines (grep -v)"
+    )
+    before: int = Field(
+        default=0,
+        description="Lines of context before match (grep -B)"
+    )
+    after: int = Field(
+        default=0,
+        description="Lines of context after match (grep -A)"
+    )
+    context: int = Field(
+        default=0,
+        description="Lines of context before AND after (grep -C, overrides before/after)"
+    )
+
+
 class SendCommandTimingRequest(BaseModel):
     """Request to send command with timing-based detection"""
     node_name: str

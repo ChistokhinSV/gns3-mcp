@@ -544,7 +544,18 @@ class SSHSessionManager:
             session.buffer_read_pos = 0  # Reset diff position
             logger.info(f"Buffer trimmed for {node_name}")
 
-    def get_buffer(self, node_name: str, mode: str = "diff", pages: int = 1) -> str:
+    def get_buffer(
+        self,
+        node_name: str,
+        mode: str = "diff",
+        pages: int = 1,
+        pattern: Optional[str] = None,
+        case_insensitive: bool = False,
+        invert: bool = False,
+        before: int = 0,
+        after: int = 0,
+        context: int = 0
+    ) -> str:
         """
         Read continuous buffer (like console read_console)
 
@@ -553,34 +564,130 @@ class SSHSessionManager:
         - last_page: Last ~25 lines
         - num_pages: Last N pages
         - all: Entire buffer
+
+        Grep Parameters (optional):
+        - pattern: Regex pattern to filter output
+        - case_insensitive: Ignore case when matching (grep -i)
+        - invert: Return non-matching lines (grep -v)
+        - before/after/context: Context lines around matches (grep -B/-A/-C)
         """
         if node_name not in self.sessions:
             raise ValueError(f"No session for {node_name}")
 
         session = self.sessions[node_name]
 
+        # Get output based on mode
         if mode == "diff":
             # Return new output since last read
             output = session.buffer[session.buffer_read_pos:]
             session.buffer_read_pos = len(session.buffer)
-            return output if output else "No new output"
+            if not output:
+                output = "No new output"
 
         elif mode == "last_page":
             # Return last ~25 lines
             lines = session.buffer.splitlines()
-            return '\n'.join(lines[-25:]) if len(lines) > 25 else session.buffer
+            output = '\n'.join(lines[-25:]) if len(lines) > 25 else session.buffer
 
         elif mode == "num_pages":
             # Return last N pages
             lines = session.buffer.splitlines()
             lines_to_return = 25 * pages
-            return '\n'.join(lines[-lines_to_return:]) if len(lines) > lines_to_return else session.buffer
+            output = '\n'.join(lines[-lines_to_return:]) if len(lines) > lines_to_return else session.buffer
 
         elif mode == "all":
-            return session.buffer
+            output = session.buffer
 
         else:
             raise ValueError(f"Invalid mode: {mode}")
+
+        # Apply grep filter if pattern provided
+        if pattern:
+            output = self._grep_filter(
+                output,
+                pattern,
+                case_insensitive=case_insensitive,
+                invert=invert,
+                before=before,
+                after=after,
+                context=context
+            )
+
+        return output
+
+    def _grep_filter(
+        self,
+        text: str,
+        pattern: str,
+        case_insensitive: bool = False,
+        invert: bool = False,
+        before: int = 0,
+        after: int = 0,
+        context: int = 0
+    ) -> str:
+        """
+        Filter text using grep-style pattern matching
+
+        Args:
+            text: Input text to filter
+            pattern: Regex pattern to match
+            case_insensitive: Ignore case when matching (grep -i)
+            invert: Return non-matching lines (grep -v)
+            before: Lines of context before match (grep -B)
+            after: Lines of context after match (grep -A)
+            context: Lines of context before AND after (grep -C, overrides before/after)
+
+        Returns:
+            Filtered lines with line numbers (grep -n format: "LINE_NUM: line content")
+            Empty string if no matches
+        """
+        if not text:
+            return ""
+
+        # Context parameter overrides before/after
+        if context > 0:
+            before = after = context
+
+        # Compile regex pattern
+        flags = re.IGNORECASE if case_insensitive else 0
+        try:
+            regex = re.compile(pattern, flags)
+        except re.error as e:
+            return f"Error: Invalid regex pattern: {e}"
+
+        lines = text.splitlines()
+        matching_indices = set()
+
+        # Find matching lines
+        for i, line in enumerate(lines):
+            matches = bool(regex.search(line))
+            if invert:
+                matches = not matches
+            if matches:
+                matching_indices.add(i)
+
+        # Add context lines
+        indices_with_context = set()
+        for idx in matching_indices:
+            # Add lines before
+            for b in range(max(0, idx - before), idx):
+                indices_with_context.add(b)
+            # Add matching line
+            indices_with_context.add(idx)
+            # Add lines after
+            for a in range(idx + 1, min(len(lines), idx + after + 1)):
+                indices_with_context.add(a)
+
+        # Build output with line numbers (1-indexed, grep -n style)
+        if not indices_with_context:
+            return ""
+
+        result = []
+        for idx in sorted(indices_with_context):
+            line_num = idx + 1  # 1-indexed line numbers
+            result.append(f"{line_num}: {lines[idx]}")
+
+        return '\n'.join(result)
 
     # ========================================================================
     # Command History (Storage System 2)

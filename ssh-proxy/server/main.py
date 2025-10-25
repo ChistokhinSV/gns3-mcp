@@ -26,6 +26,7 @@ from .models import (
     ErrorResponse,
     HistoryResponse,
     Job,
+    ReadBufferRequest,
     SendCommandRequest,
     SendConfigSetRequest,
     SessionStatusResponse,
@@ -77,7 +78,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GNS3 SSH Proxy",
     description="SSH automation proxy for GNS3 network labs with Netmiko",
-    version="0.1.3",
+    version="0.1.4",
     lifespan=lifespan
 )
 
@@ -92,7 +93,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "gns3-ssh-proxy",
-        "version": "0.1.3"
+        "version": "0.1.4"
     }
 
 
@@ -241,14 +242,10 @@ async def send_config_set(request: SendConfigSetRequest):
         )
 
 
-@app.get("/ssh/buffer/{node_name}", response_model=BufferResponse)
-async def read_buffer(
-    node_name: str,
-    mode: str = Query(default="diff", regex="^(diff|last_page|num_pages|all)$"),
-    pages: int = Query(default=1, ge=1)
-):
+@app.post("/ssh/read_buffer", response_model=BufferResponse)
+async def read_buffer(request: ReadBufferRequest):
     """
-    Read continuous buffer (all commands combined)
+    Read continuous buffer with optional grep filtering
 
     Modes:
     - diff: New output since last read (default)
@@ -256,20 +253,26 @@ async def read_buffer(
     - num_pages: Last N pages (~25 lines per page)
     - all: Entire buffer (WARNING: May be very large!)
 
+    Grep Parameters (optional):
+    - pattern: Regex pattern to filter output
+    - case_insensitive: Ignore case (grep -i)
+    - invert: Return non-matching lines (grep -v)
+    - before/after/context: Context lines (grep -B/-A/-C)
+
     Returns:
-        BufferResponse with output and buffer_size
+        BufferResponse with output (filtered if pattern provided) and buffer_size
     """
-    if not session_manager.has_session(node_name):
+    if not session_manager.has_session(request.node_name):
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(
-                error=f"No SSH session for {node_name}",
+                error=f"No SSH session for {request.node_name}",
                 details="Call POST /ssh/configure first"
             ).model_dump()
         )
 
     # Validate pages parameter
-    if pages != 1 and mode != "num_pages":
+    if request.pages != 1 and request.mode != "num_pages":
         raise HTTPException(
             status_code=400,
             detail=ErrorResponse(
@@ -279,8 +282,18 @@ async def read_buffer(
         )
 
     try:
-        output = session_manager.get_buffer(node_name, mode, pages)
-        session_info = session_manager.get_session_info(node_name)
+        output = session_manager.get_buffer(
+            request.node_name,
+            request.mode,
+            request.pages,
+            pattern=request.pattern,
+            case_insensitive=request.case_insensitive,
+            invert=request.invert,
+            before=request.before,
+            after=request.after,
+            context=request.context
+        )
+        session_info = session_manager.get_session_info(request.node_name)
 
         return BufferResponse(
             output=output,
