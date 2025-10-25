@@ -167,6 +167,7 @@ class ConfigureSSHResponse(BaseModel):
     connected: bool
     device_type: str
     host: str
+    version: str = Field(description="SSH proxy service version")
 
 
 class CommandResponse(BaseModel):

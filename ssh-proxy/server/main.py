@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GNS3 SSH Proxy",
     description="SSH automation proxy for GNS3 network labs with Netmiko",
-    version="0.1.2",
+    version="0.1.3",
     lifespan=lifespan
 )
 
@@ -92,7 +92,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "gns3-ssh-proxy",
-        "version": "0.1.2"
+        "version": "0.1.3"
     }
 
 
@@ -143,7 +143,8 @@ async def configure_ssh(request: ConfigureSSHRequest):
             node_name=request.node_name,
             connected=True,
             device_type=request.device.device_type,
-            host=request.device.host
+            host=request.device.host,
+            version=app.version
         )
 
     except Exception as e:
