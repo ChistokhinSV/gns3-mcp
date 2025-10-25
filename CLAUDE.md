@@ -10,9 +10,62 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.12.0
+## Current Version: v0.12.1
 
-**Latest Release:** v0.12.0 - SSH Proxy Service (Feature - Phase 1)
+**Latest Release:** v0.12.1 - Grep Filtering for Buffers (Feature - Enhancement)
+- **NEW**: Grep-style pattern filtering for both SSH and console buffer output
+  - Optional `pattern` parameter added to `ssh_read_buffer()` and `read_console()` tools
+  - Full regex support with Python `re` module
+  - Grep feature set: case insensitive (-i), invert match (-v), context lines (-B/-A/-C)
+  - Output format: line numbers with content (grep -n style: "LINE_NUM: line content")
+- **NEW**: Pattern searches respect current mode (diff/last_page/num_pages/all)
+  - Pattern filters the output AFTER mode-based retrieval
+  - Example: `mode="diff", pattern="error"` searches only new output since last read
+  - Example: `mode="all", pattern="interface"` searches entire buffer
+- **NEW**: Context line support with overlap prevention
+  - `before` parameter: Lines of context before match (grep -B)
+  - `after` parameter: Lines of context after match (grep -A)
+  - `context` parameter: Lines before AND after (grep -C, overrides before/after)
+  - Uses set-based deduplication to prevent duplicate context lines
+- **SSH Proxy v0.1.4 Changes**:
+  - Added `_grep_filter()` method to SSHSessionManager (73 LOC)
+  - Updated `get_buffer()` signature with 6 new grep parameters
+  - Added `ReadBufferRequest` Pydantic model with grep fields
+  - Changed `/ssh/read_buffer` endpoint from GET to POST (to support request body)
+  - Updated version from 0.1.3 to 0.1.4
+- **MCP Server v0.12.1 Changes**:
+  - Added `_grep_filter()` helper function to console_tools.py (72 LOC)
+  - Updated `read_console_impl()` signature with 6 new grep parameters
+  - Updated `read_console()` tool registration with grep parameters and examples
+  - Updated manifest.json version from 0.12.0 to 0.12.1
+- **Files added**:
+  - None (all changes to existing files)
+- **Files changed**:
+  - `ssh-proxy/server/session_manager.py`: Added _grep_filter() method (lines 585-657), updated get_buffer() signature (lines 547-616)
+  - `ssh-proxy/server/models.py`: Added ReadBufferRequest model with grep parameters (lines 132-167)
+  - `ssh-proxy/server/main.py`: Changed endpoint GET→POST (line 244), updated version to 0.1.4 (lines 81, 96)
+  - `mcp-server/server/tools/console_tools.py`: Added _grep_filter() function (lines 216-287), updated read_console_impl() (lines 116-127)
+  - `mcp-server/server/main.py`: Updated read_console() tool with grep parameters (lines 458-509)
+  - `mcp-server/manifest.json`: Updated version to 0.12.1 (line 5)
+  - `mcp-server/mcp-server.mcpb`: Rebuilt by pre-commit hook
+- **Usage Examples**:
+  ```python
+  # Find errors in new output (case insensitive)
+  read_console("R1", mode="diff", pattern="error", case_insensitive=True)
+
+  # Find interfaces with 2 lines of context
+  read_console("R1", mode="all", pattern="GigabitEthernet", context=2)
+
+  # Find non-matching lines (invert)
+  ssh_read_buffer("R1", mode="last_page", pattern="success", invert=True)
+  ```
+- **NO BREAKING CHANGES**: All new parameters are optional with backward-compatible defaults
+- **Deployment**:
+  - SSH proxy: Built and deployed as `chistokhinsv/gns3-ssh-proxy:v0.1.4`
+  - MCP server: Packaged as gns3-mcp@0.12.1 desktop extension
+- **Rationale**: Enables efficient log analysis and troubleshooting by filtering large console/SSH buffers. Grep-style interface familiar to network engineers. Maintains full backward compatibility.
+
+**Previous:** v0.12.0 - SSH Proxy Service (Feature - Phase 1)
 - **NEW**: SSH proxy service (FastAPI container, Python 3.13-slim)
   - Separate Docker container with network mode=host for GNS3 lab access
   - Port 8022 (SSH-like mnemonic)
