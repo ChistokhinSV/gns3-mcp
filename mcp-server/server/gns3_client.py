@@ -81,10 +81,99 @@ class GNS3Client:
         response.raise_for_status()
         return response.json()
 
+    async def create_project(self, name: str, path: Optional[str] = None) -> Dict[str, Any]:
+        """POST /v3/projects - create a new project
+
+        Args:
+            name: Project name
+            path: Optional project directory path
+
+        Returns:
+            Created project data
+        """
+        payload = {"name": name}
+        if path:
+            payload["path"] = path
+
+        response = await self.client.post(
+            f"{self.base_url}/v3/projects",
+            headers=self._headers(),
+            json=payload
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def open_project(self, project_id: str) -> Dict[str, Any]:
         """POST /v3/projects/{id}/open - open a project"""
         response = await self.client.post(
             f"{self.base_url}/v3/projects/{project_id}/open",
+            headers=self._headers(),
+            json={}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def close_project(self, project_id: str) -> Dict[str, Any]:
+        """POST /v3/projects/{id}/close - close a project"""
+        response = await self.client.post(
+            f"{self.base_url}/v3/projects/{project_id}/close",
+            headers=self._headers(),
+            json={}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def get_snapshots(self, project_id: str) -> List[Dict[str, Any]]:
+        """GET /v3/projects/{id}/snapshots - list all snapshots for a project
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            List of snapshot data dictionaries
+        """
+        response = await self.client.get(
+            f"{self.base_url}/v3/projects/{project_id}/snapshots",
+            headers=self._headers()
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def create_snapshot(self, project_id: str, name: str, description: str = "") -> Dict[str, Any]:
+        """POST /v3/projects/{id}/snapshots - create a new snapshot
+
+        Args:
+            project_id: Project ID
+            name: Snapshot name
+            description: Optional snapshot description
+
+        Returns:
+            Created snapshot data
+        """
+        payload = {"name": name}
+        if description:
+            payload["description"] = description
+
+        response = await self.client.post(
+            f"{self.base_url}/v3/projects/{project_id}/snapshots",
+            headers=self._headers(),
+            json=payload
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def restore_snapshot(self, project_id: str, snapshot_id: str) -> Dict[str, Any]:
+        """POST /v3/projects/{id}/snapshots/{snapshot_id}/restore - restore a snapshot
+
+        Args:
+            project_id: Project ID
+            snapshot_id: Snapshot ID to restore
+
+        Returns:
+            Project data after restore
+        """
+        response = await self.client.post(
+            f"{self.base_url}/v3/projects/{project_id}/snapshots/{snapshot_id}/restore",
             headers=self._headers(),
             json={}
         )
