@@ -368,50 +368,84 @@ mcp = FastMCP(
 # MCP Resources - Browsable State
 # ============================================================================
 
-@mcp.list_resources()
-async def list_resources(ctx: Context) -> list[dict]:
-    """List all available MCP resources
-
-    Provides browsable access to GNS3 projects, nodes, sessions, and more.
-    Resources replace query tools for better discoverability.
-
-    Returns:
-        List of resource metadata dicts with uri, name, description, mimeType
-    """
+# Project resources
+@mcp.resource("gns3://projects")
+async def resource_projects(ctx: Context) -> str:
     app: AppContext = ctx.request_context.lifespan_context
-    return await app.resource_manager.list_resources()
+    return await app.resource_manager.list_projects()
 
-
-@mcp.resource("gns3://{+path}")
-async def get_resource(ctx: Context, path: str) -> str:
-    """Get resource by URI
-
-    Supported URIs:
-    - gns3://projects/ - List all projects
-    - gns3://projects/{id} - Project details
-    - gns3://projects/{id}/nodes/ - Nodes in project
-    - gns3://projects/{id}/nodes/{id} - Node details
-    - gns3://projects/{id}/links/ - Links in project
-    - gns3://projects/{id}/templates/ - Available templates
-    - gns3://projects/{id}/drawings/ - Drawings in project
-    - gns3://sessions/console/ - Active console sessions
-    - gns3://sessions/console/{node} - Console session status
-    - gns3://sessions/ssh/ - Active SSH sessions
-    - gns3://sessions/ssh/{node} - SSH session status
-    - gns3://sessions/ssh/{node}/history - SSH command history
-    - gns3://sessions/ssh/{node}/buffer - SSH continuous buffer
-    - gns3://proxy/status - SSH proxy service status
-    - gns3://proxy/sessions - All SSH proxy sessions
-
-    Args:
-        path: Resource path (everything after gns3://)
-
-    Returns:
-        JSON string with resource data
-    """
+@mcp.resource("gns3://projects/{project_id}")
+async def resource_project(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
-    uri = f"gns3://{path}"
-    return await app.resource_manager.get_resource(uri)
+    return await app.resource_manager.get_project(project_id)
+
+@mcp.resource("gns3://projects/{project_id}/nodes")
+async def resource_nodes(ctx: Context, project_id: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.list_nodes(project_id)
+
+@mcp.resource("gns3://projects/{project_id}/nodes/{node_id}")
+async def resource_node(ctx: Context, project_id: str, node_id: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_node(project_id, node_id)
+
+@mcp.resource("gns3://projects/{project_id}/links")
+async def resource_links(ctx: Context, project_id: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.list_links(project_id)
+
+@mcp.resource("gns3://projects/{project_id}/templates")
+async def resource_templates(ctx: Context, project_id: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.list_templates(project_id)
+
+@mcp.resource("gns3://projects/{project_id}/drawings")
+async def resource_drawings(ctx: Context, project_id: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.list_drawings(project_id)
+
+# Console session resources
+@mcp.resource("gns3://sessions/console")
+async def resource_console_sessions(ctx: Context) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.list_console_sessions()
+
+@mcp.resource("gns3://sessions/console/{node_name}")
+async def resource_console_session(ctx: Context, node_name: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_console_session(node_name)
+
+# SSH session resources
+@mcp.resource("gns3://sessions/ssh")
+async def resource_ssh_sessions(ctx: Context) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.list_ssh_sessions()
+
+@mcp.resource("gns3://sessions/ssh/{node_name}")
+async def resource_ssh_session(ctx: Context, node_name: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_ssh_session(node_name)
+
+@mcp.resource("gns3://sessions/ssh/{node_name}/history")
+async def resource_ssh_history(ctx: Context, node_name: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_ssh_history(node_name)
+
+@mcp.resource("gns3://sessions/ssh/{node_name}/buffer")
+async def resource_ssh_buffer(ctx: Context, node_name: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_ssh_buffer(node_name)
+
+# SSH proxy resources
+@mcp.resource("gns3://proxy/status")
+async def resource_proxy_status(ctx: Context) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_proxy_status()
+
+@mcp.resource("gns3://proxy/sessions")
+async def resource_proxy_sessions(ctx: Context) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.list_proxy_sessions()
 
 
 # ============================================================================
