@@ -118,6 +118,99 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 3. Switch to SSH tools for all automation
 4. Return to console only if SSH fails
 
+### Error Responses
+
+**All tools return standardized error responses** (v0.20.0) with machine-readable error codes and actionable guidance.
+
+**Error Response Structure:**
+```json
+{
+  "error": "Human-readable error message",
+  "error_code": "MACHINE_READABLE_CODE",
+  "details": "Additional error details",
+  "suggested_action": "How to fix the error",
+  "context": {
+    "parameter": "value",
+    "debugging_info": "..."
+  },
+  "server_version": "0.20.0",
+  "timestamp": "2025-10-25T14:30:00.000Z"
+}
+```
+
+**Error Code Categories:**
+
+**Resource Not Found (404-style):**
+- `PROJECT_NOT_FOUND` - No project open or project doesn't exist
+- `NODE_NOT_FOUND` - Node name not found in project
+- `LINK_NOT_FOUND` - Link ID doesn't exist
+- `TEMPLATE_NOT_FOUND` - Template name not available
+- `DRAWING_NOT_FOUND` - Drawing ID not found
+- `SNAPSHOT_NOT_FOUND` - Snapshot name doesn't exist
+
+**Validation Errors (400-style):**
+- `INVALID_PARAMETER` - Invalid parameter value
+- `MISSING_PARAMETER` - Required parameter not provided
+- `PORT_IN_USE` - Port already connected to another node
+- `NODE_RUNNING` - Operation requires node to be stopped
+- `NODE_STOPPED` - Operation requires node to be running
+- `INVALID_ADAPTER` - Adapter name/number not valid for node
+- `INVALID_PORT` - Port number exceeds adapter capacity
+
+**Connection Errors (503-style):**
+- `GNS3_UNREACHABLE` - Cannot connect to GNS3 server
+- `GNS3_API_ERROR` - GNS3 server API error
+- `CONSOLE_DISCONNECTED` - Console session lost
+- `CONSOLE_CONNECTION_FAILED` - Failed to connect to console
+- `SSH_CONNECTION_FAILED` - Failed to establish SSH session
+- `SSH_DISCONNECTED` - SSH session lost
+
+**Authentication Errors (401-style):**
+- `AUTH_FAILED` - Authentication failed
+- `TOKEN_EXPIRED` - JWT token expired
+- `INVALID_CREDENTIALS` - Wrong username/password
+
+**Internal Errors (500-style):**
+- `INTERNAL_ERROR` - Server internal error
+- `TIMEOUT` - Operation timed out
+- `OPERATION_FAILED` - Generic operation failure
+
+**Example Error Handling:**
+```python
+# Attempt to start a node
+result = set_node("Router1", action="start")
+
+# Check for errors
+if "error" in result:
+    error = json.loads(result)
+    if error["error_code"] == "NODE_NOT_FOUND":
+        # Use suggested_action to fix
+        print(error["suggested_action"])  # "Use list_nodes() to see all available nodes"
+        # Check available nodes from context
+        print(error["context"]["available_nodes"])  # ["Router2", "Router3", "Switch1"]
+    elif error["error_code"] == "GNS3_UNREACHABLE":
+        # Server connection issue
+        print(f"Cannot reach GNS3 at {error['context']['host']}:{error['context']['port']}")
+```
+
+**Common Error Scenarios:**
+
+1. **No project open**: Most tools require an open project
+   - Error: `PROJECT_NOT_FOUND`
+   - Fix: `open_project("ProjectName")`
+
+2. **Node not found**: Typo in node name (case-sensitive)
+   - Error: `NODE_NOT_FOUND`
+   - Fix: Check available_nodes in error context or use resource `gns3://projects/{id}/nodes/`
+
+3. **Port already in use**: Trying to connect already-connected port
+   - Error: `PORT_IN_USE`
+   - Fix: Disconnect existing link first with `set_connection([{"action": "disconnect", "link_id": "..."}])`
+
+4. **Node must be stopped**: Trying to modify running node properties
+   - Error: `NODE_RUNNING`
+   - Fix: `set_node("NodeName", action="stop")` then retry
+
 ### Console Access
 - Nodes have **console** ports for CLI access
 - Console types:
