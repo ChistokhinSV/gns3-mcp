@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "description": "Control and automate GNS3 network labs with console and SSH automation",
-  "long_description": "Version 0.12.0: FEATURE - SSH proxy service for network device automation via Netmiko. 9 new MCP tools for SSH sessions, command execution, config management, and job history. Dual storage: continuous buffer + per-command jobs. Supports 200+ device types. Version 0.11.1: Added num_pages mode to read_console(). Version 0.11.0: Console manager tests, code organization. Supports GNS3 v3 API.",
+  "long_description": "Version 0.12.2: FIXED - list_nodes now returns lightweight NodeSummary (prevents large output failures). Version 0.12.1: FEATURE - Grep filtering for SSH/console buffers. Version 0.12.0: FEATURE - SSH proxy service for network device automation via Netmiko. 9 new MCP tools for SSH sessions, command execution, config management, and job history. Dual storage: continuous buffer + per-command jobs. Supports 200+ device types. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -67,11 +67,11 @@
     },
     {
       "name": "list_nodes",
-      "description": "List all nodes in current project (returns JSON array of NodeInfo)"
+      "description": "List all nodes in current project with basic info (returns JSON array of NodeSummary - lightweight, use get_node_details for full info)"
     },
     {
       "name": "get_node_details",
-      "description": "Get detailed node information (returns JSON NodeInfo)"
+      "description": "Get detailed node information including ports, hardware, position (returns JSON NodeInfo)"
     },
     {
       "name": "get_links",

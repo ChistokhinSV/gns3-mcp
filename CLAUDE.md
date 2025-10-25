@@ -10,9 +10,29 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.12.1
+## Current Version: v0.12.2
 
-**Latest Release:** v0.12.1 - Grep Filtering for Buffers (Feature - Enhancement)
+**Latest Release:** v0.12.2 - Lightweight list_nodes Output (Bugfix - Performance)
+- **FIXED**: `list_nodes()` now returns lightweight NodeSummary instead of full NodeInfo
+  - Prevents large output failures with projects containing many nodes
+  - Reduces output size by ~80-90% (removes ports, hardware properties, position, label data)
+  - NodeSummary includes only essential fields: node_id, name, node_type, status, console_type, console
+- **NEW**: Created NodeSummary model for minimal node information
+  - Designed for list operations where full details aren't needed
+  - Use `get_node_details()` to retrieve complete node information (ports, hardware, position, etc.)
+- **ENHANCED**: Updated tool documentation to clarify lightweight output
+  - list_nodes: Returns NodeSummary array (basic info)
+  - get_node_details: Returns full NodeInfo (detailed info)
+- **Files changed**:
+  - `mcp-server/server/models.py`: Added NodeSummary model (lines 44-63)
+  - `mcp-server/server/tools/node_tools.py`: Updated list_nodes_impl to use NodeSummary (lines 15-46)
+  - `mcp-server/server/main.py`: Updated list_nodes() tool docstring with example output (lines 314-348)
+  - `mcp-server/manifest.json`: Version 0.12.1→0.12.2, updated tool descriptions (lines 5, 7, 70, 74)
+  - `mcp-server/mcp-server.mcpb`: Rebuilt desktop extension (19.1MB, 2435 files)
+- **NO BREAKING CHANGES**: API remains the same, just returns less data per node
+- **Rationale**: Large projects (10+ nodes with many ports) were causing token limit issues. Lightweight output fixes this while maintaining usability. Full details still available via get_node_details().
+
+**Previous:** v0.12.1 - Grep Filtering for Buffers (Feature - Enhancement)
 - **NEW**: Grep-style pattern filtering for both SSH and console buffer output
   - Optional `pattern` parameter added to `ssh_read_buffer()` and `read_console()` tools
   - Full regex support with Python `re` module

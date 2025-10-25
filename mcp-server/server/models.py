@@ -41,8 +41,30 @@ class NodeConsole(BaseModel):
     console_auto_start: bool = False
 
 
+class NodeSummary(BaseModel):
+    """Minimal node information for list_nodes (lightweight)"""
+    node_id: str
+    name: str
+    node_type: str
+    status: Literal["started", "stopped", "suspended"]
+    console_type: Optional[str] = None
+    console: Optional[int] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "node_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                "name": "Router1",
+                "node_type": "qemu",
+                "status": "started",
+                "console_type": "telnet",
+                "console": 5000
+            }
+        }
+
+
 class NodeInfo(BaseModel):
-    """GNS3 Node information"""
+    """GNS3 Node information (full details)"""
     node_id: str
     name: str
     node_type: str

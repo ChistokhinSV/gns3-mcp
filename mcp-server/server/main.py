@@ -313,10 +313,31 @@ async def open_project(ctx: Context, project_name: str) -> str:
 
 @mcp.tool()
 async def list_nodes(ctx: Context) -> str:
-    """List all nodes in the current project with their status and console info
+    """List all nodes in current project with basic info (lightweight)
+
+    Returns minimal node information to avoid large outputs with many nodes.
+    For full details (ports, hardware, position, etc.), use get_node_details().
 
     Returns:
-        JSON array of NodeInfo objects
+        JSON array of NodeSummary objects with fields:
+        - node_id: Unique identifier
+        - name: Node name
+        - node_type: Type (qemu, docker, vpcs, etc.)
+        - status: started, stopped, or suspended
+        - console_type: telnet, vnc, none, etc.
+        - console: Console port number (if available)
+
+    Example:
+        [
+          {
+            "node_id": "abc123",
+            "name": "Router1",
+            "node_type": "qemu",
+            "status": "started",
+            "console_type": "telnet",
+            "console": 5000
+          }
+        ]
     """
     app: AppContext = ctx.request_context.lifespan_context
 

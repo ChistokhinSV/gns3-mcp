@@ -6,51 +6,38 @@ import asyncio
 import json
 from typing import TYPE_CHECKING, Optional
 
-from models import NodeInfo, ErrorResponse
+from models import NodeInfo, NodeSummary, ErrorResponse
 
 if TYPE_CHECKING:
     from main import AppContext
 
 
 async def list_nodes_impl(app: "AppContext") -> str:
-    """List all nodes in the current project with their status and console info
+    """List all nodes in the current project with basic info (lightweight)
+
+    Returns only essential node information to avoid large outputs.
+    Use get_node_details() to retrieve full information for specific nodes.
 
     Returns:
-        JSON array of NodeInfo objects
+        JSON array of NodeSummary objects
     """
     try:
         # Get nodes directly from API
         nodes = await app.gns3.get_nodes(app.current_project_id)
 
-        # Convert to NodeInfo models
-        node_models = []
+        # Convert to NodeSummary models (lightweight)
+        node_summaries = []
         for n in nodes:
-            props = n.get('properties', {})
-            node_models.append(NodeInfo(
+            node_summaries.append(NodeSummary(
                 node_id=n['node_id'],
                 name=n['name'],
                 node_type=n['node_type'],
                 status=n['status'],
                 console_type=n['console_type'],
-                console=n.get('console'),
-                console_host=n.get('console_host'),
-                compute_id=n.get('compute_id', 'local'),
-                x=n.get('x', 0),
-                y=n.get('y', 0),
-                z=n.get('z', 0),
-                locked=n.get('locked', False),
-                ports=n.get('ports'),
-                label=n.get('label'),
-                symbol=n.get('symbol'),
-                # Hardware properties
-                ram=props.get('ram'),
-                cpus=props.get('cpus'),
-                adapters=props.get('adapters'),
-                hdd_disk_image=props.get('hdd_disk_image'),
-                hda_disk_image=props.get('hda_disk_image')
+                console=n.get('console')
             ))
 
-        return json.dumps([n.model_dump() for n in node_models], indent=2)
+        return json.dumps([n.model_dump() for n in node_summaries], indent=2)
 
     except Exception as e:
         return json.dumps(ErrorResponse(
