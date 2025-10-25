@@ -1,16 +1,22 @@
-"""GNS3 MCP Server v0.11.0
+"""GNS3 MCP Server v0.12.0
 
 Model Context Protocol server for GNS3 lab automation.
-Provides tools for managing projects, nodes, links, console access, and drawings.
+Provides console and SSH automation tools for network devices.
+
+Version 0.12.0 - SSH Proxy Service (FEATURE - Phase 1):
+- NEW: SSH proxy service (FastAPI container on port 8022, Python 3.13-slim)
+- NEW: 9 MCP tools for SSH automation via Netmiko (200+ device types)
+  * configure_ssh, ssh_send_command, ssh_send_config_set
+  * ssh_read_buffer, ssh_get_history, ssh_get_command_output
+  * ssh_get_status, ssh_cleanup_sessions, ssh_get_job_status
+- NEW: Dual storage - continuous buffer + per-command job history
+- NEW: Adaptive async execution (poll wait_timeout, return job_id for long commands)
+- NO BREAKING CHANGES: All existing tools unchanged, SSH tools additive
 
 Version 0.11.0 - Code Organization Refactoring (REFACTOR):
-- ADDED: Console manager unit tests (38 tests, 76% coverage on 374 LOC critical async code)
-- REFACTORED: Extracted 19 tool implementations to 6 category modules (tools/ directory)
-  * project_tools.py (2 tools), node_tools.py (5 tools), console_tools.py (6 tools)
-  * link_tools.py (2 tools), drawing_tools.py (3 tools), template_tools.py (1 tool)
-- IMPROVED: Reduced main.py from 1,836 to 914 LOC (50% reduction, 922 lines saved)
-- IMPROVED: Better code organization and maintainability while preserving all functionality
-- NO BREAKING CHANGES: All tool interfaces remain unchanged
+- ADDED: Console manager unit tests (38 tests, 76% coverage)
+- REFACTORED: Extracted 19 tools to 6 modules (tools/ directory)
+- IMPROVED: Reduced main.py from 1,836 to 914 LOC (50% reduction)
 
 Version 0.10.0 - Testing Infrastructure (FEATURE):
 - ADDED: Comprehensive unit testing infrastructure (pytest 8.4.2, 134 tests total)
@@ -450,7 +456,7 @@ async def send_console(ctx: Context, node_name: str, data: str, raw: bool = Fals
 
 
 @mcp.tool()
-async def read_console(ctx: Context, node_name: str, mode: str = "diff") -> str:
+async def read_console(ctx: Context, node_name: str, mode: str = "diff", pages: int = 1) -> str:
     """Read console output (auto-connects if needed)
 
     Reads accumulated output from background console buffer. Output accumulates
@@ -460,7 +466,8 @@ async def read_console(ctx: Context, node_name: str, mode: str = "diff") -> str:
     - Background task continuously reads console into 10MB buffer
     - Diff mode (DEFAULT): Returns only NEW output since last read
     - Last page mode: Returns last ~25 lines of buffer
-    - All mode: Returns ALL console output since connection
+    - Num pages mode: Returns last N pages (~25 lines per page)
+    - All mode: Returns ALL console output since connection (WARNING: May produce >25000 tokens!)
     - Read position advances with each diff mode read
 
     Timing Recommendations:
@@ -479,7 +486,11 @@ async def read_console(ctx: Context, node_name: str, mode: str = "diff") -> str:
         mode: Output mode (default: "diff")
             - "diff": Return only new output since last read (DEFAULT)
             - "last_page": Return last ~25 lines of buffer
-            - "all": Return entire buffer since connection
+            - "num_pages": Return last N pages (use 'pages' parameter)
+            - "all": Return entire buffer (WARNING: Use carefully! May produce >25000 tokens.
+                     Consider using mode="num_pages" with a specific number of pages instead.)
+        pages: Number of pages to return (only valid with mode="num_pages", default: 1)
+               Each page contains ~25 lines. ERROR if used with other modes.
 
     Returns:
         Console output (ANSI escape codes stripped, line endings normalized)
@@ -493,11 +504,14 @@ async def read_console(ctx: Context, node_name: str, mode: str = "diff") -> str:
     Example - Check recent output:
         output = read_console("R1", mode="last_page")  # Last 25 lines
 
-    Example - Get everything:
-        output = read_console("R1", mode="all")  # Entire buffer
+    Example - Get multiple pages:
+        output = read_console("R1", mode="num_pages", pages=3)  # Last 75 lines
+
+    Example - Get everything (use carefully):
+        output = read_console("R1", mode="all")  # Entire buffer - may be huge!
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await read_console_impl(app, node_name, mode)
+    return await read_console_impl(app, node_name, mode, pages)
 
 
 @mcp.tool()
@@ -895,6 +909,220 @@ async def delete_drawing(ctx: Context, drawing_id: str) -> str:
 # export_topology_diagram tool now registered from export_tools module
 # Register the imported tool with MCP
 mcp.tool()(export_topology_diagram)
+
+
+# ============================================================================
+# SSH Proxy Tools
+# ============================================================================
+
+from tools.ssh_tools import (
+    configure_ssh_impl,
+    ssh_send_command_impl,
+    ssh_send_config_set_impl,
+    ssh_read_buffer_impl,
+    ssh_get_history_impl,
+    ssh_get_command_output_impl,
+    ssh_get_status_impl,
+    ssh_cleanup_sessions_impl,
+    ssh_get_job_status_impl
+)
+
+
+@mcp.tool()
+async def configure_ssh(
+    ctx: Context,
+    node_name: str,
+    device_dict: dict,
+    persist: bool = True
+) -> str:
+    """Configure SSH session for network device
+
+    IMPORTANT: Enable SSH on device first using console tools.
+
+    Args:
+        node_name: Node identifier
+        device_dict: Netmiko config dict (device_type, host, username, password, port, secret)
+        persist: Store credentials for reconnection (default: True)
+
+    Returns:
+        JSON with session_id, connected, device_type
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await configure_ssh_impl(app, node_name, device_dict, persist)
+
+
+@mcp.tool()
+async def ssh_send_command(
+    ctx: Context,
+    node_name: str,
+    command: str,
+    expect_string: str = None,
+    read_timeout: float = 30.0,
+    wait_timeout: int = 30
+) -> str:
+    """Execute show command via SSH with adaptive async
+
+    Long commands: Set read_timeout high, wait_timeout=0 for job_id, poll with ssh_get_job_status().
+
+    Args:
+        node_name: Node identifier
+        command: Command to execute
+        expect_string: Regex pattern to wait for (overrides prompt detection, optional)
+        read_timeout: Max seconds to wait for output (default: 30)
+        wait_timeout: Seconds to poll before returning job_id (default: 30)
+
+    Returns:
+        JSON with completed, job_id, output, execution_time
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await ssh_send_command_impl(app, node_name, command, expect_string, read_timeout, wait_timeout)
+
+
+@mcp.tool()
+async def ssh_send_config_set(
+    ctx: Context,
+    node_name: str,
+    config_commands: list,
+    wait_timeout: int = 30
+) -> str:
+    """Send configuration commands via SSH
+
+    Args:
+        node_name: Node identifier
+        config_commands: List of configuration commands
+        wait_timeout: Seconds to poll before returning job_id (default: 30)
+
+    Returns:
+        JSON with completed, job_id, output, execution_time
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await ssh_send_config_set_impl(app, node_name, config_commands, wait_timeout)
+
+
+@mcp.tool()
+async def ssh_read_buffer(
+    ctx: Context,
+    node_name: str,
+    mode: str = "diff",
+    pages: int = 1
+) -> str:
+    """Read continuous buffer (all commands combined)
+
+    Modes:
+    - diff: New output since last read (default)
+    - last_page: Last ~25 lines
+    - num_pages: Last N pages (~25 lines per page)
+    - all: Entire buffer (WARNING: May be very large!)
+
+    Args:
+        node_name: Node identifier
+        mode: Output mode (default: diff)
+        pages: Number of pages, only valid with mode='num_pages' (default: 1)
+
+    Returns:
+        JSON with output and buffer_size
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await ssh_read_buffer_impl(app, node_name, mode, pages)
+
+
+@mcp.tool()
+async def ssh_get_history(
+    ctx: Context,
+    node_name: str,
+    limit: int = 50,
+    search: str = None
+) -> str:
+    """List command history in execution order
+
+    Args:
+        node_name: Node identifier
+        limit: Max jobs to return (default: 50, max: 1000)
+        search: Filter by command text, case-insensitive (optional)
+
+    Returns:
+        JSON with total_commands and jobs list
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await ssh_get_history_impl(app, node_name, limit, search)
+
+
+@mcp.tool()
+async def ssh_get_command_output(
+    ctx: Context,
+    node_name: str,
+    job_id: str
+) -> str:
+    """Get specific command's full output
+
+    Use ssh_get_history() to find job_id, then get full output.
+
+    Args:
+        node_name: Node identifier
+        job_id: Job ID from history
+
+    Returns:
+        JSON with full Job details (command, output, timestamps, etc.)
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await ssh_get_command_output_impl(app, node_name, job_id)
+
+
+@mcp.tool()
+async def ssh_get_status(
+    ctx: Context,
+    node_name: str
+) -> str:
+    """Check SSH session status
+
+    Args:
+        node_name: Node identifier
+
+    Returns:
+        JSON with connected, session_id, device_type, buffer_size, total_commands
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await ssh_get_status_impl(app, node_name)
+
+
+@mcp.tool()
+async def ssh_cleanup_sessions(
+    ctx: Context,
+    keep_nodes: list = None,
+    clean_all: bool = False
+) -> str:
+    """Clean orphaned/all SSH sessions
+
+    Useful when project changes (different IPs on same node names).
+
+    Args:
+        keep_nodes: Node names to preserve (default: [])
+        clean_all: Clean all sessions, ignoring keep_nodes (default: False)
+
+    Returns:
+        JSON with cleaned and kept node lists
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await ssh_cleanup_sessions_impl(app, keep_nodes, clean_all)
+
+
+@mcp.tool()
+async def ssh_get_job_status(
+    ctx: Context,
+    job_id: str
+) -> str:
+    """Check job status by job_id (for async polling)
+
+    Poll long-running commands that returned job_id.
+
+    Args:
+        job_id: Job ID from ssh_send_command or ssh_send_config_set
+
+    Returns:
+        JSON with job status, output, execution_time
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await ssh_get_job_status_impl(app, job_id)
 
 
 if __name__ == "__main__":

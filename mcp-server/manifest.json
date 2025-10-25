@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.11.0",
-  "description": "Control and automate GNS3 network labs through Claude with type-safe operations",
-  "long_description": "Version 0.11.0: REFACTOR - Added console manager unit tests (38 tests, 76% coverage). Extracted 19 tools to 6 category modules (tools/ directory). Reduced main.py from 1,836 to 914 LOC (50% reduction). Version 0.10.0: Added comprehensive unit testing infrastructure (pytest 8.4.2, 134 tests). Version 0.9.0: BREAKING - Removed caching, detect_console_state(). Supports GNS3 v3 API.",
+  "version": "0.12.0",
+  "description": "Control and automate GNS3 network labs with console and SSH automation",
+  "long_description": "Version 0.12.0: FEATURE - SSH proxy service for network device automation via Netmiko. 9 new MCP tools for SSH sessions, command execution, config management, and job history. Dual storage: continuous buffer + per-command jobs. Supports 200+ device types. Version 0.11.1: Added num_pages mode to read_console(). Version 0.11.0: Console manager tests, code organization. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -87,7 +87,7 @@
     },
     {
       "name": "read_console",
-      "description": "Read console output with mode parameter (returns console output string, mode='diff'/'last_page'/'all')"
+      "description": "Read console output with mode parameter (returns console output string, mode='diff'/'last_page'/'num_pages'/'all', supports pages parameter for num_pages mode)"
     },
     {
       "name": "disconnect_console",
@@ -136,6 +136,42 @@
     {
       "name": "export_topology_diagram",
       "description": "Export topology as SVG and/or PNG diagram (returns JSON with file paths and diagram info)"
+    },
+    {
+      "name": "configure_ssh",
+      "description": "Configure SSH session for device (requires SSH enabled on device, returns JSON with session_id/connected status)"
+    },
+    {
+      "name": "ssh_send_command",
+      "description": "Execute show command via SSH (returns JSON with job_id/output, supports adaptive async with wait_timeout)"
+    },
+    {
+      "name": "ssh_send_config_set",
+      "description": "Send configuration commands via SSH (returns JSON with job_id/output)"
+    },
+    {
+      "name": "ssh_read_buffer",
+      "description": "Read SSH continuous buffer (modes: diff/last_page/num_pages/all, returns JSON with output)"
+    },
+    {
+      "name": "ssh_get_history",
+      "description": "List SSH command history (limit/search params, returns JSON with jobs list)"
+    },
+    {
+      "name": "ssh_get_command_output",
+      "description": "Get specific SSH command output by job_id (returns JSON with full Job details)"
+    },
+    {
+      "name": "ssh_get_status",
+      "description": "Check SSH session status (returns JSON with connected/buffer_size/total_commands)"
+    },
+    {
+      "name": "ssh_cleanup_sessions",
+      "description": "Clean orphaned/all SSH sessions (keep_nodes/clean_all params, returns JSON with cleaned list)"
+    },
+    {
+      "name": "ssh_get_job_status",
+      "description": "Poll async SSH job status by job_id (returns JSON with completion status/output)"
     }
   ],
   "compatibility": {

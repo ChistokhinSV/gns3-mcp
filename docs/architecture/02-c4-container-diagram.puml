@@ -1,0 +1,48 @@
+@startuml C4_Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_TOP_DOWN()
+
+title Container diagram for GNS3 MCP Server (v0.11.0)
+
+Person(user, "Network Engineer")
+System_Ext(claude, "Claude AI", "Desktop or Code")
+
+System_Boundary(mcp_system, "GNS3 MCP Server") {
+    Container(mcp_framework, "MCP Framework", "FastMCP", "Handles MCP protocol, tool registration, lifecycle management")
+
+    Container(main_server, "Main Server", "Python/main.py (914 LOC)", "Orchestrates tools, manages app context, periodic cleanup")
+
+    ContainerDb(tool_modules, "Tool Modules", "Python/tools/ (6 modules)", "Category-based tool implementations: project, node, console, link, drawing, template")
+
+    Container(gns3_client, "GNS3 API Client", "Python/httpx", "REST API wrapper for GNS3 v3 endpoints with JWT auth")
+
+    Container(console_mgr, "Console Manager", "Python/telnetlib3", "Async telnet session management with buffering and diff tracking")
+
+    Container(link_validator, "Link Validator", "Python/models", "Two-phase validation for atomic topology changes")
+
+    Container(export_tools, "Export Tools", "Python/CairoSVG", "SVG/PNG topology diagram generation")
+
+    ContainerDb(models, "Data Models", "Pydantic v2", "Type-safe models for projects, nodes, links, operations")
+}
+
+System_Ext(gns3_api, "GNS3 Server API", "HTTP REST v3")
+System_Ext(device_consoles, "Device Consoles", "Telnet ports")
+
+Rel(user, claude, "Requests automation")
+Rel(claude, mcp_framework, "MCP tool invocations", "JSON-RPC")
+
+Rel(mcp_framework, main_server, "Delegates tool execution")
+Rel(main_server, tool_modules, "Calls tool implementations")
+
+Rel(tool_modules, gns3_client, "API operations")
+Rel(tool_modules, console_mgr, "Console interactions")
+Rel(tool_modules, link_validator, "Validates connections")
+Rel(tool_modules, export_tools, "Generates diagrams")
+Rel(tool_modules, models, "Validates data")
+
+Rel(gns3_client, gns3_api, "REST calls", "HTTP/JWT")
+Rel(console_mgr, device_consoles, "Read/write", "Telnet")
+
+SHOW_LEGEND()
+@enduml

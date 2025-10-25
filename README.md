@@ -1,6 +1,66 @@
 # GNS3 MCP Server
 
-Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS3 projects, nodes, and device consoles through Claude Desktop or any MCP-compatible client.
+Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS3 projects, nodes, and device consoles through Claude Desktop or any MCP-compatible client. Includes SSH automation via Netmiko for advanced network device management.
+
+**Current Version**: v0.12.0 (SSH Proxy Service)
+
+## 📐 Architecture Documentation
+
+Comprehensive architecture documentation is available in the [docs/architecture](docs/architecture/) directory:
+
+- **[Architecture Overview](docs/architecture/README.md)** - Complete system architecture guide
+- **[C4 Model Diagrams](docs/architecture/)** - Context, Container, Component, and Deployment diagrams
+- **[Architecture Decision Records (ADRs)](docs/architecture/adr/)** - Key architectural decisions with rationale
+- **[Data Flow Documentation](docs/architecture/05-tool-invocation-flow.md)** - Request/response flow through system layers
+
+**Architecture Grade**: B+ (85/100) - Clean layered architecture with comprehensive type safety
+
+## What's New in v0.12.0
+
+Version 0.12.0 introduces SSH automation capabilities for advanced network device management:
+
+### SSH Proxy Service
+- **Separate Container**: FastAPI service on port 8022 (Python 3.13-slim)
+- **Network Mode Host**: Direct access to GNS3 lab network
+- **Netmiko Integration**: Support for 200+ device types (Cisco, Juniper, Arista, MikroTik, etc.)
+- **Deployment**: Docker container deployed to GNS3 host via SSH
+
+### 9 New SSH Automation Tools
+- **configure_ssh()** - Establish SSH sessions to network devices
+- **ssh_send_command()** - Execute show commands with adaptive async
+- **ssh_send_config_set()** - Send configuration commands
+- **ssh_read_buffer()** - Read continuous command output
+- **ssh_get_history()** - Review command history with search
+- **ssh_get_command_output()** - Get specific job output by ID
+- **ssh_get_status()** - Check SSH session status
+- **ssh_cleanup_sessions()** - Clean orphaned sessions
+- **ssh_get_job_status()** - Poll async job completion
+
+### Key Features
+- **Dual Storage**: Continuous buffer + per-command job history
+- **Adaptive Async**: Commands poll then return job_id for long operations
+- **Error Detection**: Intelligent SSH error classification with helpful suggestions
+- **Long Commands**: Support 15+ minute operations (firmware upgrades, backups)
+- **Audit Trail**: Full command history with timestamps and execution times
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for SSH proxy deployment instructions.
+
+## What's New in v0.11.0
+
+Version 0.11.0 is a major code organization refactoring with comprehensive testing:
+
+### Code Organization
+- **50% LOC Reduction**: main.py reduced from 1,836 to 914 LOC
+- **Tool Extraction**: 19 tools extracted to 6 category modules (project, node, console, link, drawing, template)
+- **Better Maintainability**: Clearer code organization with focused module responsibilities
+- **No Breaking Changes**: All tool interfaces remain unchanged
+
+### Testing Infrastructure
+- **Console Manager Tests**: 38 unit tests achieving 76% coverage on 374 LOC critical async code
+- **Test Coverage**: 134 total tests with 30%+ overall coverage focused on critical paths
+- **Quality Assurance**: All existing tests pass with zero regressions
+
+See [CLAUDE.md](CLAUDE.md) for complete v0.11.0 release notes.
 
 ## What's New in v0.6.2
 
@@ -49,6 +109,7 @@ See [CLAUDE.md - Label Rendering Implementation](CLAUDE.md#label-rendering-imple
 
 ## Features
 
+- **SSH Automation** (v0.12.0): Network device automation via Netmiko (200+ device types), dual storage with job history
 - **Topology Export** (v0.5.0): Export diagrams as SVG/PNG matching official GNS3 rendering (v0.6.2)
 - **Interactive Console Tools** (v0.6.0): Auto-detect device types, wait for prompts, send special keystrokes
 - **Project Management**: List, open GNS3 projects
@@ -60,13 +121,13 @@ See [CLAUDE.md - Label Rendering Implementation](CLAUDE.md#label-rendering-imple
 - **Node Configuration** (v0.2.0): Position, lock, configure switch ports
 - **Drawing Objects** (v0.5.0): Create rectangles, ellipses, text labels for documentation
 - **Desktop Extension**: One-click installation in Claude Desktop
-- **Multi-Session**: Support multiple concurrent console connections
-- **Performance Caching** (v0.3.0): 30s TTL cache for faster operations
+- **Multi-Session**: Support multiple concurrent console and SSH connections
 - **Type Safety** (v0.3.0): Pydantic models ensure data integrity
 
 ## Architecture
 
 - **MCP Server** (`mcp-server/`): FastMCP-based server with GNS3 v3 API client
+- **SSH Proxy** (`ssh-proxy/`): FastAPI service for SSH automation (v0.12.0, deployed to GNS3 host)
 - **Agent Skill** (`skill/`): Procedural knowledge for network automation workflows
 - **Desktop Extension**: Packaged `.mcpb` bundle for Claude Desktop
 
@@ -75,6 +136,7 @@ See [CLAUDE.md - Label Rendering Implementation](CLAUDE.md#label-rendering-imple
 - Python ≥ 3.10
 - GNS3 Server v3.x running and accessible
 - Network access to GNS3 server
+- **SSH Automation (v0.12.0)**: Docker on GNS3 host for SSH proxy container
 - Dependencies (see `requirements.txt`):
   - `mcp>=1.2.1` - MCP protocol support
   - `httpx>=0.28.1` - HTTP client for GNS3 API

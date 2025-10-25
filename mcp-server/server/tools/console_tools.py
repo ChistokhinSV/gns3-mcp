@@ -113,7 +113,7 @@ async def send_console_impl(app: "AppContext", node_name: str, data: str, raw: b
     return "Sent successfully" if success else "Failed to send"
 
 
-async def read_console_impl(app: "AppContext", node_name: str, mode: str = "diff") -> str:
+async def read_console_impl(app: "AppContext", node_name: str, mode: str = "diff", pages: int = 1) -> str:
     """Read console output (auto-connects if needed)
 
     Reads accumulated output from background console buffer. Output accumulates
@@ -123,7 +123,8 @@ async def read_console_impl(app: "AppContext", node_name: str, mode: str = "diff
     - Background task continuously reads console into 10MB buffer
     - Diff mode (DEFAULT): Returns only NEW output since last read
     - Last page mode: Returns last ~25 lines of buffer
-    - All mode: Returns ALL console output since connection
+    - Num pages mode: Returns last N pages (~25 lines per page)
+    - All mode: Returns ALL console output since connection (WARNING: May produce >25000 tokens!)
     - Read position advances with each diff mode read
 
     Timing Recommendations:
@@ -142,7 +143,11 @@ async def read_console_impl(app: "AppContext", node_name: str, mode: str = "diff
         mode: Output mode (default: "diff")
             - "diff": Return only new output since last read (DEFAULT)
             - "last_page": Return last ~25 lines of buffer
-            - "all": Return entire buffer since connection
+            - "num_pages": Return last N pages (use 'pages' parameter)
+            - "all": Return entire buffer (WARNING: Use carefully! May produce >25000 tokens.
+                     Consider using mode="num_pages" with a specific number of pages instead.)
+        pages: Number of pages to return (only valid with mode="num_pages", default: 1)
+               Each page contains ~25 lines. ERROR if used with other modes.
 
     Returns:
         Console output (ANSI escape codes stripped, line endings normalized)
@@ -156,15 +161,25 @@ async def read_console_impl(app: "AppContext", node_name: str, mode: str = "diff
     Example - Check recent output:
         output = read_console("R1", mode="last_page")  # Last 25 lines
 
-    Example - Get everything:
-        output = read_console("R1", mode="all")  # Entire buffer
+    Example - Get multiple pages:
+        output = read_console("R1", mode="num_pages", pages=3)  # Last 75 lines
+
+    Example - Get everything (use carefully):
+        output = read_console("R1", mode="all")  # Entire buffer - may be huge!
     """
+    # Validate pages parameter is only used with num_pages mode
+    if pages != 1 and mode != "num_pages":
+        return (f"Error: 'pages' parameter can only be used with mode='num_pages'.\n"
+                f"Current mode: '{mode}', pages: {pages}\n"
+                f"Either change mode to 'num_pages' or remove the 'pages' parameter.")
+
     # Validate mode parameter
-    if mode not in ("diff", "last_page", "all"):
+    if mode not in ("diff", "last_page", "num_pages", "all"):
         return (f"Invalid mode '{mode}'. Valid modes:\n"
                 f"  'diff' - New output since last read (default)\n"
                 f"  'last_page' - Last ~25 lines\n"
-                f"  'all' - Entire buffer")
+                f"  'num_pages' - Last N pages (use 'pages' parameter)\n"
+                f"  'all' - Entire buffer (WARNING: May be very large!)")
 
     # Auto-connect if needed
     error = await _auto_connect_console(app, node_name)
@@ -180,6 +195,15 @@ async def read_console_impl(app: "AppContext", node_name: str, mode: str = "diff
         if full_output:
             lines = full_output.splitlines()
             output = '\n'.join(lines[-25:]) if len(lines) > 25 else full_output
+        else:
+            output = None
+    elif mode == "num_pages":
+        # Return last N pages (~25 lines per page)
+        full_output = app.console.get_output_by_node(node_name)
+        if full_output:
+            lines = full_output.splitlines()
+            lines_to_return = 25 * pages
+            output = '\n'.join(lines[-lines_to_return:]) if len(lines) > lines_to_return else full_output
         else:
             output = None
     else:  # mode == "all"

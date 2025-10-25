@@ -10,9 +10,89 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.11.0
+## Current Version: v0.12.0
 
-**Latest Release:** v0.11.0 - Code Organization Refactoring (Refactor)
+**Latest Release:** v0.12.0 - SSH Proxy Service (Feature - Phase 1)
+- **NEW**: SSH proxy service (FastAPI container, Python 3.13-slim)
+  - Separate Docker container with network mode=host for GNS3 lab access
+  - Port 8022 (SSH-like mnemonic)
+  - Docker Hub: `chistokhinsv/gns3-ssh-proxy:v0.1.0`
+  - Deployment via SSH to GNS3 host
+- **NEW**: Dual storage architecture
+  - **Storage System 1**: Continuous buffer (10MB max, like console manager)
+  - **Storage System 2**: Command history with per-command jobs
+  - Every command creates Job record (even synchronous executions)
+  - Jobs include: job_id, command, output, timestamps, execution_time, sequence_number
+  - Searchable history with execution order tracking
+- **NEW**: Adaptive async command execution
+  - Commands poll for wait_timeout seconds
+  - Return output if completes quickly (<wait_timeout)
+  - Return job_id for polling if still running (>wait_timeout)
+  - Supports 15+ minute long-running commands (read_timeout=900)
+- **NEW**: 9 MCP tools for SSH automation
+  - `configure_ssh()` - Create/recreate SSH session (auto-drops on IP change)
+  - `ssh_send_command()` - Execute show commands with adaptive async
+  - `ssh_send_config_set()` - Send configuration commands
+  - `ssh_read_buffer()` - Read continuous buffer (modes: diff/last_page/num_pages/all)
+  - `ssh_get_history()` - List command history (limit, search filter)
+  - `ssh_get_command_output()` - Get specific job's full output
+  - `ssh_get_status()` - Check session status
+  - `ssh_cleanup_sessions()` - Clean orphaned/all sessions
+  - `ssh_get_job_status()` - Poll async job status
+- **NEW**: SSH connection error detection
+  - Intelligent error classification (authentication_failed, connection_refused, timeout, host_unreachable)
+  - Helpful suggestions for each error type
+  - Emphasizes using console tools to configure SSH access first
+- **NEW**: Netmiko integration
+  - Supports 200+ device types (cisco_ios, juniper, arista_eos, etc.)
+  - Interactive prompt handling with expect_string parameter
+  - Long-running command support with read_timeout=0 (no timeout)
+  - Timing-based detection for Y/N confirmations
+- **Files added**:
+  - `ssh-proxy/` directory: FastAPI service
+    - `server/models.py` (380 LOC): Pydantic models with error classification
+    - `server/session_manager.py` (560 LOC): Dual storage + SSH lifecycle
+    - `server/main.py` (450 LOC): FastAPI app with 10 endpoints
+  - `ssh-proxy/Dockerfile`: Python 3.13-slim, network mode=host
+  - `ssh-proxy/requirements.txt`: fastapi, uvicorn, netmiko, pydantic, httpx
+  - `ssh-proxy/README.md`: Service documentation
+  - `mcp-server/server/tools/ssh_tools.py` (370 LOC): 9 MCP tool implementations
+  - `DEPLOYMENT.md`: Docker deployment guide for GNS3 hosts
+- **Files changed**:
+  - `mcp-server/server/main.py`: Added 9 SSH tool registrations, updated version header to v0.12.0
+  - `mcp-server/server/tools/ssh_tools.py`: Fixed SSH_PROXY_URL to use GNS3_HOST from environment
+  - `mcp-server/manifest.json`: Updated to v0.12.0, added 9 SSH tool definitions
+  - `CLAUDE.md`: This version entry
+- **Workflow Integration**:
+  1. Use console tools to enable SSH on device (send_console)
+  2. Call configure_ssh() to establish SSH session
+  3. Use SSH tools for automation (send_command, send_config_set)
+  4. Review history with ssh_get_history() and ssh_get_command_output()
+- **NO BREAKING CHANGES**: All existing tools unchanged, SSH tools additive
+- **Rationale**: Enables SSH automation for devices without telnet console, handles interactive prompts and long-running installations, maintains searchable command history with audit trail
+
+**Previous:** v0.11.1 - Console Output Pagination (Patch)
+- **NEW**: Added `num_pages` mode to `read_console()` tool
+  - Retrieve multiple pages of console output (~25 lines per page)
+  - New parameter: `pages` (integer, default: 1, only valid with mode="num_pages")
+  - Usage: `read_console("R1", mode="num_pages", pages=3)` returns last 75 lines
+- **ENHANCED**: Parameter validation
+  - Using `pages` parameter with other modes returns clear error message
+  - Error example: "Error: 'pages' parameter can only be used with mode='num_pages'"
+- **ENHANCED**: Documentation improvements
+  - Added warning to `all` mode about potential >25000 token output
+  - Recommends using `num_pages` mode instead of `all` for large buffers
+  - Added examples for num_pages mode usage
+- **Files changed**:
+  - `mcp-server/server/tools/console_tools.py`: Updated read_console_impl() (lines 116-213)
+  - `mcp-server/server/main.py`: Updated read_console() tool definition (lines 453-508)
+  - `manifest.json`: Updated to v0.11.1, updated tool description
+  - `CLAUDE.md`: This version entry
+- **NO BREAKING CHANGES**: All existing modes ('diff', 'last_page', 'all') work unchanged
+- **Testing**: 5 unit tests passed (default pages, multiple pages, overflow, error handling, backward compatibility)
+- **Rationale**: Provides flexible console buffer retrieval without overwhelming token limits. Alternative to 'all' mode for large outputs.
+
+**Previous:** v0.11.0 - Code Organization Refactoring (Refactor)
 - **NEW**: Console manager unit tests for critical async code
   - 38 unit tests covering ConsoleManager class (560 LOC test file)
   - 76% coverage on console_manager.py (374 LOC, critical async telnet session handling)

@@ -213,6 +213,108 @@ result = send_and_wait_console("R1",
 6. Read output after each command
 ```
 
+## SSH Automation (v0.12.0)
+
+SSH automation via Netmiko for advanced device management. Requires SSH proxy container deployed to GNS3 host.
+
+### Prerequisites
+
+SSH must be enabled on device first using console tools:
+
+**Cisco IOS:**
+```
+send_console('R1', 'configure terminal\n')
+send_console('R1', 'username admin privilege 15 secret cisco123\n')
+send_console('R1', 'crypto key generate rsa modulus 2048\n')
+send_console('R1', 'ip ssh version 2\n')
+send_console('R1', 'line vty 0 4\n')
+send_console('R1', 'login local\n')
+send_console('R1', 'transport input ssh\n')
+send_console('R1', 'end\n')
+```
+
+**MikroTik RouterOS:**
+```
+send_console('MT1', '/user add name=admin password=admin123 group=full\n')
+send_console('MT1', '/ip service enable ssh\n')
+```
+
+### Basic SSH Workflow
+
+**1. Configure SSH Session:**
+```
+configure_ssh('R1', {
+    'device_type': 'cisco_ios',
+    'host': '10.10.10.1',
+    'username': 'admin',
+    'password': 'cisco123'
+})
+```
+
+**2. Execute Commands:**
+```
+# Show commands
+ssh_send_command('R1', 'show ip interface brief')
+ssh_send_command('R1', 'show running-config')
+
+# Configuration commands
+ssh_send_config_set('R1', [
+    'interface GigabitEthernet0/0',
+    'ip address 192.168.1.1 255.255.255.0',
+    'no shutdown'
+])
+```
+
+**3. Review History:**
+```
+# List recent commands
+ssh_get_history('R1', limit=10)
+
+# Search history
+ssh_get_history('R1', search='interface')
+
+# Get specific command output
+ssh_get_command_output('R1', job_id='...')
+```
+
+### Adaptive Async for Long Commands
+
+For long-running operations (firmware upgrades, backups):
+
+```
+# Start command, return job_id immediately
+result = ssh_send_command('R1', 'copy running-config tftp:', wait_timeout=0)
+job_id = result['job_id']
+
+# Poll for completion
+status = ssh_get_job_status(job_id)
+# Returns: {completed, output, execution_time}
+
+# For 15+ minute commands:
+ssh_send_command('R1', 'upgrade firmware', read_timeout=900, wait_timeout=0)
+```
+
+### Supported Device Types
+
+200+ device types via Netmiko:
+- **cisco_ios** - Cisco IOS/IOS-XE
+- **cisco_nxos** - Cisco Nexus
+- **juniper** - Juniper JunOS
+- **arista_eos** - Arista EOS
+- **mikrotik_routeros** - MikroTik RouterOS
+- **linux** - Linux/Alpine
+- See Netmiko documentation for complete list
+
+### SSH Best Practices
+
+- **Enable SSH first** using console tools
+- **Use job history** for audit trails and debugging
+- **Set wait_timeout=0** for long commands to avoid blocking
+- **Poll with ssh_get_job_status()** for async operations
+- **Review ssh_get_history()** to verify command execution
+- **Clean sessions** with ssh_cleanup_sessions() when changing lab topology
+- **Check status** with ssh_get_status() to verify connection before commands
+
 ## Device-Specific Commands
 
 ### MikroTik RouterOS

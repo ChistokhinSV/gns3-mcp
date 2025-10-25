@@ -1,0 +1,52 @@
+@startuml Deployment
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+
+title Deployment diagram for GNS3 MCP Server
+
+Deployment_Node(desktop_machine, "Desktop Machine", "Windows/macOS/Linux") {
+    Deployment_Node(claude_desktop_app, "Claude Desktop", "Electron App") {
+        Container(claude_ui, "Claude UI", "React", "AI assistant interface")
+        Container(mcp_runtime, "MCP Runtime", "Node.js", "Manages MCP server processes")
+    }
+
+    Deployment_Node(python_process, "Python Process", "Python 3.10+") {
+        Container(mcp_server, "GNS3 MCP Server", "FastMCP", "Tool execution engine")
+        ContainerDb(bundled_deps, "Bundled Dependencies", "lib/ (19MB)", "mcp, httpx, telnetlib3, pydantic, cairosvg")
+    }
+}
+
+Deployment_Node(gns3_host, "GNS3 Host", "Server/VM") {
+    Deployment_Node(gns3_server_process, "GNS3 Server", "Python") {
+        Container(gns3_api, "GNS3 API Server", "aiohttp", "REST API v3 with JWT auth")
+        Container(gns3_controller, "GNS3 Controller", "Python", "Project and node management")
+    }
+
+    Deployment_Node(compute_engine, "Compute Engine", "QEMU/Docker") {
+        Container(device_vm, "Network Device", "VM/Container", "Router/Switch with console port")
+    }
+}
+
+Rel(claude_ui, mcp_runtime, "Sends MCP requests", "IPC")
+Rel(mcp_runtime, mcp_server, "Invokes tools", "stdio/JSON-RPC")
+Rel(mcp_server, bundled_deps, "Uses")
+Rel(mcp_server, gns3_api, "REST API calls", "HTTP :80/443")
+Rel(mcp_server, device_vm, "Telnet console", "TCP :5000-9000")
+Rel(gns3_api, gns3_controller, "Internal")
+Rel(gns3_controller, device_vm, "Controls lifecycle")
+
+note right of mcp_server
+  **Configuration**:
+  - .mcpb extension (Claude Desktop)
+  - .mcp.json + .env (Claude Code)
+  - start_mcp.py wrapper
+end note
+
+note right of gns3_api
+  **API Endpoints**:
+  - POST /v3/access/users/authenticate
+  - GET /v3/projects
+  - GET /v3/projects/{id}/nodes
+  - POST /v3/projects/{id}/links
+end note
+
+@enduml

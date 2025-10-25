@@ -1,0 +1,71 @@
+@startuml C4_Component
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_TOP_DOWN()
+
+title Component diagram for Tool Modules (v0.11.0 Refactored Architecture)
+
+Container_Ext(main_server, "Main Server", "main.py", "Tool registration with @mcp.tool() decorators")
+
+System_Boundary(tool_layer, "Tool Implementation Layer") {
+    Component(project_tools, "Project Tools", "project_tools.py (95 LOC)", "list_projects_impl, open_project_impl")
+
+    Component(node_tools, "Node Tools", "node_tools.py (460 LOC)", "list_nodes_impl, get_node_details_impl, set_node_impl, create_node_impl, delete_node_impl")
+
+    Component(console_tools, "Console Tools", "console_tools.py (485 LOC)", "send/read/disconnect_console_impl, send_and_wait, send_keystroke, _auto_connect_console")
+
+    Component(link_tools, "Link Tools", "link_tools.py (290 LOC)", "get_links_impl, set_connection_impl (two-phase validation)")
+
+    Component(drawing_tools, "Drawing Tools", "drawing_tools.py (230 LOC)", "list/create/delete_drawing_impl")
+
+    Component(template_tools, "Template Tools", "template_tools.py (45 LOC)", "list_templates_impl")
+}
+
+System_Boundary(integration_layer, "Integration Layer") {
+    Component(gns3_client, "GNS3 Client", "gns3_client.py (333 LOC)", "20+ async methods wrapping GNS3 v3 API endpoints")
+
+    Component(console_manager, "Console Manager", "console_manager.py (375 LOC)", "Session management, async telnet, buffer tracking, ANSI stripping")
+
+    Component(link_validator, "Link Validator", "link_validator.py (369 LOC)", "Two-phase validation: validate all → execute all")
+
+    Component(export_module, "Export Module", "export_tools.py (547 LOC)", "SVG generation, PNG conversion, font fallbacks")
+}
+
+ComponentDb(models, "Pydantic Models", "models.py (364 LOC)", "15+ type-safe models: ProjectInfo, NodeInfo, LinkInfo, ErrorResponse, etc.")
+
+System_Ext(gns3_api, "GNS3 Server", "REST v3 API")
+System_Ext(telnet_ports, "Device Consoles", "Telnet")
+
+Rel(main_server, project_tools, "Delegates list/open")
+Rel(main_server, node_tools, "Delegates node ops")
+Rel(main_server, console_tools, "Delegates console ops")
+Rel(main_server, link_tools, "Delegates link ops")
+Rel(main_server, drawing_tools, "Delegates drawing ops")
+Rel(main_server, template_tools, "Delegates template ops")
+
+Rel(project_tools, gns3_client, "get_projects, open_project")
+Rel(project_tools, models, "ProjectInfo validation")
+
+Rel(node_tools, gns3_client, "get_nodes, start/stop/update_node")
+Rel(node_tools, models, "NodeInfo validation")
+
+Rel(console_tools, console_manager, "connect, send, read, disconnect")
+Rel(console_tools, gns3_client, "get_nodes (for console port lookup)")
+Rel(console_tools, models, "ConsoleStatus validation")
+
+Rel(link_tools, link_validator, "validate_connect, validate_disconnect")
+Rel(link_tools, gns3_client, "create_link, delete_link")
+Rel(link_tools, models, "LinkInfo, OperationResult validation")
+
+Rel(drawing_tools, gns3_client, "get/create/delete_drawing")
+Rel(drawing_tools, export_module, "create_*_svg helpers")
+Rel(drawing_tools, models, "DrawingInfo validation")
+
+Rel(template_tools, gns3_client, "get_templates")
+Rel(template_tools, models, "TemplateInfo validation")
+
+Rel(gns3_client, gns3_api, "httpx async client")
+Rel(console_manager, telnet_ports, "telnetlib3 async client")
+
+SHOW_LEGEND()
+@enduml

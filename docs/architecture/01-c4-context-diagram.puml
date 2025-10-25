@@ -1,0 +1,32 @@
+@startuml C4_Context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title System Context diagram for GNS3 MCP Server
+
+Person(user, "Network Engineer", "Interacts with GNS3 labs through Claude")
+
+System(claude_desktop, "Claude Desktop", "AI assistant with MCP protocol support")
+System_Ext(claude_code, "Claude Code", "AI coding assistant with MCP protocol support")
+
+System_Boundary(gns3_mcp, "GNS3 MCP Server") {
+    System(mcp_server, "MCP Server", "FastMCP-based server exposing 19 tools for GNS3 automation")
+}
+
+System_Ext(gns3_server, "GNS3 Server", "Network simulation server (v3 API)")
+System_Ext(network_devices, "Network Devices", "Simulated routers, switches, and VMs")
+
+Rel(user, claude_desktop, "Requests network automation", "Natural language")
+Rel(user, claude_code, "Requests network automation", "Natural language")
+
+Rel(claude_desktop, mcp_server, "Invokes tools", "MCP Protocol (stdio)")
+Rel(claude_code, mcp_server, "Invokes tools", "MCP Protocol (SSE)")
+
+Rel(mcp_server, gns3_server, "Manages projects, nodes, links", "REST API (HTTP/JWT)")
+Rel(mcp_server, network_devices, "Interacts with consoles", "Telnet")
+
+Rel(gns3_server, network_devices, "Controls device lifecycle", "Internal")
+
+SHOW_LEGEND()
+@enduml
