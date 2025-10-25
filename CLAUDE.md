@@ -16,7 +16,7 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - **NEW**: SSH proxy service (FastAPI container, Python 3.13-slim)
   - Separate Docker container with network mode=host for GNS3 lab access
   - Port 8022 (SSH-like mnemonic)
-  - Docker Hub: `chistokhinsv/gns3-ssh-proxy:v0.1.2`
+  - Docker Hub: `chistokhinsv/gns3-ssh-proxy:v0.1.3`
   - Deployment via SSH to GNS3 host
 - **NEW**: Dual storage architecture
   - **Storage System 1**: Continuous buffer (10MB max, like console manager)
@@ -70,6 +70,18 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
   4. Review history with ssh_get_history() and ssh_get_command_output()
 - **NO BREAKING CHANGES**: All existing tools unchanged, SSH tools additive
 - **Rationale**: Enables SSH automation for devices without telnet console, handles interactive prompts and long-running installations, maintains searchable command history with audit trail
+
+**SSH Proxy v0.1.3** (Feature - Version tracking)
+- **NEW**: Added version field to configure_ssh response
+  - Returns SSH proxy service version from container
+  - Helps track deployed version when troubleshooting
+  - Example: `{"version": "0.1.3", ...}`
+- **Files changed**:
+  - `ssh-proxy/server/models.py`: Added version field to ConfigureSSHResponse
+  - `ssh-proxy/server/main.py`: Version 0.1.2→0.1.3, configure_ssh returns app.version
+- **Testing**: Verified version field present in configure_ssh response
+- **Deployment**: Built and deployed as `chistokhinsv/gns3-ssh-proxy:v0.1.3` and `latest` tags
+- **Rationale**: Version visibility improves debugging and deployment tracking
 
 **SSH Proxy v0.1.2** (Patch - Netmiko timeout and error handling fixes)
 - **FIXED**: Netmiko prompt detection timeout on Alpine Linux
