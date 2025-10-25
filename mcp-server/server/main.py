@@ -1,4 +1,4 @@
-"""GNS3 MCP Server v0.15.0
+"""GNS3 MCP Server v0.17.0
 
 Model Context Protocol server for GNS3 lab automation.
 Provides console and SSH automation tools for network devices.
@@ -24,6 +24,17 @@ Typical Workflow:
 2. Establish SSH session with ssh_configure()
 3. Switch to SSH tools for all automation tasks
 4. Return to console only if SSH fails
+
+Version 0.17.0 - MCP Prompts (FEATURE):
+- NEW: 3 guided workflow prompts for common GNS3 operations
+  * ssh_setup: Device-specific SSH configuration (Cisco, MikroTik, Juniper, Arista, Linux)
+  * topology_discovery: Discover and visualize network topology with resources
+  * troubleshooting: OSI model-based troubleshooting methodology
+- ARCHITECTURE: 11 tools + 15 resources + 3 prompts = Complete MCP server
+- ENHANCED: Workflow guidance for complex multi-step operations
+- DEVICE COVERAGE: 6 device types with specific configuration commands
+- NO BREAKING CHANGES: All tools and resources unchanged, prompts additive
+- RATIONALE: Prompts guide users through complex workflows, reducing errors and improving efficiency
 
 Version 0.15.0 - Complete Tool Consolidation (BREAKING CHANGES):
 - RENAMED: All tools now follow {category}_{action} pattern for consistency
@@ -246,6 +257,11 @@ from tools.drawing_tools import (
 )
 from tools.template_tools import list_templates_impl
 from resources import ResourceManager
+from prompts import (
+    render_ssh_setup_prompt,
+    render_topology_discovery_prompt,
+    render_troubleshooting_prompt
+)
 
 # Setup logging
 logging.basicConfig(
@@ -487,6 +503,78 @@ async def resource_proxy_status(ctx: Context) -> str:
 async def resource_proxy_sessions(ctx: Context) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_proxy_sessions()
+
+
+# ============================================================================
+# MCP Prompts - Guided Workflows
+# ============================================================================
+
+@mcp.prompt()
+async def ssh_setup(
+    node_name: str,
+    device_type: str,
+    username: str = "admin",
+    password: str = "admin"
+) -> str:
+    """SSH Setup Workflow - Enable SSH access on network devices
+
+    Provides device-specific step-by-step instructions for configuring SSH
+    on network devices. Covers 6 device types: Cisco IOS, NX-OS, MikroTik
+    RouterOS, Juniper Junos, Arista EOS, and Linux.
+
+    Args:
+        node_name: Target node name to configure
+        device_type: Device type (cisco_ios, cisco_nxos, mikrotik_routeros,
+                     juniper_junos, arista_eos, linux)
+        username: SSH username to create (default: "admin")
+        password: SSH password to set (default: "admin")
+
+    Returns:
+        Complete workflow with device-specific commands, verification steps,
+        and troubleshooting guidance
+    """
+    return await render_ssh_setup_prompt(node_name, device_type, username, password)
+
+
+@mcp.prompt()
+async def topology_discovery(
+    project_name: str = None,
+    include_export: bool = True
+) -> str:
+    """Topology Discovery Workflow - Discover and visualize network topology
+
+    Guides you through discovering nodes, links, and topology structure using
+    MCP resources and tools. Includes visualization and analysis guidance.
+
+    Args:
+        project_name: Optional project name to focus on (default: guide user to select)
+        include_export: Include export/visualization steps (default: True)
+
+    Returns:
+        Complete workflow for topology discovery, visualization, and analysis
+    """
+    return await render_topology_discovery_prompt(project_name, include_export)
+
+
+@mcp.prompt()
+async def troubleshooting(
+    node_name: str = None,
+    issue_type: str = None
+) -> str:
+    """Network Troubleshooting Workflow - Systematic network issue diagnosis
+
+    Provides OSI model-based troubleshooting methodology for network labs.
+    Covers connectivity, console access, SSH, and performance issues.
+
+    Args:
+        node_name: Optional node name to focus troubleshooting on
+        issue_type: Optional issue category (connectivity, console, ssh, performance)
+
+    Returns:
+        Complete troubleshooting workflow with diagnostic steps, common issues,
+        and resolution guidance
+    """
+    return await render_troubleshooting_prompt(node_name, issue_type)
 
 
 # ============================================================================

@@ -10,9 +10,55 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.15.0
+## Current Version: v0.17.0
 
-**Latest Release:** v0.15.0 - Complete Tool Consolidation (BREAKING CHANGES)
+**Latest Release:** v0.17.0 - MCP Prompts (FEATURE)
+- **NEW**: 3 guided workflow prompts for common GNS3 operations
+  - `ssh_setup`: Device-specific SSH configuration workflow
+    - Covers 6 device types: Cisco IOS, NX-OS, MikroTik RouterOS, Juniper Junos, Arista EOS, Linux
+    - Step-by-step instructions from console configuration to SSH session establishment
+    - Device-specific commands with parameter placeholders
+    - Troubleshooting guidance for common SSH issues
+  - `topology_discovery`: Network topology discovery and visualization
+    - Guides through using MCP resources to browse projects/nodes/links
+    - Instructions for export_topology_diagram tool usage
+    - Topology pattern analysis (hub-and-spoke, mesh, tiered, etc.)
+    - Common topology questions to answer during discovery
+  - `troubleshooting`: OSI model-based systematic troubleshooting
+    - Layer 1-7 troubleshooting methodology
+    - Common issues and resolutions for each layer
+    - Console and SSH troubleshooting workflows
+    - Performance analysis and log collection
+- **ARCHITECTURE**: Complete MCP server = 11 tools + 15 resources + 3 prompts
+  - **Tools (11)**: Actions that modify state
+  - **Resources (15)**: Browsable read-only state
+  - **Prompts (3)**: Guided workflows for complex operations
+- **DEVICE COVERAGE**: 6 device types with specific configuration commands
+  - Cisco IOS/IOS-XE: Full enterprise router/switch setup
+  - Cisco NX-OS: Data center switch configuration
+  - MikroTik RouterOS: SOHO/branch router setup
+  - Juniper Junos: Enterprise networking equipment
+  - Arista EOS: Cloud/data center switching
+  - Linux: Alpine/Debian/Ubuntu server configuration
+- **WORKFLOW GUIDANCE**: Step-by-step instructions reduce errors
+  - Prerequisites check before starting workflows
+  - Verification steps after each action
+  - Troubleshooting sections for common problems
+  - Next steps guidance after workflow completion
+- **Files added**:
+  - `mcp-server/server/prompts/__init__.py`: Module initialization (17 LOC)
+  - `mcp-server/server/prompts/ssh_setup.py`: SSH setup workflow (~280 LOC)
+  - `mcp-server/server/prompts/topology_discovery.py`: Topology discovery workflow (~320 LOC)
+  - `mcp-server/server/prompts/troubleshooting.py`: Troubleshooting workflow (~440 LOC)
+- **Files changed**:
+  - `mcp-server/server/main.py`: Added prompt imports, registered 3 prompts, version 0.15.0→0.17.0
+  - `mcp-server/manifest.json`: Added prompts section, version 0.15.0→0.17.0
+  - `CLAUDE.md`: This version entry
+  - `mcp-server/mcp-server.mcpb`: Rebuilt desktop extension
+- **NO BREAKING CHANGES**: All tools and resources unchanged, prompts additive
+- **Rationale**: Prompts guide users through complex multi-step workflows, reducing errors and improving efficiency. Device-specific instructions ensure correct configuration for different platforms.
+
+**Previous:** v0.15.0 - Complete Tool Consolidation (BREAKING CHANGES)
 - **RENAMED**: All tools now follow `{category}_{action}` naming pattern for consistency
   - `send_console` → `console_send`
   - `read_console` → `console_read`

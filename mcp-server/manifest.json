@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.15.0",
-  "description": "GNS3 lab automation - final architecture with 11 tools + 15 MCP resources - consistent naming and merged SSH commands",
-  "long_description": "FINAL ARCHITECTURE: 11 core tools + 15 browsable MCP resources with consistent {category}_{action} naming. Version 0.15.0 BREAKING CHANGES: Renamed all tools for consistency (console_send, console_read, ssh_configure), merged SSH commands (ssh_command auto-detects show vs config), removed 7 deprecated tools (send_and_wait_console, create_node/drawing, delete_drawing, ssh_cleanup_sessions, ssh_get_job_status). Use ssh_command() for all SSH operations - auto-detects command type. Console tools (console_send, console_read) only for initial SSH setup. Version 0.14.0: REMOVED 11 query tools (now MCP resources). Version 0.13.0: Added 15 MCP resources. Supports GNS3 v3 API.",
+  "version": "0.17.0",
+  "description": "GNS3 lab automation - 11 tools + 15 resources + 3 guided workflow prompts",
+  "long_description": "COMPLETE MCP SERVER: 11 tools + 15 browsable resources + 3 workflow prompts. Version 0.17.0 NEW: 3 MCP prompts for guided workflows (ssh_setup, topology_discovery, troubleshooting). Prompts provide device-specific instructions and step-by-step guidance. Version 0.15.0 BREAKING CHANGES: Renamed all tools for consistency (console_send, console_read, ssh_configure), merged SSH commands (ssh_command auto-detects show vs config), removed 7 deprecated tools. Use ssh_command() for all SSH operations. Version 0.14.0: Removed 11 query tools (now MCP resources). Version 0.13.0: Added 15 MCP resources. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
