@@ -56,3 +56,4 @@ data/*.pcapng
 
 gns3-gui/
 gns3-project/.coverage
+.claude/settings.local.json

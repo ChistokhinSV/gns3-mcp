@@ -1,3 +1,5 @@
 !.env
 !gns3-gui/
 !gns3-project/
+!.claude/settings.local.json
+!.claude/
