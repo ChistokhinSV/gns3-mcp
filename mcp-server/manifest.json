@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Control and automate GNS3 network labs with console and SSH automation",
   "long_description": "Version 0.12.0: FEATURE - SSH proxy service for network device automation via Netmiko. 9 new MCP tools for SSH sessions, command execution, config management, and job history. Dual storage: continuous buffer + per-command jobs. Supports 200+ device types. Version 0.11.1: Added num_pages mode to read_console(). Version 0.11.0: Console manager tests, code organization. Supports GNS3 v3 API.",
   "author": {

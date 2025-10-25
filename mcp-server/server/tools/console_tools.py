@@ -113,7 +113,18 @@ async def send_console_impl(app: "AppContext", node_name: str, data: str, raw: b
     return "Sent successfully" if success else "Failed to send"
 
 
-async def read_console_impl(app: "AppContext", node_name: str, mode: str = "diff", pages: int = 1) -> str:
+async def read_console_impl(
+    app: "AppContext",
+    node_name: str,
+    mode: str = "diff",
+    pages: int = 1,
+    pattern: str | None = None,
+    case_insensitive: bool = False,
+    invert: bool = False,
+    before: int = 0,
+    after: int = 0,
+    context: int = 0
+) -> str:
     """Read console output (auto-connects if needed)
 
     Reads accumulated output from background console buffer. Output accumulates
@@ -210,7 +221,93 @@ async def read_console_impl(app: "AppContext", node_name: str, mode: str = "diff
         # Return entire buffer
         output = app.console.get_output_by_node(node_name)
 
+    # Apply grep filter if pattern provided
+    if pattern and output:
+        output = _grep_filter(
+            output,
+            pattern,
+            case_insensitive=case_insensitive,
+            invert=invert,
+            before=before,
+            after=after,
+            context=context
+        )
+
     return output if output is not None else "No output available"
+
+
+def _grep_filter(
+    text: str,
+    pattern: str,
+    case_insensitive: bool = False,
+    invert: bool = False,
+    before: int = 0,
+    after: int = 0,
+    context: int = 0
+) -> str:
+    """
+    Filter text using grep-style pattern matching
+
+    Args:
+        text: Input text to filter
+        pattern: Regex pattern to match
+        case_insensitive: Ignore case when matching (grep -i)
+        invert: Return non-matching lines (grep -v)
+        before: Lines of context before match (grep -B)
+        after: Lines of context after match (grep -A)
+        context: Lines of context before AND after (grep -C, overrides before/after)
+
+    Returns:
+        Filtered lines with line numbers (grep -n format: "LINE_NUM: line content")
+        Empty string if no matches
+    """
+    if not text:
+        return ""
+
+    # Context parameter overrides before/after
+    if context > 0:
+        before = after = context
+
+    # Compile regex pattern
+    flags = re.IGNORECASE if case_insensitive else 0
+    try:
+        regex = re.compile(pattern, flags)
+    except re.error as e:
+        return f"Error: Invalid regex pattern: {e}"
+
+    lines = text.splitlines()
+    matching_indices = set()
+
+    # Find matching lines
+    for i, line in enumerate(lines):
+        matches = bool(regex.search(line))
+        if invert:
+            matches = not matches
+        if matches:
+            matching_indices.add(i)
+
+    # Add context lines
+    indices_with_context = set()
+    for idx in matching_indices:
+        # Add lines before
+        for b in range(max(0, idx - before), idx):
+            indices_with_context.add(b)
+        # Add matching line
+        indices_with_context.add(idx)
+        # Add lines after
+        for a in range(idx + 1, min(len(lines), idx + after + 1)):
+            indices_with_context.add(a)
+
+    # Build output with line numbers (1-indexed, grep -n style)
+    if not indices_with_context:
+        return ""
+
+    result = []
+    for idx in sorted(indices_with_context):
+        line_num = idx + 1  # 1-indexed line numbers
+        result.append(f"{line_num}: {lines[idx]}")
+
+    return '\n'.join(result)
 
 
 async def disconnect_console_impl(app: "AppContext", node_name: str) -> str:

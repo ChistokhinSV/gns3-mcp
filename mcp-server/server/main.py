@@ -456,8 +456,19 @@ async def send_console(ctx: Context, node_name: str, data: str, raw: bool = Fals
 
 
 @mcp.tool()
-async def read_console(ctx: Context, node_name: str, mode: str = "diff", pages: int = 1) -> str:
-    """Read console output (auto-connects if needed)
+async def read_console(
+    ctx: Context,
+    node_name: str,
+    mode: str = "diff",
+    pages: int = 1,
+    pattern: str | None = None,
+    case_insensitive: bool = False,
+    invert: bool = False,
+    before: int = 0,
+    after: int = 0,
+    context: int = 0
+) -> str:
+    """Read console output with optional grep filtering (auto-connects if needed)
 
     Reads accumulated output from background console buffer. Output accumulates
     while device runs - this function retrieves it without blocking.
@@ -470,48 +481,32 @@ async def read_console(ctx: Context, node_name: str, mode: str = "diff", pages: 
     - All mode: Returns ALL console output since connection (WARNING: May produce >25000 tokens!)
     - Read position advances with each diff mode read
 
-    Timing Recommendations:
-    - After send_console(): Wait 0.5-2s before reading for command output
-    - After node start: Wait 30-60s for boot messages
-    - Interactive prompts: Wait 1-3s for prompt to appear
-
-    State Detection Tips:
-    - Look for prompt patterns: "Router>", "Login:", "Password:", "#"
-    - Check for "% " at start of line (IOS error messages)
-    - Look for "[OK]" or "failed" for command results
-    - MikroTik prompts: "[admin@RouterOS] > " or similar
+    Grep Parameters (optional):
+    - pattern: Regex pattern to filter output (returns matching lines with line numbers)
+    - case_insensitive: Ignore case when matching (grep -i)
+    - invert: Return non-matching lines (grep -v)
+    - before/after/context: Context lines around matches (grep -B/-A/-C)
 
     Args:
         node_name: Name of the node
         mode: Output mode (default: "diff")
-            - "diff": Return only new output since last read (DEFAULT)
-            - "last_page": Return last ~25 lines of buffer
-            - "num_pages": Return last N pages (use 'pages' parameter)
-            - "all": Return entire buffer (WARNING: Use carefully! May produce >25000 tokens.
-                     Consider using mode="num_pages" with a specific number of pages instead.)
-        pages: Number of pages to return (only valid with mode="num_pages", default: 1)
-               Each page contains ~25 lines. ERROR if used with other modes.
+        pages: Number of pages (only with mode="num_pages")
+        pattern: Regex to filter output
+        case_insensitive: Case-insensitive matching
+        invert: Invert match
+        before/after/context: Context lines
 
     Returns:
-        Console output (ANSI escape codes stripped, line endings normalized)
-        or "No output available" if buffer empty
+        Console output (filtered if pattern provided)
 
-    Example - Interactive session (default):
-        output = read_console("R1")  # mode="diff" by default
-        if "Login:" in output:
-            send_console("R1", "admin\\n")
+    Example - Grep for errors:
+        read_console("R1", mode="all", pattern="error", case_insensitive=True)
 
-    Example - Check recent output:
-        output = read_console("R1", mode="last_page")  # Last 25 lines
-
-    Example - Get multiple pages:
-        output = read_console("R1", mode="num_pages", pages=3)  # Last 75 lines
-
-    Example - Get everything (use carefully):
-        output = read_console("R1", mode="all")  # Entire buffer - may be huge!
+    Example - Find interface with context:
+        read_console("R1", mode="diff", pattern="GigabitEthernet", context=2)
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await read_console_impl(app, node_name, mode, pages)
+    return await read_console_impl(app, node_name, mode, pages, pattern, case_insensitive, invert, before, after, context)
 
 
 @mcp.tool()
