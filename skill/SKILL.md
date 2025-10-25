@@ -77,10 +77,11 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 - `ssh_get_command_output()` → Use resource with filtering
 - `ssh_read_buffer()` → Use resource `gns3://sessions/ssh/{node}/buffer`
 
-**Final Architecture (v0.14.0):**
-- **17 Action Tools**: Modify state (create, delete, configure, execute commands)
-- **15 MCP Resources**: Browse state (projects, nodes, sessions, status)
-- **Clear separation**: Tools change things, Resources view things
+**Final Architecture (v0.20.0):**
+- **20 Action Tools**: Modify state (create, delete, configure, execute commands)
+- **17 MCP Resources**: Browse state (projects, nodes, sessions, status, snapshots)
+- **4 MCP Prompts**: Guided workflows (ssh_setup, topology_discovery, troubleshooting, lab_setup)
+- **Clear separation**: Tools change things, Resources view things, Prompts guide workflows
 
 ### Projects
 - **Projects** are isolated network topologies with their own nodes, links, and configuration
@@ -210,6 +211,38 @@ if "error" in result:
 4. **Node must be stopped**: Trying to modify running node properties
    - Error: `NODE_RUNNING`
    - Fix: `set_node("NodeName", action="stop")` then retry
+
+### Tool Annotations (v0.19.0)
+
+**MCP tool annotations** provide metadata to IDE/MCP clients for better UX and safety.
+
+**destructive** (3 tools):
+- `delete_node`, `restore_snapshot`, `delete_drawing`
+- IDE may show warnings or require confirmation
+- These operations delete data or make irreversible changes
+- **Always create backups before using destructive tools**
+
+**idempotent** (9 tools):
+- `open_project`, `create_project`, `close_project`, `set_node`
+- `console_disconnect`, `ssh_configure`, `ssh_disconnect`
+- `update_drawing`, `export_topology_diagram`
+- Safe to retry - same operation produces same result
+- Example: Opening already-opened project is safe
+
+**read_only** (1 tool):
+- `console_read`
+- Tool only reads data, makes no state changes
+- May be cached by MCP clients
+
+**creates_resource** (5 tools):
+- `create_project`, `create_node`, `create_snapshot`
+- `export_topology_diagram`, `create_drawing`
+- Tool creates new resources (in GNS3 or filesystem)
+
+**modifies_topology** (3 tools):
+- `set_connection`, `create_node`, `delete_node`
+- Tool changes network topology structure
+- May require project reload in GNS3 GUI
 
 ### Console Access
 - Nodes have **console** ports for CLI access
@@ -399,6 +432,68 @@ result = send_and_wait_console("R1",
 4. Check routing: send "show ip route"
 5. Test ping: send "ping <target_ip>"
 6. Read output after each command
+```
+
+## MCP Prompts - Guided Workflows (v0.17.0)
+
+**MCP prompts** provide step-by-step guidance for complex multi-step operations.
+
+### Available Prompts
+
+**ssh_setup** - Device-Specific SSH Configuration
+- Covers 6 device types: Cisco IOS, NX-OS, MikroTik, Juniper, Arista, Linux
+- Step-by-step instructions from console configuration to SSH session establishment
+- Device-specific commands with parameter placeholders
+- Troubleshooting guidance for common SSH issues
+
+Usage:
+```
+Call the ssh_setup prompt with device_type parameter
+Example: ssh_setup(device_type="cisco_ios", node_name="R1")
+```
+
+**topology_discovery** - Network Topology Discovery and Visualization
+- Guides through using MCP resources to browse projects/nodes/links
+- Instructions for `export_topology_diagram` tool usage
+- Topology pattern analysis (hub-and-spoke, mesh, tiered, etc.)
+- Common topology questions to answer during discovery
+
+Usage:
+```
+Call the topology_discovery prompt to start guided discovery
+The prompt walks through resource browsing and diagram export
+```
+
+**troubleshooting** - OSI Model-Based Systematic Troubleshooting
+- Layer 1-7 troubleshooting methodology
+- Common issues and resolutions for each layer
+- Console and SSH troubleshooting workflows
+- Performance analysis and log collection
+
+Usage:
+```
+Call the troubleshooting prompt for systematic diagnosis
+Example: troubleshooting(node_name="R1", issue="connectivity")
+```
+
+**lab_setup** - Automated Topology Creation (v0.18.0)
+- Creates complete topologies with single command
+- 6 topology types: star, mesh, linear, ring, OSPF, BGP
+- Automatic node positioning using layout algorithms
+- IP addressing schemes
+
+Topology types:
+- **star**: Hub-and-spoke (parameter: spoke_count)
+- **mesh**: Full mesh (parameter: router_count)
+- **linear**: Chain topology (parameter: router_count)
+- **ring**: Circular topology (parameter: router_count)
+- **ospf**: Multi-area OSPF (parameter: area_count, 3 routers per area)
+- **bgp**: Multiple AS (parameter: AS_count, 2 routers per AS)
+
+Usage:
+```
+Call the lab_setup prompt with topology_type and device_count
+Example: lab_setup(topology_type="ospf", device_count=3)
 ```
 
 ## SSH Automation (v0.12.0)
@@ -681,6 +776,195 @@ set_node("R1", action="start", x=150, y=300)
 - Waits for confirmed stop before starting
 - Returns all retry attempts in result
 - Use for nodes that need clean restart
+
+## Snapshot Management (v0.18.0)
+
+Snapshots capture complete project state for version control and rollback.
+
+### Creating Snapshots
+
+Before major changes, create a snapshot for safe rollback:
+
+**Workflow:**
+1. Stop all running nodes (optional but recommended for consistency)
+2. Create snapshot with descriptive name
+3. Make your changes
+4. If issues occur, restore to snapshot
+
+**Example:**
+```
+create_snapshot("Before OSPF Configuration",
+                "Working baseline before adding OSPF")
+```
+
+**Best Practices:**
+- Use descriptive names with dates: "2025-10-26 Working OSPF Config"
+- Stop nodes before snapshot for consistent state
+- Document what each snapshot represents
+- Create snapshots at major milestones
+
+### Restoring Snapshots
+
+Rollback to previous state (⚠️ **DESTRUCTIVE** - all changes since snapshot are lost):
+
+**Restore Process:**
+1. Call `restore_snapshot("snapshot_name")`
+2. Tool automatically:
+   - Stops all running nodes
+   - Disconnects all console sessions
+   - Restores project to snapshot state
+3. All changes since snapshot are permanently lost
+
+**Example:**
+```
+restore_snapshot("Before OSPF Configuration")
+```
+
+**Warning:** Destructive operation - creates backup before testing restore procedure.
+
+### Browsing Snapshots
+
+List available snapshots via resource:
+```
+gns3://projects/{project_id}/snapshots/
+```
+
+View snapshot details:
+```
+gns3://projects/{project_id}/snapshots/{snapshot_id}
+```
+
+## Lab Setup Automation (v0.18.0)
+
+Use `lab_setup` prompt to create complete topologies automatically.
+
+### Creating a Lab
+
+The lab_setup prompt creates:
+- Nodes positioned using layout algorithms
+- Network links between nodes
+- IP addressing schemes
+- Complete topology diagrams
+
+### Topology Types
+
+**Star Topology** (Hub-and-Spoke):
+```
+lab_setup(topology_type="star", device_count=4)
+```
+- Creates: 1 hub router + 4 spoke routers
+- Links: Hub-to-each-spoke
+- IP: 10.0.{spoke}.0/24 per link
+
+**Mesh Topology** (Full Mesh):
+```
+lab_setup(topology_type="mesh", device_count=4)
+```
+- Creates: 4 routers, all interconnected
+- Links: N*(N-1)/2 point-to-point links
+- IP: 10.0.{subnet}.0/30 per link
+
+**Linear Topology** (Chain):
+```
+lab_setup(topology_type="linear", device_count=4)
+```
+- Creates: 4 routers in series (R1-R2-R3-R4)
+- Links: Sequential connections
+- IP: 10.0.{link}.0/30
+
+**Ring Topology** (Circular):
+```
+lab_setup(topology_type="ring", device_count=4)
+```
+- Creates: 4 routers in a ring
+- Links: Each router connects to two neighbors
+- Closes the loop for redundancy
+
+**OSPF Topology** (Multi-Area):
+```
+lab_setup(topology_type="ospf", device_count=3)
+```
+- Creates: 3 areas with Area 0 backbone
+- Nodes: 3 routers per area + ABRs
+- IP: 10.{area}.0.{router}/32 loopbacks
+
+**BGP Topology** (Multiple AS):
+```
+lab_setup(topology_type="bgp", device_count=3)
+```
+- Creates: 3 autonomous systems
+- Nodes: 2 routers per AS (iBGP peering)
+- Links: eBGP between adjacent AS
+- IP: 10.{AS}.1.0/30 (iBGP), 172.16.{link}.0/30 (eBGP)
+
+### Customizing Labs
+
+**Parameters:**
+- `topology_type`: Required topology type (star/mesh/linear/ring/ospf/bgp)
+- `device_count`: Number of devices/areas/AS (topology-specific)
+- `template_name`: Device template (default: "Alpine Linux")
+- `project_name`: Target project (uses current if not specified)
+
+**Example:**
+```
+lab_setup("ospf", device_count=2,
+          template_name="Cisco IOSv",
+          project_name="OSPF Lab")
+```
+
+## Drawing Tools (v0.19.0 - Hybrid Architecture)
+
+Create visual annotations on topology diagrams using drawing tools.
+
+**Hybrid Pattern:**
+- **READ**: Browse drawings via resource `gns3://projects/{id}/drawings/`
+- **WRITE**: Modify drawings via tools (create_drawing, update_drawing, delete_drawing)
+
+### Available Drawing Types
+
+**Rectangle** - For site boundaries, network segments
+```
+create_drawing("rectangle", x=100, y=100, width=300, height=200,
+               fill_color="#f0f0f0", border_color="#000000", z=0)
+```
+
+**Ellipse** - For cloud/WAN representations, circles
+```
+create_drawing("ellipse", x=200, y=200, rx=50, ry=50,
+               fill_color="#ffffff", border_color="#0000ff", z=0)
+```
+
+**Line** - For connections, arrows, dividers
+```
+create_drawing("line", x=100, y=100, x2=200, y2=150,
+               color="#ff0000", border_width=3, z=1)
+```
+
+**Text** - For labels, site names, annotations
+```
+create_drawing("text", x=150, y=50, text="Data Center A",
+               font_size=14, font_weight="bold", color="#000000", z=1)
+```
+
+### Updating Drawings
+
+Modify drawing properties:
+```
+update_drawing(drawing_id="abc123", x=120, y=80, rotation=45)
+```
+
+### Deleting Drawings
+
+Remove drawing (⚠️ **DESTRUCTIVE**):
+```
+delete_drawing(drawing_id="abc123")
+```
+
+### Z-order Layers
+
+- `z=0`: Background shapes (behind nodes)
+- `z=1`: Foreground labels and annotations
+- Higher z values appear in front
 
 ## Automation Tips
 
