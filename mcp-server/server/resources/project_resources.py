@@ -350,3 +350,104 @@ async def list_drawings_impl(app: "AppContext", project_id: str) -> str:
             "project_id": project_id,
             "details": str(e)
         }, indent=2)
+
+
+async def list_snapshots_impl(app: "AppContext", project_id: str) -> str:
+    """
+    List all snapshots in a project
+
+    Resource URI: gns3://projects/{project_id}/snapshots/
+
+    Args:
+        project_id: GNS3 project UUID
+
+    Returns:
+        JSON array of snapshot information
+    """
+    try:
+        # Verify project exists
+        projects = await app.gns3.get_projects()
+        project = next((p for p in projects if p['project_id'] == project_id), None)
+
+        if not project:
+            return json.dumps({
+                "error": "Project not found",
+                "project_id": project_id
+            }, indent=2)
+
+        # Get snapshots
+        snapshots = await app.gns3.get_snapshots(project_id)
+
+        # Build snapshot info
+        from models import SnapshotInfo
+        snapshot_infos = [
+            SnapshotInfo(
+                snapshot_id=s['snapshot_id'],
+                name=s['name'],
+                created_at=s.get('created_at', ''),
+                project_id=project_id
+            ).model_dump()
+            for s in snapshots
+        ]
+
+        return json.dumps(snapshot_infos, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to list snapshots",
+            "project_id": project_id,
+            "details": str(e)
+        }, indent=2)
+
+
+async def get_snapshot_impl(app: "AppContext", project_id: str, snapshot_id: str) -> str:
+    """
+    Get snapshot details by ID
+
+    Resource URI: gns3://projects/{project_id}/snapshots/{snapshot_id}
+
+    Args:
+        project_id: GNS3 project UUID
+        snapshot_id: Snapshot UUID
+
+    Returns:
+        JSON object with snapshot details
+    """
+    try:
+        # Verify project exists
+        projects = await app.gns3.get_projects()
+        project = next((p for p in projects if p['project_id'] == project_id), None)
+
+        if not project:
+            return json.dumps({
+                "error": "Project not found",
+                "project_id": project_id
+            }, indent=2)
+
+        # Get snapshots
+        snapshots = await app.gns3.get_snapshots(project_id)
+        snapshot = next((s for s in snapshots if s['snapshot_id'] == snapshot_id), None)
+
+        if not snapshot:
+            return json.dumps({
+                "error": "Snapshot not found",
+                "project_id": project_id,
+                "snapshot_id": snapshot_id
+            }, indent=2)
+
+        # Build snapshot info
+        from models import SnapshotInfo
+        snapshot_info = SnapshotInfo(
+            snapshot_id=snapshot['snapshot_id'],
+            name=snapshot['name'],
+            created_at=snapshot.get('created_at', ''),
+            project_id=project_id
+        )
+
+        return json.dumps(snapshot_info.model_dump(), indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to get snapshot",
+            "project_id": project_id,
+            "snapshot_id": snapshot_id,
+            "details": str(e)
+        }, indent=2)

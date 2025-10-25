@@ -27,6 +27,8 @@ class ResourceManager:
         r'^gns3://projects/(?P<project_id>[^/]+)/links/$': 'list_links',
         r'^gns3://projects/(?P<project_id>[^/]+)/templates/$': 'list_templates',
         r'^gns3://projects/(?P<project_id>[^/]+)/drawings/$': 'list_drawings',
+        r'^gns3://projects/(?P<project_id>[^/]+)/snapshots/$': 'list_snapshots',
+        r'^gns3://projects/(?P<project_id>[^/]+)/snapshots/(?P<snapshot_id>[^/]+)$': 'get_snapshot',
 
         # Console session resources
         r'^gns3://sessions/console/$': 'list_console_sessions',
@@ -87,6 +89,8 @@ class ResourceManager:
                     "gns3://projects/{id}/links/",
                     "gns3://projects/{id}/templates/",
                     "gns3://projects/{id}/drawings/",
+                    "gns3://projects/{id}/snapshots/",
+                    "gns3://projects/{id}/snapshots/{id}",
                     "gns3://sessions/console/",
                     "gns3://sessions/console/{node}",
                     "gns3://sessions/ssh/",
@@ -171,6 +175,12 @@ class ResourceManager:
                     "description": f"List of drawings in project {proj['name']}",
                     "mimeType": "application/json"
                 },
+                {
+                    "uri": f"gns3://projects/{project_id}/snapshots/",
+                    "name": f"Snapshots in {proj['name']}",
+                    "description": f"List of snapshots in project {proj['name']}",
+                    "mimeType": "application/json"
+                },
             ])
 
         # Session resources
@@ -241,6 +251,16 @@ class ResourceManager:
         """List drawings in project"""
         from .project_resources import list_drawings_impl
         return await list_drawings_impl(self.app, project_id)
+
+    async def list_snapshots(self, project_id: str) -> str:
+        """List snapshots in project"""
+        from .project_resources import list_snapshots_impl
+        return await list_snapshots_impl(self.app, project_id)
+
+    async def get_snapshot(self, project_id: str, snapshot_id: str) -> str:
+        """Get snapshot details"""
+        from .project_resources import get_snapshot_impl
+        return await get_snapshot_impl(self.app, project_id, snapshot_id)
 
     # ========================================================================
     # Session Resource Handlers
