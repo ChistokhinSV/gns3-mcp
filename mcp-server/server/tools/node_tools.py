@@ -6,7 +6,15 @@ import asyncio
 import json
 from typing import TYPE_CHECKING, Optional
 
-from models import NodeInfo, NodeSummary, ErrorResponse
+from models import NodeInfo, NodeSummary, ErrorResponse, ErrorCode
+from error_utils import (
+    create_error_response,
+    node_not_found_error,
+    project_not_found_error,
+    template_not_found_error,
+    node_running_error,
+    validation_error
+)
 
 if TYPE_CHECKING:
     from main import AppContext
@@ -40,10 +48,13 @@ async def list_nodes_impl(app: "AppContext") -> str:
         return json.dumps([n.model_dump() for n in node_summaries], indent=2)
 
     except Exception as e:
-        return json.dumps(ErrorResponse(
+        return create_error_response(
             error="Failed to list nodes",
-            details=str(e)
-        ).model_dump(), indent=2)
+            error_code=ErrorCode.GNS3_API_ERROR.value,
+            details=str(e),
+            suggested_action="Check that GNS3 server is running and a project is currently open",
+            context={"project_id": app.current_project_id, "exception": str(e)}
+        )
 
 
 async def get_node_details_impl(app: "AppContext", node_name: str) -> str:
@@ -62,11 +73,12 @@ async def get_node_details_impl(app: "AppContext", node_name: str) -> str:
         node = next((n for n in nodes if n['name'] == node_name), None)
 
         if not node:
-            return json.dumps(ErrorResponse(
-                error="Node not found",
-                details=f"No node named '{node_name}' in current project. Use list_nodes() to see available nodes.",
-                suggested_action="Call list_nodes() to see exact node names (case-sensitive)"
-            ).model_dump(), indent=2)
+            available_nodes = [n['name'] for n in nodes]
+            return node_not_found_error(
+                node_name=node_name,
+                project_id=app.current_project_id,
+                available_nodes=available_nodes
+            )
 
         # Extract hardware properties from nested 'properties' object
         props = node.get('properties', {})
@@ -99,10 +111,13 @@ async def get_node_details_impl(app: "AppContext", node_name: str) -> str:
         return json.dumps(node_info.model_dump(), indent=2)
 
     except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to get node details",
-            details=str(e)
-        ).model_dump(), indent=2)
+        return create_error_response(
+            error=f"Failed to get details for node '{node_name}'",
+            error_code=ErrorCode.GNS3_API_ERROR.value,
+            details=str(e),
+            suggested_action="Verify the node exists and GNS3 server is accessible",
+            context={"node_name": node_name, "project_id": app.current_project_id, "exception": str(e)}
+        )
 
 
 async def set_node_impl(app: "AppContext",
@@ -147,21 +162,19 @@ async def set_node_impl(app: "AppContext",
         Status message describing what was done
     """
     if not app.current_project_id:
-        return json.dumps(ErrorResponse(
-            error="No project opened",
-            details="Use open_project() to open a project first"
-        ).model_dump(), indent=2)
+        return project_not_found_error()
 
     # Find node
     nodes = await app.gns3.get_nodes(app.current_project_id)
     node = next((n for n in nodes if n['name'] == node_name), None)
 
     if not node:
-        return json.dumps(ErrorResponse(
-            error="Node not found",
-            details=f"Node '{node_name}' does not exist in current project",
-            suggested_action="Call list_nodes() to see exact node names (case-sensitive)"
-        ).model_dump(), indent=2)
+        available_nodes = [n['name'] for n in nodes]
+        return node_not_found_error(
+            node_name=node_name,
+            project_id=app.current_project_id,
+            available_nodes=available_nodes
+        )
 
     node_id = node['node_id']
     node_status = node.get('status', 'unknown')
@@ -173,10 +186,11 @@ async def set_node_impl(app: "AppContext",
         requires_stopped.append('name')
 
     if requires_stopped and node_status != 'stopped':
-        return json.dumps(ErrorResponse(
-            error="Node must be stopped",
-            details=f"Properties {requires_stopped} can only be changed when node is stopped. Current status: {node_status}. Use set_node(node_name='{node_name}', action='stop') first."
-        ).model_dump(), indent=2)
+        properties_str = ', '.join(requires_stopped)
+        return node_running_error(
+            node_name=node_name,
+            operation=f"change properties: {properties_str}"
+        )
 
     # Handle property updates
     # Separate top-level properties from hardware properties
@@ -249,10 +263,13 @@ async def set_node_impl(app: "AppContext",
 
             results.append(f"Updated: {', '.join(changes)}")
         except Exception as e:
-            return json.dumps(ErrorResponse(
-                error="Failed to update properties",
-                details=str(e)
-            ).model_dump(), indent=2)
+            return create_error_response(
+                error=f"Failed to update properties for node '{node_name}'",
+                error_code=ErrorCode.OPERATION_FAILED.value,
+                details=str(e),
+                suggested_action="Check that the property values are valid for this node type and GNS3 server is accessible",
+                context={"node_name": node_name, "update_payload": update_payload, "exception": str(e)}
+            )
 
     # Handle action
     if action:
@@ -298,16 +315,21 @@ async def set_node_impl(app: "AppContext",
                 results.append(f"Started {node_name}")
 
             else:
-                return json.dumps(ErrorResponse(
-                    error="Unknown action",
-                    details=f"Action '{action}' not recognized. Valid actions: start, stop, suspend, reload, restart"
-                ).model_dump(), indent=2)
+                return validation_error(
+                    message=f"Invalid action '{action}'",
+                    parameter="action",
+                    value=action,
+                    valid_values=["start", "stop", "suspend", "reload", "restart"]
+                )
 
         except Exception as e:
-            return json.dumps(ErrorResponse(
-                error="Action failed",
-                details=str(e)
-            ).model_dump(), indent=2)
+            return create_error_response(
+                error=f"Failed to execute action '{action}' on node '{node_name}'",
+                error_code=ErrorCode.OPERATION_FAILED.value,
+                details=str(e),
+                suggested_action="Check node state and GNS3 server logs for details",
+                context={"node_name": node_name, "action": action, "exception": str(e)}
+            )
 
     if not results:
         return json.dumps({"message": f"No changes made to {node_name}"}, indent=2)
@@ -338,10 +360,11 @@ async def create_node_impl(app: "AppContext", template_name: str, x: int, y: int
         template = next((t for t in templates if t['name'] == template_name), None)
 
         if not template:
-            return json.dumps(ErrorResponse(
-                error="Template not found",
-                details=f"Template '{template_name}' not found. Use list_templates() to see available templates."
-            ).model_dump(), indent=2)
+            available_templates = [t['name'] for t in templates]
+            return template_not_found_error(
+                template_name=template_name,
+                available_templates=available_templates
+            )
 
         payload = {"x": x, "y": y, "compute_id": compute_id}
         if node_name:
@@ -354,10 +377,13 @@ async def create_node_impl(app: "AppContext", template_name: str, x: int, y: int
         return json.dumps({"message": "Node created successfully", "node": result}, indent=2)
 
     except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to create node",
-            details=str(e)
-        ).model_dump(), indent=2)
+        return create_error_response(
+            error=f"Failed to create node from template '{template_name}'",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details=str(e),
+            suggested_action="Verify template exists, GNS3 server is accessible, and position coordinates are valid",
+            context={"template_name": template_name, "x": x, "y": y, "node_name": node_name, "exception": str(e)}
+        )
 
 
 async def delete_node_impl(app: "AppContext", node_name: str) -> str:
@@ -374,17 +400,22 @@ async def delete_node_impl(app: "AppContext", node_name: str) -> str:
         node = next((n for n in nodes if n['name'] == node_name), None)
 
         if not node:
-            return json.dumps(ErrorResponse(
-                error="Node not found",
-                details=f"Node '{node_name}' does not exist"
-            ).model_dump(), indent=2)
+            available_nodes = [n['name'] for n in nodes]
+            return node_not_found_error(
+                node_name=node_name,
+                project_id=app.current_project_id,
+                available_nodes=available_nodes
+            )
 
         await app.gns3.delete_node(app.current_project_id, node['node_id'])
 
         return json.dumps({"message": f"Node '{node_name}' deleted successfully"}, indent=2)
 
     except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to delete node",
-            details=str(e)
-        ).model_dump(), indent=2)
+        return create_error_response(
+            error=f"Failed to delete node '{node_name}'",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details=str(e),
+            suggested_action="Verify the node exists, stop it if running, and check GNS3 server is accessible",
+            context={"node_name": node_name, "project_id": app.current_project_id, "exception": str(e)}
+        )

@@ -5,7 +5,8 @@ Provides tools for creating and managing drawing objects (shapes, text, lines).
 import json
 from typing import TYPE_CHECKING, Optional
 
-from models import DrawingInfo, ErrorResponse
+from models import DrawingInfo, ErrorResponse, ErrorCode
+from error_utils import create_error_response, drawing_not_found_error
 from export_tools import (
     create_rectangle_svg,
     create_ellipse_svg,
@@ -43,10 +44,13 @@ async def list_drawings_impl(app: "AppContext") -> str:
         return json.dumps([d.model_dump() for d in drawing_models], indent=2)
 
     except Exception as e:
-        return json.dumps(ErrorResponse(
+        return create_error_response(
             error="Failed to list drawings",
-            details=str(e)
-        ).model_dump(), indent=2)
+            error_code=ErrorCode.GNS3_API_ERROR.value,
+            details=str(e),
+            suggested_action="Check that GNS3 server is running and a project is currently open",
+            context={"project_id": app.current_project_id, "exception": str(e)}
+        )
 
 
 async def create_drawing_impl(app: "AppContext",
@@ -134,49 +138,64 @@ async def create_drawing_impl(app: "AppContext",
         # Generate appropriate SVG based on type
         if drawing_type == "rectangle":
             if width is None or height is None:
-                return json.dumps(ErrorResponse(
-                    error="Missing required parameters",
-                    details="Rectangle requires 'width' and 'height' parameters"
-                ).model_dump(), indent=2)
+                return create_error_response(
+                    error="Missing required parameters for rectangle",
+                    error_code=ErrorCode.MISSING_PARAMETER.value,
+                    details="Rectangle requires 'width' and 'height' parameters",
+                    suggested_action="Provide width and height parameters",
+                    context={"drawing_type": drawing_type, "width": width, "height": height}
+                )
 
             svg = create_rectangle_svg(width, height, fill_color, border_color, border_width)
             message = "Rectangle created successfully"
 
         elif drawing_type == "ellipse":
             if rx is None or ry is None:
-                return json.dumps(ErrorResponse(
-                    error="Missing required parameters",
-                    details="Ellipse requires 'rx' and 'ry' parameters"
-                ).model_dump(), indent=2)
+                return create_error_response(
+                    error="Missing required parameters for ellipse",
+                    error_code=ErrorCode.MISSING_PARAMETER.value,
+                    details="Ellipse requires 'rx' and 'ry' parameters",
+                    suggested_action="Provide rx and ry parameters (horizontal and vertical radii)",
+                    context={"drawing_type": drawing_type, "rx": rx, "ry": ry}
+                )
 
             svg = create_ellipse_svg(rx, ry, fill_color, border_color, border_width)
             message = "Ellipse created successfully"
 
         elif drawing_type == "line":
             if x2 is None or y2 is None:
-                return json.dumps(ErrorResponse(
-                    error="Missing required parameters",
-                    details="Line requires 'x2' and 'y2' parameters (offset from start point)"
-                ).model_dump(), indent=2)
+                return create_error_response(
+                    error="Missing required parameters for line",
+                    error_code=ErrorCode.MISSING_PARAMETER.value,
+                    details="Line requires 'x2' and 'y2' parameters (offset from start point)",
+                    suggested_action="Provide x2 and y2 parameters to define line endpoint",
+                    context={"drawing_type": drawing_type, "x2": x2, "y2": y2}
+                )
 
             svg = create_line_svg(x2, y2, color, border_width)
             message = "Line created successfully"
 
         elif drawing_type == "text":
             if text is None:
-                return json.dumps(ErrorResponse(
-                    error="Missing required parameters",
-                    details="Text drawing requires 'text' parameter"
-                ).model_dump(), indent=2)
+                return create_error_response(
+                    error="Missing required parameter for text",
+                    error_code=ErrorCode.MISSING_PARAMETER.value,
+                    details="Text drawing requires 'text' parameter",
+                    suggested_action="Provide text parameter with the text content to display",
+                    context={"drawing_type": drawing_type}
+                )
 
             svg = create_text_svg(text, font_size, font_weight, font_family, color)
             message = "Text created successfully"
 
         else:
-            return json.dumps(ErrorResponse(
-                error="Invalid drawing type",
-                details=f"drawing_type must be 'rectangle', 'ellipse', 'line', or 'text', got '{drawing_type}'"
-            ).model_dump(), indent=2)
+            from error_utils import validation_error
+            return validation_error(
+                message=f"Invalid drawing type '{drawing_type}'",
+                parameter="drawing_type",
+                value=drawing_type,
+                valid_values=["rectangle", "ellipse", "line", "text"]
+            )
 
         # Create drawing in GNS3
         drawing_data = {
@@ -192,10 +211,85 @@ async def create_drawing_impl(app: "AppContext",
         return json.dumps({"message": message, "drawing": result}, indent=2)
 
     except Exception as e:
-        return json.dumps(ErrorResponse(
+        return create_error_response(
             error="Failed to create drawing",
-            details=str(e)
-        ).model_dump(), indent=2)
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details=str(e),
+            suggested_action="Check drawing parameters are valid and GNS3 server is accessible",
+            context={"drawing_type": drawing_type, "x": x, "y": y, "z": z, "exception": str(e)}
+        )
+
+
+async def update_drawing_impl(app: "AppContext",
+                              drawing_id: str,
+                              x: Optional[int] = None,
+                              y: Optional[int] = None,
+                              z: Optional[int] = None,
+                              rotation: Optional[int] = None,
+                              svg: Optional[str] = None,
+                              locked: Optional[bool] = None) -> str:
+    """Update properties of an existing drawing object
+
+    Args:
+        drawing_id: ID of the drawing to update
+        x: New X coordinate (optional)
+        y: New Y coordinate (optional)
+        z: New Z-order/layer (optional)
+        rotation: New rotation angle in degrees (optional)
+        svg: New SVG content (optional, for changing appearance)
+        locked: Lock/unlock drawing (optional)
+
+    Returns:
+        JSON with updated drawing info
+
+    Example:
+        # Move drawing to new position
+        update_drawing("draw-123", x=200, y=150)
+
+        # Rotate drawing 45 degrees
+        update_drawing("draw-123", rotation=45)
+
+        # Lock drawing position
+        update_drawing("draw-123", locked=True)
+    """
+    try:
+        # Build update payload with only provided parameters
+        update_data = {}
+        if x is not None:
+            update_data["x"] = x
+        if y is not None:
+            update_data["y"] = y
+        if z is not None:
+            update_data["z"] = z
+        if rotation is not None:
+            update_data["rotation"] = rotation
+        if svg is not None:
+            update_data["svg"] = svg
+        if locked is not None:
+            update_data["locked"] = locked
+
+        if not update_data:
+            return create_error_response(
+                error="No update parameters provided",
+                error_code=ErrorCode.MISSING_PARAMETER.value,
+                details="Provide at least one parameter to update (x, y, z, rotation, svg, locked)",
+                suggested_action="Specify at least one parameter: x, y, z, rotation, svg, or locked",
+                context={"drawing_id": drawing_id}
+            )
+
+        # Update drawing in GNS3
+        result = await app.gns3.update_drawing(app.current_project_id, drawing_id, update_data)
+
+        return json.dumps({"message": "Drawing updated successfully", "drawing": result}, indent=2)
+
+    except Exception as e:
+        return create_error_response(
+            error=f"Failed to update drawing '{drawing_id}'",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details=str(e),
+            suggested_action="Verify drawing ID exists and update parameters are valid",
+            context={"drawing_id": drawing_id, "update_data": update_data, "exception": str(e)}
+        )
 
 
 async def delete_drawing_impl(app: "AppContext", drawing_id: str) -> str:
@@ -212,7 +306,10 @@ async def delete_drawing_impl(app: "AppContext", drawing_id: str) -> str:
         return json.dumps({"message": f"Drawing {drawing_id} deleted successfully"}, indent=2)
 
     except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to delete drawing",
-            details=str(e)
-        ).model_dump(), indent=2)
+        return create_error_response(
+            error=f"Failed to delete drawing '{drawing_id}'",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details=str(e),
+            suggested_action="Verify drawing ID exists using list_drawings() or resource gns3://projects/{id}/drawings/",
+            context={"drawing_id": drawing_id, "project_id": app.current_project_id, "exception": str(e)}
+        )

@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING, List, Dict, Any
 
 from link_validator import LinkValidator
 from models import (
-    LinkInfo, LinkEndpoint, ErrorResponse,
+    LinkInfo, LinkEndpoint, ErrorResponse, ErrorCode,
     ConnectOperation, DisconnectOperation,
     CompletedOperation, FailedOperation, OperationResult,
     validate_connection_operations
 )
+from error_utils import create_error_response
 
 if TYPE_CHECKING:
     from main import AppContext
@@ -102,10 +103,13 @@ async def get_links_impl(app: "AppContext") -> str:
         return json.dumps(response, indent=2)
 
     except Exception as e:
-        return json.dumps(ErrorResponse(
+        return create_error_response(
             error="Failed to get links",
-            details=str(e)
-        ).model_dump(), indent=2)
+            error_code=ErrorCode.GNS3_API_ERROR.value,
+            details=str(e),
+            suggested_action="Check that GNS3 server is running and a project is currently open",
+            context={"project_id": app.current_project_id, "exception": str(e)}
+        )
 
 
 async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any]]) -> str:
@@ -144,10 +148,13 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
         # Validate operation structure with Pydantic
         parsed_ops, validation_error = validate_connection_operations(connections)
         if validation_error:
-            return json.dumps(ErrorResponse(
+            return create_error_response(
                 error="Invalid operation structure",
-                details=validation_error
-            ).model_dump(), indent=2)
+                error_code=ErrorCode.INVALID_PARAMETER.value,
+                details=validation_error,
+                suggested_action="Check operation format: connect operations need node_a, node_b, port_a, port_b, adapter_a, adapter_b; disconnect operations need link_id",
+                context={"validation_error": validation_error, "operations": connections}
+            )
 
         # Fetch topology data ONCE (not in loop - fixes N+1 issue)
         nodes = await app.gns3.get_nodes(app.current_project_id)
@@ -165,22 +172,26 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
                     op.node_a, op.adapter_a
                 )
                 if error:
-                    return json.dumps(ErrorResponse(
+                    return create_error_response(
                         error=f"Failed to resolve adapter for {op.node_a}",
+                        error_code=ErrorCode.INVALID_ADAPTER.value,
                         details=error,
-                        operation_index=idx
-                    ).model_dump(), indent=2)
+                        suggested_action="Use valid adapter name (e.g., 'eth0', 'GigabitEthernet0/0') or adapter number (0, 1, 2, ...)",
+                        context={"node_name": op.node_a, "adapter": op.adapter_a, "operation_index": idx}
+                    )
 
                 # Resolve adapter_b
                 adapter_b_num, port_b_num, port_b_name, error = validator.resolve_adapter_identifier(
                     op.node_b, op.adapter_b
                 )
                 if error:
-                    return json.dumps(ErrorResponse(
+                    return create_error_response(
                         error=f"Failed to resolve adapter for {op.node_b}",
+                        error_code=ErrorCode.INVALID_ADAPTER.value,
                         details=error,
-                        operation_index=idx
-                    ).model_dump(), indent=2)
+                        suggested_action="Use valid adapter name (e.g., 'eth0', 'GigabitEthernet0/0') or adapter number (0, 1, 2, ...)",
+                        context={"node_name": op.node_b, "adapter": op.adapter_b, "operation_index": idx}
+                    )
 
                 # Store resolved values
                 resolved_ops.append({
@@ -204,11 +215,26 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
                 validation_error = validator.validate_disconnect(op.link_id)
 
             if validation_error:
-                return json.dumps(ErrorResponse(
+                # Determine error code based on validation message
+                if "already connected" in validation_error or "in use" in validation_error:
+                    error_code = ErrorCode.PORT_IN_USE.value
+                elif "not found" in validation_error:
+                    if "Node" in validation_error:
+                        error_code = ErrorCode.NODE_NOT_FOUND.value
+                    elif "Link" in validation_error:
+                        error_code = ErrorCode.LINK_NOT_FOUND.value
+                    else:
+                        error_code = ErrorCode.INVALID_PARAMETER.value
+                else:
+                    error_code = ErrorCode.INVALID_PARAMETER.value
+
+                return create_error_response(
                     error=f"Validation failed at operation {idx}",
+                    error_code=error_code,
                     details=validation_error,
-                    operation_index=idx
-                ).model_dump(), indent=2)
+                    suggested_action="Check get_links() to see current topology and verify node names, ports, and adapters",
+                    context={"operation_index": idx, "operation": op.model_dump()}
+                )
 
         logger.info(f"All {len(parsed_ops)} operations validated successfully")
 
@@ -286,7 +312,10 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
         return json.dumps(result.model_dump(), indent=2)
 
     except Exception as e:
-        return json.dumps(ErrorResponse(
+        return create_error_response(
             error="Failed to manage connections",
-            details=str(e)
-        ).model_dump(), indent=2)
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details=str(e),
+            suggested_action="Check GNS3 server is accessible, verify operation format, and review GNS3 server logs",
+            context={"operations": connections, "exception": str(e)}
+        )

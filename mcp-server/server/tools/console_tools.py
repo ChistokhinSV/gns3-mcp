@@ -8,7 +8,15 @@ import time
 import re
 from typing import TYPE_CHECKING, Optional
 
-from models import ConsoleStatus, ErrorResponse
+from models import ConsoleStatus, ErrorResponse, ErrorCode
+from error_utils import (
+    create_error_response,
+    node_not_found_error,
+    project_not_found_error,
+    console_connection_failed_error,
+    node_stopped_error,
+    validation_error
+)
 
 if TYPE_CHECKING:
     from main import AppContext
@@ -18,29 +26,42 @@ async def _auto_connect_console(app: "AppContext", node_name: str) -> Optional[s
     """Auto-connect to console if not already connected
 
     Returns:
-        Error message if connection fails, None if successful
+        JSON error message if connection fails, None if successful
     """
     # Check if already connected
     if app.console.has_session(node_name):
         return None
 
     if not app.current_project_id:
-        return "No project opened. Use open_project() first."
+        return project_not_found_error()
 
     # Find node
     nodes = await app.gns3.get_nodes(app.current_project_id)
     node = next((n for n in nodes if n['name'] == node_name), None)
 
     if not node:
-        return f"Node '{node_name}' not found. Use list_nodes() to see available nodes (case-sensitive)."
+        available_nodes = [n['name'] for n in nodes]
+        return node_not_found_error(
+            node_name=node_name,
+            project_id=app.current_project_id,
+            available_nodes=available_nodes
+        )
 
     # Check console type
     console_type = node['console_type']
     if console_type not in ['telnet']:
-        return f"Console type '{console_type}' not supported (only 'telnet' currently supported). Check node configuration."
+        return validation_error(
+            message=f"Console type '{console_type}' not supported",
+            parameter="console_type",
+            value=console_type,
+            valid_values=["telnet"]
+        )
 
     if not node['console']:
-        return f"Node '{node_name}' has no console configured. Verify node is started with list_nodes()."
+        return node_stopped_error(
+            node_name=node_name,
+            operation="console access"
+        )
 
     # Extract host from GNS3 client config
     host = app.gns3.base_url.split('//')[1].split(':')[0]
@@ -51,7 +72,12 @@ async def _auto_connect_console(app: "AppContext", node_name: str) -> Optional[s
         await app.console.connect(host, port, node_name)
         return None
     except Exception as e:
-        return f"Failed to connect: {str(e)}"
+        return console_connection_failed_error(
+            node_name=node_name,
+            host=host,
+            port=port,
+            details=str(e)
+        )
 
 
 async def send_console_impl(app: "AppContext", node_name: str, data: str, raw: bool = False) -> str:
@@ -110,7 +136,16 @@ async def send_console_impl(app: "AppContext", node_name: str, data: str, raw: b
         data = data.replace('\n', '\r\n')      # Convert all LF to CRLF
 
     success = await app.console.send_by_node(node_name, data)
-    return "Sent successfully" if success else "Failed to send"
+    if success:
+        return "Sent successfully"
+    else:
+        return create_error_response(
+            error=f"Failed to send data to console for node '{node_name}'",
+            error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
+            details="Console session may have been disconnected",
+            suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
+            context={"node_name": node_name}
+        )
 
 
 async def read_console_impl(
@@ -180,17 +215,22 @@ async def read_console_impl(
     """
     # Validate pages parameter is only used with num_pages mode
     if pages != 1 and mode != "num_pages":
-        return (f"Error: 'pages' parameter can only be used with mode='num_pages'.\n"
-                f"Current mode: '{mode}', pages: {pages}\n"
-                f"Either change mode to 'num_pages' or remove the 'pages' parameter.")
+        return create_error_response(
+            error="Invalid parameter combination",
+            error_code=ErrorCode.INVALID_PARAMETER.value,
+            details=f"'pages' parameter (value: {pages}) can only be used with mode='num_pages' (current mode: '{mode}')",
+            suggested_action="Either change mode to 'num_pages' or remove the 'pages' parameter",
+            context={"mode": mode, "pages": pages}
+        )
 
     # Validate mode parameter
     if mode not in ("diff", "last_page", "num_pages", "all"):
-        return (f"Invalid mode '{mode}'. Valid modes:\n"
-                f"  'diff' - New output since last read (default)\n"
-                f"  'last_page' - Last ~25 lines\n"
-                f"  'num_pages' - Last N pages (use 'pages' parameter)\n"
-                f"  'all' - Entire buffer (WARNING: May be very large!)")
+        return validation_error(
+            message=f"Invalid mode '{mode}'",
+            parameter="mode",
+            value=mode,
+            valid_values=["diff", "last_page", "num_pages", "all"]
+        )
 
     # Auto-connect if needed
     error = await _auto_connect_console(app, node_name)
@@ -484,12 +524,13 @@ async def send_and_wait_console_impl(
     # Send command
     success = await app.console.send_by_node(node_name, command)
     if not success:
-        return json.dumps({
-            "error": "Failed to send command",
-            "output": "",
-            "pattern_found": False,
-            "timeout_occurred": False
-        }, indent=2)
+        return create_error_response(
+            error=f"Failed to send command to console for node '{node_name}'",
+            error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
+            details="Console session may have been disconnected",
+            suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
+            context={"node_name": node_name, "command": command[:100]}  # Truncate long commands
+        )
 
     # Wait for pattern or timeout
     start_time = time.time()
@@ -501,12 +542,13 @@ async def send_and_wait_console_impl(
         try:
             pattern_re = re.compile(wait_pattern)
         except re.error as e:
-            return json.dumps({
-                "error": f"Invalid regex pattern: {str(e)}",
-                "output": "",
-                "pattern_found": False,
-                "timeout_occurred": False
-            }, indent=2)
+            return create_error_response(
+                error=f"Invalid regex pattern: {str(e)}",
+                error_code=ErrorCode.INVALID_PARAMETER.value,
+                details=f"Pattern '{wait_pattern}' is not a valid regular expression",
+                suggested_action="Check regex syntax and escape special characters",
+                context={"wait_pattern": wait_pattern, "regex_error": str(e)}
+            )
 
         # Poll console every 0.5s
         while (time.time() - start_time) < timeout:
@@ -625,8 +667,22 @@ async def send_keystroke_impl(app: "AppContext", node_name: str, key: str) -> st
 
     key_lower = key.lower()
     if key_lower not in SPECIAL_KEYS:
-        return f"Unknown key: {key}. Supported keys: {', '.join(sorted(SPECIAL_KEYS.keys()))}"
+        return validation_error(
+            message=f"Unknown key '{key}'",
+            parameter="key",
+            value=key,
+            valid_values=sorted(SPECIAL_KEYS.keys())
+        )
 
     keystroke = SPECIAL_KEYS[key_lower]
     success = await app.console.send_by_node(node_name, keystroke)
-    return "Sent successfully" if success else "Failed to send"
+    if success:
+        return "Sent successfully"
+    else:
+        return create_error_response(
+            error=f"Failed to send keystroke to console for node '{node_name}'",
+            error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
+            details="Console session may have been disconnected",
+            suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
+            context={"node_name": node_name, "key": key}
+        )
