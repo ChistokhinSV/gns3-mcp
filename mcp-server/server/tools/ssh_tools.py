@@ -79,22 +79,52 @@ async def configure_ssh_impl(
                 }
             )
 
+            # Success - SSH connection established
             if response.status_code == 200:
                 return json.dumps(response.json(), indent=2)
-            else:
-                # SSH connection failed - return detailed error
+
+            # SSH connection error (400) or server error (500)
+            try:
                 error_data = response.json()
+            except Exception:
+                # JSON parsing failed - return raw response
                 return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "Unknown error"),
-                    "details": error_data.get("detail", {}).get("details"),
-                    "ssh_connection_error": error_data.get("detail", {}).get("ssh_connection_error")
+                    "error": f"HTTP {response.status_code}",
+                    "details": response.text,
+                    "suggestion": "Unexpected response format from SSH proxy"
                 }, indent=2)
 
-        except Exception as e:
+            # Extract error details from FastAPI HTTPException response
+            detail = error_data.get("detail", {})
+
+            # Handle structured error response
+            if isinstance(detail, dict):
+                return json.dumps({
+                    "error": detail.get("error", f"HTTP {response.status_code} error"),
+                    "details": detail.get("details"),
+                    "ssh_connection_error": detail.get("ssh_connection_error")
+                }, indent=2)
+            else:
+                # detail is a string or other type
+                return json.dumps({
+                    "error": f"HTTP {response.status_code} error",
+                    "details": str(detail)
+                }, indent=2)
+
+        except httpx.RequestError as e:
+            # Network/connection errors
             return json.dumps({
-                "error": "Failed to connect to SSH proxy",
+                "error": "Failed to connect to SSH proxy service",
                 "details": str(e),
                 "suggestion": "Ensure SSH proxy service is running: docker ps | grep gns3-ssh-proxy"
+            }, indent=2)
+
+        except Exception as e:
+            # Unexpected errors
+            return json.dumps({
+                "error": "Unexpected error",
+                "details": str(e),
+                "suggestion": "Check SSH proxy logs for details"
             }, indent=2)
 
 

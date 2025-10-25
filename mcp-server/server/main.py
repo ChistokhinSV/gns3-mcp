@@ -1,7 +1,43 @@
-"""GNS3 MCP Server v0.12.0
+"""GNS3 MCP Server v0.12.4
 
 Model Context Protocol server for GNS3 lab automation.
 Provides console and SSH automation tools for network devices.
+
+IMPORTANT: Tool Selection Guidelines
+====================================
+When automating network devices, ALWAYS prefer SSH tools over console tools!
+
+SSH Tools (Preferred):
+- ssh_send_command(), ssh_send_config_set(), ssh_read_buffer()
+- Better reliability with automatic prompt detection
+- Structured output and error handling
+- Supports 200+ device types via Netmiko
+
+Console Tools (Use Only When Necessary):
+- send_console(), read_console(), send_and_wait_console()
+- For initial device configuration (enabling SSH, creating users)
+- For troubleshooting when SSH is unavailable
+- For devices without SSH support (VPCS, simple switches)
+
+Typical Workflow:
+1. Use console tools to configure SSH access on device
+2. Establish SSH session with configure_ssh()
+3. Switch to SSH tools for all automation tasks
+4. Return to console only if SSH fails
+
+Version 0.12.4 - Error Handling Improvement (BUGFIX):
+- FIXED: configure_ssh error messages now properly distinguish SSH connection
+  errors (timeout, auth failure) from server errors
+- Better error parsing from SSH proxy HTTP responses
+
+Version 0.12.3 - Console Output Fix (BUGFIX):
+- FIXED: send_and_wait_console now accumulates all output during polling
+
+Version 0.12.2 - Lightweight Node Listing (BUGFIX):
+- FIXED: list_nodes returns lightweight NodeSummary to prevent large output failures
+
+Version 0.12.1 - Grep Filtering (FEATURE):
+- ADDED: Grep-style pattern filtering for SSH and console buffers
 
 Version 0.12.0 - SSH Proxy Service (FEATURE - Phase 1):
 - NEW: SSH proxy service (FastAPI container on port 8022, Python 3.13-slim)
@@ -440,6 +476,14 @@ async def set_node(ctx: Context,
 async def send_console(ctx: Context, node_name: str, data: str, raw: bool = False) -> str:
     """Send data to console (auto-connects if needed)
 
+    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
+    - Initial device configuration (enabling SSH, creating users)
+    - Troubleshooting when SSH is unavailable
+    - Devices without SSH support (VPCS, simple switches)
+
+    For automation workflows, use SSH tools (ssh_send_command, ssh_send_config_set)
+    which provide better reliability, error handling, and prompt detection.
+
     Sends data immediately to console without waiting for response.
     For interactive workflows, use read_console() after sending to verify output.
 
@@ -490,6 +534,14 @@ async def read_console(
     context: int = 0
 ) -> str:
     """Read console output with optional grep filtering (auto-connects if needed)
+
+    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
+    - Initial device configuration (enabling SSH, creating users)
+    - Troubleshooting when SSH is unavailable
+    - Devices without SSH support
+
+    For automation workflows, use ssh_send_command() and ssh_read_buffer()
+    which provide better reliability and structured output.
 
     Reads accumulated output from background console buffer. Output accumulates
     while device runs - this function retrieves it without blocking.
@@ -597,6 +649,14 @@ async def send_and_wait_console(
 ) -> str:
     """Send command and wait for specific prompt pattern
 
+    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
+    - Initial device configuration (enabling SSH, creating users)
+    - Troubleshooting when SSH is unavailable
+    - Devices without SSH support
+
+    For automation workflows, use ssh_send_command() which provides automatic
+    prompt detection and better error handling.
+
     Combines send + wait + read into single operation. Useful for interactive
     workflows where you need to verify prompt before proceeding.
 
@@ -665,6 +725,11 @@ async def send_and_wait_console(
 @mcp.tool()
 async def send_keystroke(ctx: Context, node_name: str, key: str) -> str:
     """Send special keystroke to console (auto-connects if needed)
+
+    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
+    - Initial device configuration (enabling SSH, creating users)
+    - Troubleshooting when SSH is unavailable
+    - Devices without SSH support (VPCS, simple switches)
 
     Sends special keys like arrows, function keys, control sequences for
     navigating menus, editing in vim, or TUI applications.

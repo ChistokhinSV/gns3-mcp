@@ -10,9 +10,32 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.12.3
+## Current Version: v0.12.4
 
-**Latest Release:** v0.12.3 - send_and_wait_console Output Fix (Bugfix - Critical)
+**Latest Release:** v0.12.4 - Documentation and Error Handling (Patch - UX)
+- **ENHANCED**: Added comprehensive SSH vs Console tool selection guidelines
+  - Server-level instruction in main.py module docstring (visible on server load)
+  - Individual tool docstrings updated with preference notes
+  - Skill file updated with "Choosing Between SSH and Console Tools" section
+- **IMPROVED**: configure_ssh error response handling
+  - Better parsing of HTTP 400 (connection errors) vs HTTP 500 (server errors)
+  - Graceful handling of JSON parsing failures in error responses
+  - Clearer error messages distinguishing connection failures from other issues
+- **GUIDANCE**: When automating network devices, always prefer SSH tools
+  - SSH tools: Better reliability, automatic prompt detection, structured output
+  - Console tools: Only for initial SSH configuration, troubleshooting, or devices without SSH
+  - Typical workflow: Console → configure SSH → Switch to SSH tools
+- **Files changed**:
+  - `mcp-server/server/main.py`: Added server-level tool selection guidance (lines 6-26), updated 4 console tool docstrings
+  - `mcp-server/server/tools/ssh_tools.py`: Improved error handling in configure_ssh_impl (lines 82-128)
+  - `skill/SKILL.md`: Added "Choosing Between SSH and Console Tools" section (lines 26-48)
+  - `mcp-server/manifest.json`: Version 0.12.3→0.12.4
+  - `mcp-server/mcp-server.mcpb`: Rebuilt desktop extension (19.1MB, 2435 files)
+  - `CLAUDE.md`: This version entry
+- **NO BREAKING CHANGES**: All functionality unchanged, documentation and UX improvements only
+- **Rationale**: Users may not realize SSH tools are preferred. Clear guidance prevents inefficient console-based automation.
+
+**Previous:** v0.12.3 - send_and_wait_console Output Fix (Bugfix - Critical)
 - **FIXED**: `send_and_wait_console()` now correctly accumulates all output during polling
   - Previous bug: Output was lost when pattern matched quickly
   - Pattern would match on first poll (0.5s), but final output was empty

@@ -23,6 +23,30 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 - Node status: `started` or `stopped`
 - Each node has a unique `node_id` and human-readable `name`
 
+### Choosing Between SSH and Console Tools
+
+**IMPORTANT: Always prefer SSH tools when available!**
+
+**Use SSH Tools For:**
+- Production automation workflows
+- Configuration management
+- Command execution on network devices
+- Better reliability with automatic prompt detection
+- Structured output and error handling
+- Available SSH tools: `ssh_send_command()`, `ssh_send_config_set()`, `ssh_read_buffer()`, `ssh_get_history()`
+
+**Use Console Tools Only For:**
+- **Initial device configuration** (enabling SSH, creating users, generating keys)
+- **Troubleshooting** when SSH is unavailable or broken
+- **Devices without SSH support** (VPCS, simple switches)
+- Interactive TUI navigation (vim, menu systems)
+
+**Typical Workflow:**
+1. Start with console tools to configure SSH access
+2. Establish SSH session with `configure_ssh()`
+3. Switch to SSH tools for all automation
+4. Return to console only if SSH fails
+
 ### Console Access
 - Nodes have **console** ports for CLI access
 - Console types:
