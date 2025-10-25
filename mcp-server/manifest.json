@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.13.0",
-  "description": "GNS3 lab automation with MCP resources (15 browsable URIs) - prefer SSH tools over console tools",
-  "long_description": "IMPORTANT: Use SSH MCP tools (ssh_send_command, ssh_send_config_set, ssh_read_buffer) for automation - better reliability and prompt detection. Console tools (send_console, read_console) only for initial SSH setup or troubleshooting. Version 0.13.0: NEW - 15 MCP resources for browsable state (gns3://projects/, gns3://sessions/ssh/{node}, etc.) providing better IDE integration and discoverability. Query tools deprecated (will be removed in v0.14.0). Version 0.12.4: ENHANCED - Added SSH vs Console tool selection guidance. FIXED - configure_ssh error messages now properly distinguish SSH connection errors from server errors. Version 0.12.3: FIXED - send_and_wait_console accumulates all output. Version 0.12.2: FIXED - list_nodes returns lightweight NodeSummary. Supports GNS3 v3 API.",
+  "version": "0.14.0",
+  "description": "GNS3 lab automation - final architecture with 17 tools + 15 MCP resources - prefer SSH tools for automation",
+  "long_description": "FINAL ARCHITECTURE: 17 action tools + 15 browsable MCP resources. Use SSH MCP tools (ssh_send_command, ssh_send_config_set) for automation - better reliability and prompt detection. Console tools (send_console, read_console) only for initial SSH setup or troubleshooting. Version 0.14.0: REMOVED - 11 deprecated query tools (now available as MCP resources: gns3://projects/, gns3://sessions/ssh/{node}, etc.). Clear separation: Tools modify state, Resources browse state. Version 0.13.0: NEW - 15 MCP resources for browsable state providing better IDE integration. Version 0.12.4: Added SSH vs Console tool selection guidance. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -58,24 +58,8 @@
   },
   "tools": [
     {
-      "name": "list_projects",
-      "description": "List all GNS3 projects (returns JSON array of ProjectInfo)"
-    },
-    {
       "name": "open_project",
       "description": "Open a GNS3 project by name (returns JSON ProjectInfo)"
-    },
-    {
-      "name": "list_nodes",
-      "description": "List all nodes in current project with basic info (returns JSON array of NodeSummary - lightweight, use get_node_details for full info)"
-    },
-    {
-      "name": "get_node_details",
-      "description": "Get detailed node information including ports, hardware, position (returns JSON NodeInfo)"
-    },
-    {
-      "name": "get_links",
-      "description": "List all network links with adapters/ports (returns JSON array of LinkInfo)"
     },
     {
       "name": "set_node",
@@ -94,10 +78,6 @@
       "description": "Disconnect from node console session (returns JSON status)"
     },
     {
-      "name": "get_console_status",
-      "description": "Check console connection status for a node (returns JSON ConsoleStatus)"
-    },
-    {
       "name": "send_and_wait_console",
       "description": "Send command and wait for specific prompt pattern (returns JSON with output, pattern_found, timeout_occurred)"
     },
@@ -114,16 +94,8 @@
       "description": "Delete a node from the current project (returns JSON confirmation)"
     },
     {
-      "name": "list_templates",
-      "description": "List all available GNS3 templates (returns JSON array of TemplateInfo)"
-    },
-    {
       "name": "create_node",
       "description": "Create a new node from a template at specified coordinates (returns JSON with NodeInfo)"
-    },
-    {
-      "name": "list_drawings",
-      "description": "List all drawing objects in current project (returns JSON array of DrawingInfo)"
     },
     {
       "name": "create_drawing",
@@ -132,10 +104,6 @@
     {
       "name": "delete_drawing",
       "description": "Delete a drawing object from the current project (returns JSON confirmation)"
-    },
-    {
-      "name": "export_topology_diagram",
-      "description": "Export topology as SVG and/or PNG diagram (returns JSON with file paths and diagram info)"
     },
     {
       "name": "configure_ssh",
@@ -148,22 +116,6 @@
     {
       "name": "ssh_send_config_set",
       "description": "Send configuration commands via SSH (returns JSON with job_id/output)"
-    },
-    {
-      "name": "ssh_read_buffer",
-      "description": "Read SSH continuous buffer (modes: diff/last_page/num_pages/all, returns JSON with output)"
-    },
-    {
-      "name": "ssh_get_history",
-      "description": "List SSH command history (limit/search params, returns JSON with jobs list)"
-    },
-    {
-      "name": "ssh_get_command_output",
-      "description": "Get specific SSH command output by job_id (returns JSON with full Job details)"
-    },
-    {
-      "name": "ssh_get_status",
-      "description": "Check SSH session status (returns JSON with connected/buffer_size/total_commands)"
     },
     {
       "name": "ssh_cleanup_sessions",

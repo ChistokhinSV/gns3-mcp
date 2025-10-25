@@ -1,4 +1,4 @@
-"""GNS3 MCP Server v0.13.0
+"""GNS3 MCP Server v0.14.0
 
 Model Context Protocol server for GNS3 lab automation.
 Provides console and SSH automation tools for network devices.
@@ -8,7 +8,7 @@ IMPORTANT: Tool Selection Guidelines
 When automating network devices, ALWAYS prefer SSH tools over console tools!
 
 SSH Tools (Preferred):
-- ssh_send_command(), ssh_send_config_set(), ssh_read_buffer()
+- ssh_send_command(), ssh_send_config_set()
 - Better reliability with automatic prompt detection
 - Structured output and error handling
 - Supports 200+ device types via Netmiko
@@ -24,6 +24,24 @@ Typical Workflow:
 2. Establish SSH session with configure_ssh()
 3. Switch to SSH tools for all automation tasks
 4. Return to console only if SSH fails
+
+Version 0.14.0 - Tool Consolidation (BREAKING CHANGES - Final Architecture):
+- REMOVED: 11 deprecated query tools (replaced by MCP resources in v0.13.0)
+  * list_projects → use resource gns3://projects
+  * list_nodes → use resource gns3://projects/{id}/nodes
+  * get_node_details → use resource gns3://projects/{id}/nodes/{id}
+  * get_links → use resource gns3://projects/{id}/links
+  * list_templates → use resource gns3://projects/{id}/templates
+  * list_drawings → use resource gns3://projects/{id}/drawings
+  * get_console_status → use resource gns3://sessions/console/{node}
+  * ssh_get_status → use resource gns3://sessions/ssh/{node}
+  * ssh_get_history → use resource gns3://sessions/ssh/{node}/history
+  * ssh_get_command_output → query resource with filtering
+  * ssh_read_buffer → use resource gns3://sessions/ssh/{node}/buffer
+- FINAL ARCHITECTURE: 10 core tools + 15 browsable resources
+  * Tools: Actions that modify state (create, delete, configure, execute)
+  * Resources: Read-only browsable state (projects, nodes, sessions, status)
+- RATIONALE: Clearer separation of concerns, reduced cognitive load, better IDE integration
 
 Version 0.13.0 - MCP Resources (BREAKING CHANGES - Phase 1):
 - NEW: 15 MCP resources for browsable state (gns3:// URI scheme)
@@ -453,17 +471,6 @@ async def resource_proxy_sessions(ctx: Context) -> str:
 # ============================================================================
 
 @mcp.tool()
-async def list_projects(ctx: Context) -> str:
-    """List all GNS3 projects with their status
-
-    Returns:
-        JSON array of ProjectInfo objects
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await list_projects_impl(app)
-
-
-@mcp.tool()
 async def open_project(ctx: Context, project_name: str) -> str:
     """Open a GNS3 project by name
 
@@ -475,82 +482,6 @@ async def open_project(ctx: Context, project_name: str) -> str:
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await open_project_impl(app, project_name)
-
-
-@mcp.tool()
-async def list_nodes(ctx: Context) -> str:
-    """List all nodes in current project with basic info (lightweight)
-
-    Returns minimal node information to avoid large outputs with many nodes.
-    For full details (ports, hardware, position, etc.), use get_node_details().
-
-    Returns:
-        JSON array of NodeSummary objects with fields:
-        - node_id: Unique identifier
-        - name: Node name
-        - node_type: Type (qemu, docker, vpcs, etc.)
-        - status: started, stopped, or suspended
-        - console_type: telnet, vnc, none, etc.
-        - console: Console port number (if available)
-
-    Example:
-        [
-          {
-            "node_id": "abc123",
-            "name": "Router1",
-            "node_type": "qemu",
-            "status": "started",
-            "console_type": "telnet",
-            "console": 5000
-          }
-        ]
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await list_nodes_impl(app)
-
-
-@mcp.tool()
-async def get_node_details(ctx: Context, node_name: str) -> str:
-    """Get detailed information about a specific node
-
-    Args:
-        node_name: Name of the node
-
-    Returns:
-        JSON with NodeInfo object
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await get_node_details_impl(app, node_name)
-
-
-@mcp.tool()
-async def get_links(ctx: Context) -> str:
-    """List all network links in the current project
-
-    Returns link details including link IDs (needed for disconnect),
-    connected nodes, ports, adapters, and link type. Use this before
-    set_connection() to check current topology and find link IDs.
-
-    Returns:
-        JSON array of LinkInfo objects
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await get_links_impl(app)
 
 
 @mcp.tool()
@@ -724,48 +655,6 @@ async def disconnect_console(ctx: Context, node_name: str) -> str:
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await disconnect_console_impl(app, node_name)
-
-
-@mcp.tool()
-async def get_console_status(ctx: Context, node_name: str) -> str:
-    """Check console connection status for a node
-
-    Shows connection state and buffer size. Does NOT show current prompt or
-    device readiness - use read_console(diff=True) to check current state.
-
-    Returns:
-        JSON with ConsoleStatus:
-        {
-            "connected": true/false,
-            "node_name": "Router1",
-            "session_id": "uuid",  # null if not connected
-            "host": "192.168.1.20",  # null if not connected
-            "port": 5000,  # null if not connected
-            "buffer_size": 1024,  # bytes accumulated
-            "created_at": "2025-10-23T10:30:00"  # null if not connected
-        }
-
-    Use Cases:
-    - Check if already connected before manual operations
-    - Verify auto-connect succeeded
-    - Monitor buffer size (>10MB triggers trim to 5MB)
-
-    Note: Connection state does NOT indicate device readiness. A connected
-    console may still be at login prompt, booting, or waiting for input.
-    Use read_console() to check current prompt state.
-
-    Args:
-        node_name: Name of the node
-
-    Example:
-        status = get_console_status("R1")
-        if status["connected"]:
-            print(f"Buffer size: {status['buffer_size']} bytes")
-        else:
-            print("Not connected - next send/read will auto-connect")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await get_console_status_impl(app, node_name)
 
 
 @mcp.tool()
@@ -952,17 +841,6 @@ async def delete_node(ctx: Context, node_name: str) -> str:
 
 
 @mcp.tool()
-async def list_templates(ctx: Context) -> str:
-    """List all available GNS3 templates
-
-    Returns:
-        JSON array of TemplateInfo objects
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await list_templates_impl(app)
-
-
-@mcp.tool()
 async def create_node(ctx: Context, template_name: str, x: int, y: int,
                      node_name: Optional[str] = None, compute_id: str = "local") -> str:
     """Create a new node from a template
@@ -987,22 +865,6 @@ async def create_node(ctx: Context, template_name: str, x: int, y: int,
         return error
 
     return await create_node_impl(app, template_name, x, y, node_name, compute_id)
-
-
-@mcp.tool()
-async def list_drawings(ctx: Context) -> str:
-    """List all drawing objects in the current project
-
-    Returns:
-        JSON array of DrawingInfo objects
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await list_drawings_impl(app)
 
 
 @mcp.tool()
@@ -1208,92 +1070,6 @@ async def ssh_send_config_set(
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await ssh_send_config_set_impl(app, node_name, config_commands, wait_timeout)
-
-
-@mcp.tool()
-async def ssh_read_buffer(
-    ctx: Context,
-    node_name: str,
-    mode: str = "diff",
-    pages: int = 1
-) -> str:
-    """Read continuous buffer (all commands combined)
-
-    Modes:
-    - diff: New output since last read (default)
-    - last_page: Last ~25 lines
-    - num_pages: Last N pages (~25 lines per page)
-    - all: Entire buffer (WARNING: May be very large!)
-
-    Args:
-        node_name: Node identifier
-        mode: Output mode (default: diff)
-        pages: Number of pages, only valid with mode='num_pages' (default: 1)
-
-    Returns:
-        JSON with output and buffer_size
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await ssh_read_buffer_impl(app, node_name, mode, pages)
-
-
-@mcp.tool()
-async def ssh_get_history(
-    ctx: Context,
-    node_name: str,
-    limit: int = 50,
-    search: str = None
-) -> str:
-    """List command history in execution order
-
-    Args:
-        node_name: Node identifier
-        limit: Max jobs to return (default: 50, max: 1000)
-        search: Filter by command text, case-insensitive (optional)
-
-    Returns:
-        JSON with total_commands and jobs list
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await ssh_get_history_impl(app, node_name, limit, search)
-
-
-@mcp.tool()
-async def ssh_get_command_output(
-    ctx: Context,
-    node_name: str,
-    job_id: str
-) -> str:
-    """Get specific command's full output
-
-    Use ssh_get_history() to find job_id, then get full output.
-
-    Args:
-        node_name: Node identifier
-        job_id: Job ID from history
-
-    Returns:
-        JSON with full Job details (command, output, timestamps, etc.)
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await ssh_get_command_output_impl(app, node_name, job_id)
-
-
-@mcp.tool()
-async def ssh_get_status(
-    ctx: Context,
-    node_name: str
-) -> str:
-    """Check SSH session status
-
-    Args:
-        node_name: Node identifier
-
-    Returns:
-        JSON with connected, session_id, device_type, buffer_size, total_commands
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await ssh_get_status_impl(app, node_name)
 
 
 @mcp.tool()

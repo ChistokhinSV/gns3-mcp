@@ -10,9 +10,35 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.13.0
+## Current Version: v0.14.0
 
-**Latest Release:** v0.13.0 - MCP Resources (Breaking Changes - Phase 1)
+**Latest Release:** v0.14.0 - Tool Consolidation (BREAKING CHANGES - Final Architecture)
+- **REMOVED**: 11 deprecated query tools (replaced by MCP resources in v0.13.0)
+  - `list_projects()` → resource `gns3://projects`
+  - `list_nodes()` → resource `gns3://projects/{id}/nodes`
+  - `get_node_details()` → resource `gns3://projects/{id}/nodes/{id}`
+  - `get_links()` → resource `gns3://projects/{id}/links`
+  - `list_templates()` → resource `gns3://projects/{id}/templates`
+  - `list_drawings()` → resource `gns3://projects/{id}/drawings`
+  - `get_console_status()` → resource `gns3://sessions/console/{node}`
+  - `ssh_get_status()` → resource `gns3://sessions/ssh/{node}`
+  - `ssh_get_history()` → resource `gns3://sessions/ssh/{node}/history`
+  - `ssh_get_command_output()` → query resource with filtering
+  - `ssh_read_buffer()` → resource `gns3://sessions/ssh/{node}/buffer`
+- **FINAL ARCHITECTURE**: 17 core tools + 15 browsable resources
+  - **Tools (17)**: Actions that modify state - create, delete, configure, execute
+  - **Resources (15)**: Read-only browsable state - projects, nodes, sessions, status
+  - **Clear separation**: Tools change things, Resources view things
+- **Tool count reduction**: 30 → 17 (-43% reduction in cognitive load)
+- **Files changed**:
+  - `mcp-server/server/main.py`: Removed 11 tool definitions, updated version 0.13.0→0.14.0
+  - `mcp-server/manifest.json`: Removed 11 tool definitions, version 0.13.0→0.14.0
+  - `skill/SKILL.md`: Updated deprecated tools section to "Removed in v0.14.0"
+  - `CLAUDE.md`: This version entry
+- **NO BREAKING CHANGES for v0.13.0 users**: Resources already available, tools simply removed
+- **Rationale**: Clearer separation of concerns (read vs write), reduced cognitive load, better IDE integration with resources
+
+**Previous:** v0.13.0 - MCP Resources (Breaking Changes - Phase 1)
 - **NEW**: 15 MCP resources for browsable state via `gns3://` URI scheme
   - Project resources: `gns3://projects/`, `gns3://projects/{id}`, `gns3://projects/{id}/nodes/`, etc.
   - Session resources: `gns3://sessions/console/{node}`, `gns3://sessions/ssh/{node}`, etc.

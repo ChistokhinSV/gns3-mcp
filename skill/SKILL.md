@@ -64,18 +64,23 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 7. Call set_node() to change node state
 ```
 
-**Deprecated Tools (will be removed in v0.14.0):**
-- `list_projects()` → Use resource `gns3://projects/`
-- `list_nodes()` → Use resource `gns3://projects/{id}/nodes/`
+**Removed in v0.14.0 (use MCP resources instead):**
+- `list_projects()` → Use resource `gns3://projects`
+- `list_nodes()` → Use resource `gns3://projects/{id}/nodes`
 - `get_node_details()` → Use resource `gns3://projects/{id}/nodes/{id}`
-- `get_links()` → Use resource `gns3://projects/{id}/links/`
-- `list_templates()` → Use resource `gns3://projects/{id}/templates/`
-- `list_drawings()` → Use resource `gns3://projects/{id}/drawings/`
+- `get_links()` → Use resource `gns3://projects/{id}/links`
+- `list_templates()` → Use resource `gns3://projects/{id}/templates`
+- `list_drawings()` → Use resource `gns3://projects/{id}/drawings`
 - `get_console_status()` → Use resource `gns3://sessions/console/{node}`
 - `ssh_get_status()` → Use resource `gns3://sessions/ssh/{node}`
 - `ssh_get_history()` → Use resource `gns3://sessions/ssh/{node}/history`
 - `ssh_get_command_output()` → Use resource with filtering
 - `ssh_read_buffer()` → Use resource `gns3://sessions/ssh/{node}/buffer`
+
+**Final Architecture (v0.14.0):**
+- **17 Action Tools**: Modify state (create, delete, configure, execute commands)
+- **15 MCP Resources**: Browse state (projects, nodes, sessions, status)
+- **Clear separation**: Tools change things, Resources view things
 
 ### Projects
 - **Projects** are isolated network topologies with their own nodes, links, and configuration
