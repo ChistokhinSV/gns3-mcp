@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.17.0",
-  "description": "GNS3 lab automation - 11 tools + 15 resources + 3 guided workflow prompts",
-  "long_description": "COMPLETE MCP SERVER: 11 tools + 15 browsable resources + 3 workflow prompts. Version 0.17.0 NEW: 3 MCP prompts for guided workflows (ssh_setup, topology_discovery, troubleshooting). Prompts provide device-specific instructions and step-by-step guidance. Version 0.15.0 BREAKING CHANGES: Renamed all tools for consistency (console_send, console_read, ssh_configure), merged SSH commands (ssh_command auto-detects show vs config), removed 7 deprecated tools. Use ssh_command() for all SSH operations. Version 0.14.0: Removed 11 query tools (now MCP resources). Version 0.13.0: Added 15 MCP resources. Supports GNS3 v3 API.",
+  "version": "0.20.0",
+  "description": "GNS3 lab automation - 20 tools + 17 resources + 4 prompts with standardized error handling and version tracking",
+  "long_description": "COMPLETE MCP SERVER: 20 tools + 17 browsable resources + 4 workflow prompts. Version 0.20.0 NEW: Single source of truth for version (manifest.json), standardized error handling with 26 error codes, comprehensive error utilities with suggested actions, version tracking in all errors. Foundation for improved developer experience. Version 0.19.0: MCP tool annotations (destructive/idempotent/read_only/creates_resource/modifies_topology), drawing tools with hybrid architecture. Version 0.18.0: Core Lab Automation - project/node/snapshot management, lab setup with 6 topology types. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -62,8 +62,20 @@
       "description": "Open a GNS3 project by name (returns JSON ProjectInfo)"
     },
     {
+      "name": "create_project",
+      "description": "Create a new GNS3 project and auto-open it (returns JSON ProjectInfo)"
+    },
+    {
+      "name": "close_project",
+      "description": "Close the currently opened project (returns JSON success message)"
+    },
+    {
       "name": "set_node",
       "description": "Configure node properties and/or control state (returns JSON status message)"
+    },
+    {
+      "name": "create_node",
+      "description": "Create a new node from template at specified coordinates (returns JSON NodeInfo)"
     },
     {
       "name": "console_send",
@@ -90,6 +102,14 @@
       "description": "Delete a node from the current project (returns JSON confirmation)"
     },
     {
+      "name": "create_snapshot",
+      "description": "Create a snapshot of the current project state (returns JSON SnapshotInfo)"
+    },
+    {
+      "name": "restore_snapshot",
+      "description": "Restore project to a previous snapshot state (returns JSON success message)"
+    },
+    {
       "name": "ssh_configure",
       "description": "Configure SSH session for device (requires SSH enabled, returns JSON with session_id/connected status)"
     },
@@ -100,6 +120,44 @@
     {
       "name": "ssh_disconnect",
       "description": "Disconnect SSH session (returns JSON status)"
+    },
+    {
+      "name": "export_topology_diagram",
+      "description": "Export topology diagram as SVG/PNG with optional crop region (returns JSON with file paths)"
+    },
+    {
+      "name": "create_drawing",
+      "description": "Create a drawing object - rectangle, ellipse, line, or text (returns JSON with drawing info)"
+    },
+    {
+      "name": "update_drawing",
+      "description": "Update properties of an existing drawing object (returns JSON with updated drawing)"
+    },
+    {
+      "name": "delete_drawing",
+      "description": "Delete a drawing object from the current project (returns JSON confirmation)"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "ssh_setup",
+      "description": "SSH Setup Workflow - Device-specific instructions for configuring SSH on network devices (Cisco IOS, NX-OS, MikroTik, Juniper, Arista, Linux)",
+      "text": "Device-specific SSH configuration workflow for Cisco IOS, NX-OS, MikroTik, Juniper, Arista, and Linux devices"
+    },
+    {
+      "name": "topology_discovery",
+      "description": "Topology Discovery Workflow - Discover and visualize network topology using MCP resources and tools",
+      "text": "Guided workflow for discovering and visualizing network topology using MCP resources and export tools"
+    },
+    {
+      "name": "troubleshooting",
+      "description": "Network Troubleshooting Workflow - OSI model-based systematic troubleshooting for network labs",
+      "text": "OSI model-based systematic troubleshooting methodology for network lab issues"
+    },
+    {
+      "name": "lab_setup",
+      "description": "Lab Setup Workflow - Automated lab topology creation with 6 topology types (star, mesh, linear, ring, OSPF, BGP)",
+      "text": "Automated lab topology creation supporting star, mesh, linear, ring, OSPF, and BGP topologies"
     }
   ],
   "compatibility": {

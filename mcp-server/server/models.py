@@ -3,6 +3,7 @@
 Type-safe data models for all GNS3 entities and operations.
 """
 
+from enum import Enum
 from pydantic import BaseModel, Field, field_validator
 from typing import Literal, List, Optional, Dict, Any, Union
 from datetime import datetime
@@ -27,6 +28,24 @@ class ProjectInfo(BaseModel):
                 "project_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
                 "name": "My Network Lab",
                 "status": "opened"
+            }
+        }
+
+
+class SnapshotInfo(BaseModel):
+    """GNS3 Project Snapshot information"""
+    snapshot_id: str
+    name: str
+    created_at: str
+    project_id: str
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "snapshot_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                "name": "Before Config Change",
+                "created_at": "2025-10-25T14:30:00.000Z",
+                "project_id": "proj-123"
             }
         }
 
@@ -335,21 +354,74 @@ class ConsoleStatus(BaseModel):
 
 # Error Models
 
+class ErrorCode(str, Enum):
+    """Standardized error codes for all MCP tools"""
+
+    # Resource Not Found (404-style)
+    PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND"
+    NODE_NOT_FOUND = "NODE_NOT_FOUND"
+    LINK_NOT_FOUND = "LINK_NOT_FOUND"
+    TEMPLATE_NOT_FOUND = "TEMPLATE_NOT_FOUND"
+    DRAWING_NOT_FOUND = "DRAWING_NOT_FOUND"
+    SNAPSHOT_NOT_FOUND = "SNAPSHOT_NOT_FOUND"
+
+    # Validation Errors (400-style)
+    INVALID_PARAMETER = "INVALID_PARAMETER"
+    MISSING_PARAMETER = "MISSING_PARAMETER"
+    PORT_IN_USE = "PORT_IN_USE"
+    NODE_RUNNING = "NODE_RUNNING"
+    NODE_STOPPED = "NODE_STOPPED"
+    INVALID_NODE_STATE = "INVALID_NODE_STATE"
+    INVALID_ADAPTER = "INVALID_ADAPTER"
+    INVALID_PORT = "INVALID_PORT"
+
+    # Connection Errors (503-style)
+    GNS3_UNREACHABLE = "GNS3_UNREACHABLE"
+    GNS3_API_ERROR = "GNS3_API_ERROR"
+    CONSOLE_DISCONNECTED = "CONSOLE_DISCONNECTED"
+    CONSOLE_CONNECTION_FAILED = "CONSOLE_CONNECTION_FAILED"
+    SSH_CONNECTION_FAILED = "SSH_CONNECTION_FAILED"
+    SSH_DISCONNECTED = "SSH_DISCONNECTED"
+
+    # Authentication Errors (401-style)
+    AUTH_FAILED = "AUTH_FAILED"
+    TOKEN_EXPIRED = "TOKEN_EXPIRED"
+    INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
+
+    # Internal Errors (500-style)
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+    TIMEOUT = "TIMEOUT"
+    OPERATION_FAILED = "OPERATION_FAILED"
+
+
 class ErrorResponse(BaseModel):
-    """Error response with optional suggested action"""
-    error: str
-    details: Optional[str] = None
-    suggested_action: Optional[str] = None
+    """Standardized error response for all tools"""
+    error: str = Field(description="Human-readable error message")
+    error_code: Optional[str] = Field(default=None, description="Machine-readable error code from ErrorCode enum")
+    details: Optional[str] = Field(default=None, description="Additional error details")
+    suggested_action: Optional[str] = Field(default=None, description="How to fix the error")
+    context: Optional[Dict[str, Any]] = Field(default=None, description="Error context for debugging")
+    # Legacy fields for backward compatibility
     field: Optional[str] = None
     operation_index: Optional[int] = None
+    # Version tracking
+    server_version: str = Field(default="unknown", description="Server version that produced this error")
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat(), description="Error timestamp (ISO 8601 UTC)")
 
     class Config:
         json_schema_extra = {
             "example": {
-                "error": "Node not found",
-                "details": "Node 'Router1' does not exist in current project",
-                "field": "node_a",
-                "operation_index": 0
+                "error": "Node 'Router1' not found in project 'Lab1'",
+                "error_code": "NODE_NOT_FOUND",
+                "details": "Available nodes: Router2, Router3, Switch1",
+                "suggested_action": "Use list_nodes() to see all available nodes in the project",
+                "context": {
+                    "project_id": "abc123",
+                    "node_name": "Router1",
+                    "available_nodes": ["Router2", "Router3", "Switch1"]
+                },
+                "server_version": "0.20.0",
+                "timestamp": "2025-10-25T14:30:00.000Z"
             }
         }
 

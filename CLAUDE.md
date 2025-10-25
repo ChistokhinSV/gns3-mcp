@@ -10,9 +10,205 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.17.0
+## Current Version: v0.20.0
 
-**Latest Release:** v0.17.0 - MCP Prompts (FEATURE)
+**Latest Release:** v0.20.0 - Polish & Quality (Phase 1 - Foundation) (REFACTOR)
+- **NEW**: Single source of truth for version - manifest.json
+  - `main.py` reads VERSION from manifest.json at runtime (no hardcoded versions)
+  - Falls back to "0.20.0" if manifest read fails
+  - Pre-commit hook validates no hardcoded VERSION in code
+  - Version synchronization tests ensure consistency
+- **NEW**: Enhanced error handling infrastructure (foundation for Phase 2)
+  - **ErrorCode enum** with 26 standardized error codes:
+    - Resource Not Found (6 codes): PROJECT_NOT_FOUND, NODE_NOT_FOUND, LINK_NOT_FOUND, etc.
+    - Validation Errors (8 codes): INVALID_PARAMETER, PORT_IN_USE, NODE_RUNNING, etc.
+    - Connection Errors (6 codes): GNS3_UNREACHABLE, CONSOLE_CONNECTION_FAILED, etc.
+    - Authentication Errors (3 codes): AUTH_FAILED, TOKEN_EXPIRED, INVALID_CREDENTIALS
+    - Internal Errors (3 codes): INTERNAL_ERROR, TIMEOUT, OPERATION_FAILED
+  - **Enhanced ErrorResponse model**:
+    - Added `error_code` field (machine-readable, from ErrorCode enum)
+    - Added `context` field (debugging information with structured data)
+    - Added `server_version` field (tracks which version produced error)
+    - Added `timestamp` field (auto-generated ISO 8601 UTC timestamp)
+    - Kept legacy fields for backward compatibility
+  - **15 error helper functions** in error_utils.py (~400 LOC):
+    - `create_error_response()` - Generic error creation with version tracking
+    - `node_not_found_error()` - Node errors with available nodes list
+    - `project_not_found_error()` - Project errors with suggested action
+    - `validation_error()` - Validation errors with valid values list
+    - `gns3_api_error()` - API errors with status code and endpoint
+    - And 10 more specialized helpers for common error scenarios
+    - All helpers include suggested_action and context for debugging
+- **FILES CHANGED** (Foundation Phase):
+  - `mcp-server/server/main.py`: VERSION reading from manifest (+12 LOC)
+  - `mcp-server/server/models.py`: ErrorCode enum, enhanced ErrorResponse (+48 LOC)
+  - `mcp-server/server/error_utils.py`: NEW - 15 error helper functions (400 LOC)
+  - `tests/unit/test_version.py`: NEW - Version synchronization tests (85 LOC)
+  - `.git/hooks/pre-commit`: Version consistency validation (+11 LOC)
+  - `mcp-server/manifest.json`: Version 0.19.0→0.20.0, updated descriptions
+  - `CLAUDE.md`: This version entry
+- **PHASE 1 STATUS**: Foundation complete, tools not yet updated
+  - ✅ Version synchronization infrastructure
+  - ✅ Error code taxonomy and response models
+  - ✅ Error utility helper functions
+  - ✅ Unit tests for version handling
+  - ⏳ Pending: Update 20 tools to use standardized errors (Phase 2)
+  - ⏳ Pending: Update gns3_client.py error handling (Phase 2)
+  - ⏳ Pending: Create ERROR_CODES.md documentation (Phase 2)
+  - ⏳ Pending: Write comprehensive error handling tests (Phase 2)
+- **NO BREAKING CHANGES**: All tools still functional, error handling backward compatible
+- **TESTING**: Server starts successfully, VERSION correctly read from manifest.json
+- **RATIONALE**: Centralized version management prevents version mismatch errors. Standardized
+  error handling foundation enables consistent error responses across all 20 tools with helpful
+  suggested actions and debugging context. Phase 1 establishes infrastructure, Phase 2 will
+  update all tools to use it.
+
+**Previous:** v0.19.0 - UX & Advanced Features (FEATURE)
+- **NEW**: MCP tool annotations for all 20 tools (visibility of tool behavior in IDE/MCP clients)
+  - **destructive** (3 tools): delete_node, restore_snapshot, delete_drawing
+    - Marks tools that delete data or make irreversible changes
+    - IDE/MCP clients may show warnings or require confirmation
+  - **idempotent** (9 tools): open_project, create_project, close_project, set_node, console_disconnect,
+                               ssh_configure, ssh_disconnect, update_drawing, export_topology_diagram
+    - Safe to retry - same operation multiple times produces same result
+    - Example: opening already-opened project, stopping already-stopped node
+  - **read_only** (1 tool): console_read
+    - Tool only reads data, makes no state changes
+    - May be cached by MCP clients
+  - **creates_resource** (5 tools): create_project, create_node, create_snapshot, export_topology_diagram, create_drawing
+    - Tool creates new resources in GNS3 or filesystem
+  - **modifies_topology** (3 tools): set_connection, create_node, delete_node
+    - Tool changes network topology structure
+- **DEFERRED**: Autocomplete support via MCP completions for 7 parameter types (implementation prepared but disabled pending FastMCP API clarification)
+  - **node_name** (9 tools): console_send, console_read, console_keystroke, console_disconnect,
+                              ssh_configure, ssh_command, ssh_disconnect, set_node, delete_node
+    - Autocompletes from current project's node names
+    - Shows node type and status in description (e.g., "vpcs (started)")
+    - Filters by prefix, limits to 10 results
+  - **template_name** (create_node): Autocompletes from available GNS3 templates
+    - Shows category and node_type in description
+  - **action** (set_node): Enum autocomplete for start/stop/suspend/reload/restart
+  - **project_name** (open_project): Autocompletes from all GNS3 projects
+    - Shows project status in description
+  - **snapshot_name** (restore_snapshot): Autocompletes from current project's snapshots
+    - Shows created_at timestamp in description
+  - **drawing_type** (create_drawing): Enum autocomplete for rectangle/ellipse/line/text
+  - **topology_type** (lab_setup prompt): Enum autocomplete for star/mesh/linear/ring/ospf/bgp
+- **NEW**: 3 drawing tools for visual annotations (hybrid architecture)
+  - `create_drawing`: Create rectangle, ellipse, line, or text annotations
+    - **Rectangle**: width/height, fill_color, border_color, border_width
+    - **Ellipse**: rx/ry (radii), fill_color, border_color, border_width
+    - **Line**: x2/y2 (offset from start), color, border_width
+    - **Text**: text content, font_size, font_weight, font_family, color
+    - All: x/y position, z-order/layer
+  - `update_drawing`: Modify position (x/y/z), rotation, svg content, locked state
+    - Partial updates supported - provide only changed properties
+  - `delete_drawing`: Remove drawing object by ID
+  - **Hybrid pattern**: Resources (gns3://projects/{id}/drawings/) for READ, Tools for WRITE
+    - Follows MCP protocol semantics (Resources = browsable read-only, Tools = actions)
+    - Drawing resources already existed from v0.13.0
+    - Tools added in v0.19.0 to enable modifications
+- **ARCHITECTURE**: 20 tools + 17 resources + 4 prompts + (8 completions deferred) = Enhanced UX
+  - **Tools (20)**: Added export_topology_diagram, create_drawing, update_drawing, delete_drawing
+  - **Resources (17)**: Unchanged from v0.18.0
+  - **Prompts (4)**: Unchanged from v0.18.0
+  - **Completions (8)**: Implementation prepared but disabled - FastMCP completion API differs from MCP spec
+                          Functions: complete_node_names, complete_template_names, complete_node_actions,
+                          complete_project_names, complete_snapshot_names, complete_drawing_types,
+                          complete_topology_types, complete_connection_actions (all suffixed with _DISABLED)
+- **Files changed**:
+  - `mcp-server/server/main.py`: Added annotations to 17 tools, 8 completion handlers, 3 drawing tools,
+                                   imported Completion type, version 0.18.0→0.19.0 (+300 LOC)
+  - `mcp-server/server/tools/drawing_tools.py`: Added update_drawing_impl() (+65 LOC)
+  - `mcp-server/manifest.json`: Version 0.18.0→0.19.0, added 3 tools (create/update/delete_drawing),
+                                  updated descriptions to reflect 20 tools + annotations
+  - `CLAUDE.md`: This version entry
+  - `mcp-server/mcp-server.mcpb`: Rebuilt desktop extension
+- **NO BREAKING CHANGES**: All existing tools, resources, prompts unchanged
+- **KNOWN ISSUES**: Completions disabled - FastMCP API for completions is different from MCP spec.
+  Code is ready but disabled pending API clarification. Will be re-enabled in future version once
+  correct FastMCP completion decorator syntax is determined.
+- **Rationale**: Tool annotations enable IDE warnings for destructive operations, improving safety.
+  Completions would reduce typing and discovery friction (deferred). Drawing tools restore functionality
+  removed in v0.15.0 with improved hybrid architecture that separates READ (resources) from WRITE (tools).
+
+**Previous:** v0.18.0 - Core Lab Automation (FEATURE)
+- **NEW**: 5 new tools for complete lab lifecycle management
+  - `create_project`: Create new GNS3 projects and auto-open
+    - Validates no duplicate project names
+    - Auto-opens after creation
+    - Stores project in GNS3 configured directory or custom path
+  - `close_project`: Close currently opened project
+    - Clears current_project_id from app context
+    - Returns project name in confirmation
+  - `create_node`: Create nodes from templates at specified coordinates (RESTORED from v0.15.0)
+    - Uses template name (e.g., "Alpine Linux", "Cisco IOSv")
+    - Positions nodes with x/y coordinates
+    - Optional custom node name and property overrides
+  - `create_snapshot`: Save project state with validation
+    - Checks for duplicate snapshot names
+    - Warns (non-blocking) if nodes are running
+    - Captures all project state: nodes, links, drawings, settings
+  - `restore_snapshot`: Restore to previous snapshot state
+    - Stops all running nodes first
+    - Disconnects all console sessions
+    - Restores complete project state
+- **NEW**: 2 new MCP resources for snapshot browsing
+  - `gns3://projects/{id}/snapshots/` - List all snapshots in project
+  - `gns3://projects/{id}/snapshots/{id}` - Snapshot details (name, created_at, snapshot_id)
+- **NEW**: lab_setup prompt - Automated topology creation with 6 topology types
+  - `star`: Hub-and-spoke topology (parameter: spoke count)
+    - Hub at center, spokes radiate outward
+    - IP scheme: 10.0.{spoke}.0/24 per link
+  - `mesh`: Full mesh topology (parameter: router count)
+    - All routers interconnected
+    - IP scheme: 10.0.{subnet}.0/30 point-to-point links
+  - `linear`: Chain topology (parameter: router count)
+    - Routers connected in series
+    - IP scheme: 10.0.{link}.0/30
+  - `ring`: Circular topology (parameter: router count)
+    - Each router connects to two neighbors
+    - Closes the loop
+  - `ospf`: Multi-area OSPF topology (parameter: area count)
+    - Area 0 backbone with ABRs in center
+    - Additional areas radiate outward
+    - 3 routers per area
+    - IP scheme: 10.{area}.0.{router}/32 loopbacks
+  - `bgp`: Multiple AS topology (parameter: AS count)
+    - 2 routers per AS (iBGP peering)
+    - eBGP between adjacent AS
+    - IP scheme: 10.{AS}.1.0/30 (iBGP), 172.16.{link}.0/30 (eBGP)
+  - **Includes**: Layout algorithms for node positioning, link generation functions, IP addressing schemes
+- **ARCHITECTURE**: 16 tools + 17 resources + 4 prompts = Complete lab automation
+  - **Tools (16)**: open_project, create_project, close_project, set_node, create_node, delete_node,
+                    create_snapshot, restore_snapshot, console_send, console_read, console_disconnect,
+                    console_keystroke, set_connection, ssh_configure, ssh_command, ssh_disconnect
+  - **Resources (17)**: 17 `gns3://` URIs (added 2 snapshot resources)
+  - **Prompts (4)**: ssh_setup, topology_discovery, troubleshooting, lab_setup
+- **WORKFLOW ENABLEMENT**: Complete lab lifecycle now automated
+  - Create project → Add nodes → Create links → Create snapshot → Test → Restore if needed
+  - Lab setup prompt generates complete topologies with single command
+- **Files added**:
+  - `mcp-server/server/tools/snapshot_tools.py`: Snapshot management (~200 LOC)
+  - `mcp-server/server/prompts/lab_setup.py`: Lab setup workflow with layout algorithms (~800 LOC)
+- **Files changed**:
+  - `mcp-server/server/gns3_client.py`: Added create_project(), close_project(), get_snapshots(),
+                                         create_snapshot(), restore_snapshot() (+100 LOC)
+  - `mcp-server/server/tools/project_tools.py`: Added create_project_impl(), close_project_impl() (+100 LOC)
+  - `mcp-server/server/main.py`: Registered 5 tools + 1 prompt, version 0.17.0→0.18.0 (+100 LOC)
+  - `mcp-server/server/models.py`: Added SnapshotInfo model (+30 LOC)
+  - `mcp-server/server/resources/project_resources.py`: Added list_snapshots_impl(), get_snapshot_impl() (+100 LOC)
+  - `mcp-server/server/resources/resource_manager.py`: Added snapshot URI patterns (+20 LOC)
+  - `mcp-server/server/prompts/__init__.py`: Exported render_lab_setup_prompt
+  - `mcp-server/manifest.json`: Version 0.17.0→0.18.0, added 5 tools + 1 prompt to definitions
+  - `CLAUDE.md`: This version entry
+  - `mcp-server/mcp-server.mcpb`: Rebuilt desktop extension
+- **NO BREAKING CHANGES**: All existing tools, resources, and prompts unchanged
+- **Rationale**: Enables complete lab automation from project creation through topology setup to snapshot
+  management. Lab setup prompt with layout algorithms reduces manual work for common topologies. Snapshot
+  management provides version control for lab configurations.
+
+**Previous:** v0.17.0 - MCP Prompts (FEATURE)
 - **NEW**: 3 guided workflow prompts for common GNS3 operations
   - `ssh_setup`: Device-specific SSH configuration workflow
     - Covers 6 device types: Cisco IOS, NX-OS, MikroTik RouterOS, Juniper Junos, Arista EOS, Linux
