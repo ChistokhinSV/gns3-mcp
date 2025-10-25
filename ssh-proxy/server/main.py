@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GNS3 SSH Proxy",
     description="SSH automation proxy for GNS3 network labs with Netmiko",
-    version="0.1.0",
+    version="0.1.2",
     lifespan=lifespan
 )
 
@@ -92,7 +92,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "gns3-ssh-proxy",
-        "version": "0.1.0"
+        "version": "0.1.2"
     }
 
 

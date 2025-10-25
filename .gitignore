@@ -55,4 +55,4 @@ Thumbs.db
 data/*.pcapng
 
 gns3-gui/
-gns3-project/
+gns3-project/.coverage

@@ -305,9 +305,13 @@ class SSHSessionManager:
         for i in range(wait_timeout):
             await asyncio.sleep(1)
             if task.done():
-                # Command completed
+                # Command completed - get result and recalculate timing
                 try:
                     output = task.result()
+                    # Job object updated by background task - recalculate execution time
+                    if job.completed_at and job.started_at:
+                        job.execution_time = (job.completed_at - job.started_at).total_seconds()
+
                     return {
                         "completed": True,
                         "job_id": job.job_id,
@@ -317,16 +321,21 @@ class SSHSessionManager:
                         "completed_at": job.completed_at
                     }
                 except Exception as e:
-                    # Command failed
-                    logger.error(f"Command failed: {e}")
+                    # Command failed or timed out
+                    error_msg = str(e)
+                    logger.error(f"Command failed: {error_msg}")
+                    # Calculate execution time for failed command
+                    completed_at = datetime.now(timezone.utc)
+                    exec_time = (completed_at - job.started_at).total_seconds()
+
                     return {
-                        "completed": True,
+                        "completed": False,  # Mark as failed
                         "job_id": job.job_id,
-                        "output": "",
-                        "execution_time": None,
+                        "output": job.output if job.output else "",  # Include any partial output
+                        "execution_time": exec_time,
                         "started_at": job.started_at,
-                        "completed_at": datetime.now(timezone.utc),
-                        "error": str(e)
+                        "completed_at": completed_at,
+                        "error": error_msg
                     }
 
         # Still running - return job_id for polling
@@ -354,12 +363,20 @@ class SSHSessionManager:
             raise ValueError(f"Job {job_id} not found")
 
         try:
+            # Ensure proper defaults for Netmiko send_command
+            # Add delay_factor for more reliable output capture on slow devices
+            if 'delay_factor' not in netmiko_kwargs:
+                netmiko_kwargs['delay_factor'] = 4  # Increased for Alpine/doas commands
+
             # Execute command (blocking, run in thread)
             output = await asyncio.to_thread(
                 connection.send_command,
                 command,
                 **netmiko_kwargs
             )
+
+            # Log output size for debugging
+            logger.info(f"Command output size: {len(output)} bytes")
 
             # Update job
             job.output = output
@@ -432,8 +449,13 @@ class SSHSessionManager:
         for i in range(wait_timeout):
             await asyncio.sleep(1)
             if task.done():
+                # Command completed - get result and recalculate timing
                 try:
                     output = task.result()
+                    # Job object updated by background task - recalculate execution time
+                    if job.completed_at and job.started_at:
+                        job.execution_time = (job.completed_at - job.started_at).total_seconds()
+
                     return {
                         "completed": True,
                         "job_id": job.job_id,
@@ -443,14 +465,20 @@ class SSHSessionManager:
                         "completed_at": job.completed_at
                     }
                 except Exception as e:
+                    # Config command failed or timed out
+                    error_msg = str(e)
+                    logger.error(f"Config failed: {error_msg}")
+                    completed_at = datetime.now(timezone.utc)
+                    exec_time = (completed_at - job.started_at).total_seconds()
+
                     return {
-                        "completed": True,
+                        "completed": False,  # Mark as failed
                         "job_id": job.job_id,
-                        "output": "",
-                        "execution_time": None,
+                        "output": job.output if job.output else "",
+                        "execution_time": exec_time,
                         "started_at": job.started_at,
-                        "completed_at": datetime.now(timezone.utc),
-                        "error": str(e)
+                        "completed_at": completed_at,
+                        "error": error_msg
                     }
 
         # Still running
