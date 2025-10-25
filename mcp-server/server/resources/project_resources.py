@@ -1,0 +1,352 @@
+"""
+Project-related MCP Resources
+
+Handles resources for projects, nodes, links, templates, and drawings.
+"""
+
+import json
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from main import AppContext
+
+
+async def list_projects_impl(app: "AppContext") -> str:
+    """
+    List all GNS3 projects
+
+    Resource URI: gns3://projects/
+
+    Returns:
+        JSON array of projects with status information
+    """
+    try:
+        projects = await app.gns3.get_projects()
+        return json.dumps(projects, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to list projects",
+            "details": str(e)
+        }, indent=2)
+
+
+async def get_project_impl(app: "AppContext", project_id: str) -> str:
+    """
+    Get project details by ID
+
+    Resource URI: gns3://projects/{project_id}
+
+    Args:
+        project_id: GNS3 project UUID
+
+    Returns:
+        JSON object with project details
+    """
+    try:
+        projects = await app.gns3.get_projects()
+        project = next((p for p in projects if p['project_id'] == project_id), None)
+
+        if not project:
+            return json.dumps({
+                "error": "Project not found",
+                "project_id": project_id
+            }, indent=2)
+
+        return json.dumps(project, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to get project",
+            "project_id": project_id,
+            "details": str(e)
+        }, indent=2)
+
+
+async def list_nodes_impl(app: "AppContext", project_id: str) -> str:
+    """
+    List all nodes in a project
+
+    Resource URI: gns3://projects/{project_id}/nodes/
+
+    Args:
+        project_id: GNS3 project UUID
+
+    Returns:
+        JSON array of node summaries
+    """
+    try:
+        # Verify project exists
+        projects = await app.gns3.get_projects()
+        project = next((p for p in projects if p['project_id'] == project_id), None)
+
+        if not project:
+            return json.dumps({
+                "error": "Project not found",
+                "project_id": project_id
+            }, indent=2)
+
+        # Get nodes
+        nodes = await app.gns3.get_nodes(project_id)
+
+        # Return lightweight NodeSummary format
+        from models import NodeSummary
+        summaries = [
+            NodeSummary(
+                node_id=n['node_id'],
+                name=n['name'],
+                node_type=n['node_type'],
+                status=n['status'],
+                console_type=n['console_type'],
+                console=n.get('console')
+            ).model_dump()
+            for n in nodes
+        ]
+
+        return json.dumps(summaries, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to list nodes",
+            "project_id": project_id,
+            "details": str(e)
+        }, indent=2)
+
+
+async def get_node_impl(app: "AppContext", project_id: str, node_id: str) -> str:
+    """
+    Get detailed node information
+
+    Resource URI: gns3://projects/{project_id}/nodes/{node_id}
+
+    Args:
+        project_id: GNS3 project UUID
+        node_id: Node UUID
+
+    Returns:
+        JSON object with complete node details (NodeInfo)
+    """
+    try:
+        # Get all nodes
+        nodes = await app.gns3.get_nodes(project_id)
+        node = next((n for n in nodes if n['node_id'] == node_id), None)
+
+        if not node:
+            return json.dumps({
+                "error": "Node not found",
+                "project_id": project_id,
+                "node_id": node_id
+            }, indent=2)
+
+        # Return full NodeInfo format
+        from models import NodeInfo
+        props = node.get('properties', {})
+        info = NodeInfo(
+            node_id=node['node_id'],
+            name=node['name'],
+            node_type=node['node_type'],
+            status=node['status'],
+            console_type=node['console_type'],
+            console=node.get('console'),
+            console_host=node.get('console_host'),
+            compute_id=node.get('compute_id', 'local'),
+            x=node.get('x', 0),
+            y=node.get('y', 0),
+            z=node.get('z', 0),
+            locked=node.get('locked', False),
+            ports=node.get('ports'),
+            label=node.get('label'),
+            symbol=node.get('symbol'),
+            ram=props.get('ram'),
+            cpus=props.get('cpus'),
+            adapters=props.get('adapters'),
+            hdd_disk_image=props.get('hdd_disk_image'),
+            hda_disk_image=props.get('hda_disk_image')
+        ).model_dump()
+
+        return json.dumps(info, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to get node",
+            "project_id": project_id,
+            "node_id": node_id,
+            "details": str(e)
+        }, indent=2)
+
+
+async def list_links_impl(app: "AppContext", project_id: str) -> str:
+    """
+    List all network links in a project
+
+    Resource URI: gns3://projects/{project_id}/links/
+
+    Args:
+        project_id: GNS3 project UUID
+
+    Returns:
+        JSON array of link information with adapter/port details
+    """
+    try:
+        # Verify project exists
+        projects = await app.gns3.get_projects()
+        project = next((p for p in projects if p['project_id'] == project_id), None)
+
+        if not project:
+            return json.dumps({
+                "error": "Project not found",
+                "project_id": project_id
+            }, indent=2)
+
+        # Get links and nodes
+        links = await app.gns3.get_links(project_id)
+        nodes = await app.gns3.get_nodes(project_id)
+
+        # Build node lookup
+        node_lookup = {n['node_id']: n for n in nodes}
+
+        # Build link info with port names
+        from models import LinkInfo
+        link_infos = []
+
+        for link in links:
+            nodes_data = link.get('nodes', [])
+            if len(nodes_data) >= 2:
+                node_a_id = nodes_data[0].get('node_id')
+                node_b_id = nodes_data[1].get('node_id')
+                node_a = node_lookup.get(node_a_id)
+                node_b = node_lookup.get(node_b_id)
+
+                if node_a and node_b:
+                    # Get port names from node ports
+                    port_a_num = nodes_data[0].get('port_number', 0)
+                    port_b_num = nodes_data[1].get('port_number', 0)
+                    adapter_a_num = nodes_data[0].get('adapter_number', 0)
+                    adapter_b_num = nodes_data[1].get('adapter_number', 0)
+
+                    port_a_name = None
+                    port_b_name = None
+
+                    if node_a.get('ports'):
+                        for port in node_a['ports']:
+                            if (port.get('adapter_number') == adapter_a_num and
+                                port.get('port_number') == port_a_num):
+                                port_a_name = port.get('name')
+                                break
+
+                    if node_b.get('ports'):
+                        for port in node_b['ports']:
+                            if (port.get('adapter_number') == adapter_b_num and
+                                port.get('port_number') == port_b_num):
+                                port_b_name = port.get('name')
+                                break
+
+                    link_info = LinkInfo(
+                        link_id=link['link_id'],
+                        link_type=link.get('link_type', 'ethernet'),
+                        node_a=node_a['name'],
+                        node_a_id=node_a_id,
+                        port_a=port_a_num,
+                        adapter_a=adapter_a_num,
+                        port_a_name=port_a_name,
+                        node_b=node_b['name'],
+                        node_b_id=node_b_id,
+                        port_b=port_b_num,
+                        adapter_b=adapter_b_num,
+                        port_b_name=port_b_name,
+                        suspended=link.get('suspend', False)
+                    ).model_dump()
+
+                    link_infos.append(link_info)
+
+        return json.dumps(link_infos, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to list links",
+            "project_id": project_id,
+            "details": str(e)
+        }, indent=2)
+
+
+async def list_templates_impl(app: "AppContext", project_id: str) -> str:
+    """
+    List available GNS3 templates
+
+    Resource URI: gns3://projects/{project_id}/templates/
+
+    Args:
+        project_id: GNS3 project UUID (not used but keeps URI consistent)
+
+    Returns:
+        JSON array of template information
+    """
+    try:
+        templates = await app.gns3.get_templates()
+
+        # Build template info
+        from models import TemplateInfo
+        template_infos = [
+            TemplateInfo(
+                template_id=t['template_id'],
+                name=t['name'],
+                category=t.get('category', 'guest'),
+                template_type=t.get('template_type'),
+                builtin=t.get('builtin', False),
+                compute_id=t.get('compute_id', 'local'),
+                symbol=t.get('symbol')
+            ).model_dump()
+            for t in templates
+        ]
+
+        return json.dumps(template_infos, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to list templates",
+            "project_id": project_id,
+            "details": str(e)
+        }, indent=2)
+
+
+async def list_drawings_impl(app: "AppContext", project_id: str) -> str:
+    """
+    List all drawing objects in a project
+
+    Resource URI: gns3://projects/{project_id}/drawings/
+
+    Args:
+        project_id: GNS3 project UUID
+
+    Returns:
+        JSON array of drawing information
+    """
+    try:
+        # Verify project exists
+        projects = await app.gns3.get_projects()
+        project = next((p for p in projects if p['project_id'] == project_id), None)
+
+        if not project:
+            return json.dumps({
+                "error": "Project not found",
+                "project_id": project_id
+            }, indent=2)
+
+        # Get drawings
+        drawings = await app.gns3.get_drawings(project_id)
+
+        # Build drawing info
+        from models import DrawingInfo
+        drawing_infos = [
+            DrawingInfo(
+                drawing_id=d['drawing_id'],
+                x=d.get('x', 0),
+                y=d.get('y', 0),
+                z=d.get('z', 0),
+                rotation=d.get('rotation', 0),
+                svg=d.get('svg', '')
+            ).model_dump()
+            for d in drawings
+        ]
+
+        return json.dumps(drawing_infos, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to list drawings",
+            "project_id": project_id,
+            "details": str(e)
+        }, indent=2)

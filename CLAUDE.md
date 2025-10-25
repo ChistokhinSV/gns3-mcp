@@ -10,9 +10,58 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.12.4
+## Current Version: v0.13.0
 
-**Latest Release:** v0.12.4 - Documentation and Error Handling (Patch - UX)
+**Latest Release:** v0.13.0 - MCP Resources (Breaking Changes - Phase 1)
+- **NEW**: 15 MCP resources for browsable state via `gns3://` URI scheme
+  - Project resources: `gns3://projects/`, `gns3://projects/{id}`, `gns3://projects/{id}/nodes/`, etc.
+  - Session resources: `gns3://sessions/console/{node}`, `gns3://sessions/ssh/{node}`, etc.
+  - SSH proxy resources: `gns3://proxy/status`, `gns3://proxy/sessions`
+  - Provides browsable state in MCP-aware tools (inspectors, IDEs)
+  - Better IDE integration with automatic discovery and autocomplete
+- **REFACTORED**: Resource architecture with 3 new modules
+  - `resources/resource_manager.py` - URI routing and resource dispatch (330 LOC)
+  - `resources/project_resources.py` - Project/node/link/template/drawing resources (340 LOC)
+  - `resources/session_resources.py` - Console/SSH session resources (230 LOC)
+  - Total: 900 LOC for resource infrastructure
+- **DEPRECATED**: 11 query tools (still functional, will be removed in v0.14.0)
+  - `list_projects()` → `gns3://projects/`
+  - `list_nodes()` → `gns3://projects/{id}/nodes/`
+  - `get_node_details()` → `gns3://projects/{id}/nodes/{id}`
+  - `get_links()` → `gns3://projects/{id}/links/`
+  - `list_templates()` → `gns3://projects/{id}/templates/`
+  - `list_drawings()` → `gns3://projects/{id}/drawings/`
+  - `get_console_status()` → `gns3://sessions/console/{node}`
+  - `ssh_get_status()` → `gns3://sessions/ssh/{node}`
+  - `ssh_get_history()` → `gns3://sessions/ssh/{node}/history`
+  - `ssh_get_command_output()` → Query resource with filtering
+  - `ssh_read_buffer()` → `gns3://sessions/ssh/{node}/buffer`
+- **ENHANCED**: Updated server architecture
+  - Added `ResourceManager` to AppContext for centralized resource management
+  - Added `@mcp.list_resources()` handler for resource discovery
+  - Added `@mcp.resource("gns3://{+path}")` handler for URI-based resource access
+  - Main.py version header updated to v0.13.0 with full resource documentation
+- **DOCUMENTATION**: Updated SKILL.md and manifest.json
+  - SKILL.md: New "MCP Resources" section with complete URI reference (66 lines)
+  - Manifest.json: Updated description to emphasize MCP resources
+  - Clear migration guidance from deprecated tools to resources
+- **Files added**:
+  - `mcp-server/server/resources/__init__.py` - Resource module initialization
+  - `mcp-server/server/resources/resource_manager.py` - URI routing (330 LOC)
+  - `mcp-server/server/resources/project_resources.py` - Project resources (340 LOC)
+  - `mcp-server/server/resources/session_resources.py` - Session resources (230 LOC)
+- **Files changed**:
+  - `mcp-server/server/main.py`: Added ResourceManager import, AppContext field, lifespan initialization, 2 resource handlers, version 0.12.4→0.13.0
+  - `mcp-server/manifest.json`: Version 0.12.4→0.13.0, updated descriptions
+  - `skill/SKILL.md`: Added "MCP Resources" section with complete documentation
+  - `CLAUDE.md`: This version entry
+- **NO BREAKING CHANGES**: All existing tools still functional (deprecated but working)
+  - Query tools will continue working until v0.14.0
+  - Migration period allows gradual transition to resources
+  - All action tools (modify state) unchanged
+- **Rationale**: MCP resources provide better IDE integration, automatic discovery, and clearer separation between read (resources) and write (tools) operations. Reduces cognitive load from 30 tools to 10 core tools + 15 browsable resources.
+
+**Previous:** v0.12.4 - Documentation and Error Handling (Patch - UX)
 - **ENHANCED**: Added comprehensive SSH vs Console tool selection guidelines
   - Server-level instruction in main.py module docstring (visible on server load)
   - Individual tool docstrings updated with preference notes

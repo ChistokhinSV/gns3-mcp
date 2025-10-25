@@ -1,0 +1,116 @@
+@startuml Migration Flow v0.13
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+
+title GNS3 MCP Migration Flow\nv0.12.4 → v0.14.0
+
+' Current state
+rectangle "v0.12.4 (Current)\n30 Tools" as v0124 #FFE4E1 {
+  rectangle "Projects (2)" as p_old
+  rectangle "Nodes (5)" as n_old
+  rectangle "Console (6)" as c_old
+  rectangle "SSH (9)" as s_old
+  rectangle "Topology (5)" as t_old
+  rectangle "Drawings (3)" as d_old
+}
+
+' Phase 1
+rectangle "v0.13.0 (Phase 1)\n30 Tools + Resources" as v0130 #E8F4F8 {
+  rectangle "30 Tools (unchanged)" as tools_130
+  rectangle "15+ Resources (new)" as res_130
+  note right of res_130
+    **Non-breaking**
+    • Projects browsable
+    • Nodes browsable
+    • Sessions browsable
+    • All old tools work
+  end note
+}
+
+' Phase 2
+rectangle "v0.13.1 (Phase 2)\n30 Tools + Resources + Templates" as v0131 #F4E8F8 {
+  rectangle "30 Tools (3 deprecated)" as tools_131
+  rectangle "15+ Resources" as res_131
+  rectangle "3+ Templates (new)" as tpl_131
+  note right of tools_131
+    **Non-breaking**
+    • create_node deprecated
+    • create_drawing deprecated
+    • export_topology deprecated
+    • Warnings in docstrings
+  end note
+}
+
+' Phase 3
+rectangle "v0.13.2 (Phase 3)\n30 Tools + Resources + Templates + Prompts" as v0132 #F8F4E8 {
+  rectangle "30 Tools (3 deprecated)" as tools_132
+  rectangle "15+ Resources" as res_132
+  rectangle "3+ Templates" as tpl_132
+  rectangle "3+ Prompts (new)" as prm_132
+  note right of prm_132
+    **Non-breaking**
+    • SSH setup workflow
+    • Topology discovery
+    • Troubleshooting
+  end note
+}
+
+' Phase 4
+rectangle "v0.14.0 (Phase 4)\n10 Tools + Resources + Templates + Prompts" as v0140 #E8F8E8 {
+  rectangle "10 Tools (renamed)" as tools_140
+  rectangle "15+ Resources" as res_140
+  rectangle "3+ Templates" as tpl_140
+  rectangle "3+ Prompts" as prm_140
+  note right of tools_140
+    **BREAKING**
+    • 11 tools removed
+    • 6 tools renamed
+    • 2 tools merged
+  end note
+}
+
+' Flow
+v0124 -down-> v0130 : "Add Resources\n(1-2 weeks)"
+v0130 -down-> v0131 : "Add Templates\n(1 week)"
+v0131 -down-> v0132 : "Add Prompts\n(1 week)"
+v0132 -down-> v0140 : "Remove Deprecated\n(1-2 weeks)"
+
+' Timeline
+note left of v0124
+  **Week 0**
+  Current state
+end note
+
+note left of v0130
+  **Weeks 1-2**
+  Resources added
+end note
+
+note left of v0131
+  **Week 3**
+  Templates added
+end note
+
+note left of v0132
+  **Week 4**
+  Prompts added
+end note
+
+note left of v0140
+  **Weeks 6-7**
+  Breaking changes
+end note
+
+' Legend
+legend right
+  |= Color |= Phase |= Breaking? |
+  | <#FFE4E1> | Current | No |
+  | <#E8F4F8> | Phase 1 | No |
+  | <#F4E8F8> | Phase 2 | No |
+  | <#F8F4E8> | Phase 3 | No |
+  | <#E8F8E8> | Phase 4 | **YES** |
+endlegend
+
+@enduml

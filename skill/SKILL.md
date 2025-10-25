@@ -11,6 +11,72 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 
 ## Core Concepts
 
+### MCP Resources (v0.13.0 - NEW)
+
+**MCP resources provide browsable state** via standardized URIs, replacing query tools for better IDE integration.
+
+**Resource Benefits:**
+- Browsable in MCP-aware tools (inspectors, IDEs)
+- Automatic discovery and autocomplete
+- Consistent URI scheme (`gns3://` protocol)
+- Better performance with resource subscriptions
+
+**Available Resources:**
+
+**Project Resources:**
+- `gns3://projects/` - List all GNS3 projects
+- `gns3://projects/{project_id}` - Get project details by ID
+- `gns3://projects/{project_id}/nodes/` - List nodes in project (NodeSummary)
+- `gns3://projects/{project_id}/nodes/{node_id}` - Get node details (full NodeInfo)
+- `gns3://projects/{project_id}/links/` - List network links in project
+- `gns3://projects/{project_id}/templates/` - List available templates
+- `gns3://projects/{project_id}/drawings/` - List drawing objects
+
+**Console Session Resources:**
+- `gns3://sessions/console/` - List all active console sessions
+- `gns3://sessions/console/{node_name}` - Get console session status for node
+
+**SSH Session Resources:**
+- `gns3://sessions/ssh/` - List all active SSH sessions
+- `gns3://sessions/ssh/{node_name}` - Get SSH session status for node
+- `gns3://sessions/ssh/{node_name}/history` - Get SSH command history
+- `gns3://sessions/ssh/{node_name}/buffer` - Get SSH continuous buffer
+
+**SSH Proxy Resources:**
+- `gns3://proxy/status` - Get SSH proxy service status
+- `gns3://proxy/sessions` - List all SSH proxy sessions
+
+**Resource vs Tool Usage:**
+- **Resources**: Query state (read-only) - use for browsing, monitoring
+- **Tools**: Modify state (actions) - use for changes, commands, configuration
+
+**Example Resource Workflow:**
+```
+# Browse resources (read-only)
+1. List all projects: gns3://projects/
+2. Pick project ID from list
+3. View nodes: gns3://projects/{id}/nodes/
+4. Check SSH session: gns3://sessions/ssh/R1
+
+# Use tools to modify (actions)
+5. Call configure_ssh() to create SSH session
+6. Call ssh_send_command() to execute commands
+7. Call set_node() to change node state
+```
+
+**Deprecated Tools (will be removed in v0.14.0):**
+- `list_projects()` → Use resource `gns3://projects/`
+- `list_nodes()` → Use resource `gns3://projects/{id}/nodes/`
+- `get_node_details()` → Use resource `gns3://projects/{id}/nodes/{id}`
+- `get_links()` → Use resource `gns3://projects/{id}/links/`
+- `list_templates()` → Use resource `gns3://projects/{id}/templates/`
+- `list_drawings()` → Use resource `gns3://projects/{id}/drawings/`
+- `get_console_status()` → Use resource `gns3://sessions/console/{node}`
+- `ssh_get_status()` → Use resource `gns3://sessions/ssh/{node}`
+- `ssh_get_history()` → Use resource `gns3://sessions/ssh/{node}/history`
+- `ssh_get_command_output()` → Use resource with filtering
+- `ssh_read_buffer()` → Use resource `gns3://sessions/ssh/{node}/buffer`
+
 ### Projects
 - **Projects** are isolated network topologies with their own nodes, links, and configuration
 - Projects have status: `opened` or `closed`

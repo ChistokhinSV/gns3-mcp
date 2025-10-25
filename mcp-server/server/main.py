@@ -1,4 +1,4 @@
-"""GNS3 MCP Server v0.12.4
+"""GNS3 MCP Server v0.13.0
 
 Model Context Protocol server for GNS3 lab automation.
 Provides console and SSH automation tools for network devices.
@@ -24,6 +24,42 @@ Typical Workflow:
 2. Establish SSH session with configure_ssh()
 3. Switch to SSH tools for all automation tasks
 4. Return to console only if SSH fails
+
+Version 0.13.0 - MCP Resources (BREAKING CHANGES - Phase 1):
+- NEW: 15 MCP resources for browsable state (gns3:// URI scheme)
+  * gns3://projects/ - List all projects
+  * gns3://projects/{id} - Project details
+  * gns3://projects/{id}/nodes/ - List nodes in project
+  * gns3://projects/{id}/nodes/{id} - Node details with full info
+  * gns3://projects/{id}/links/ - List links in project
+  * gns3://projects/{id}/templates/ - Available templates
+  * gns3://projects/{id}/drawings/ - List drawings
+  * gns3://sessions/console/ - All console sessions
+  * gns3://sessions/console/{node} - Console session status
+  * gns3://sessions/ssh/ - All SSH sessions
+  * gns3://sessions/ssh/{node} - SSH session status
+  * gns3://sessions/ssh/{node}/history - SSH command history
+  * gns3://sessions/ssh/{node}/buffer - SSH continuous buffer
+  * gns3://proxy/status - SSH proxy service status
+  * gns3://proxy/sessions - All SSH proxy sessions
+- REFACTORED: Resource architecture with 3 new modules
+  * resources/resource_manager.py - URI routing (330 LOC)
+  * resources/project_resources.py - Project/node/link resources (340 LOC)
+  * resources/session_resources.py - Console/SSH session resources (230 LOC)
+- DEPRECATED: 11 query tools (still available, will be removed in v0.14.0)
+  * list_projects → gns3://projects/
+  * list_nodes → gns3://projects/{id}/nodes/
+  * get_node_details → gns3://projects/{id}/nodes/{id}
+  * get_links → gns3://projects/{id}/links/
+  * list_templates → gns3://projects/{id}/templates/
+  * list_drawings → gns3://projects/{id}/drawings/
+  * get_console_status → gns3://sessions/console/{node}
+  * ssh_get_status → gns3://sessions/ssh/{node}
+  * ssh_get_history → gns3://sessions/ssh/{node}/history
+  * ssh_get_command_output → gns3://sessions/ssh/{node}/history (with filtering)
+  * ssh_read_buffer → gns3://sessions/ssh/{node}/buffer
+- ENHANCED: Better IDE integration with resource discovery
+- NO BREAKING CHANGES: All existing tools still work (deprecated tools functional)
 
 Version 0.12.4 - Error Handling Improvement (BUGFIX):
 - FIXED: configure_ssh error messages now properly distinguish SSH connection
@@ -168,6 +204,7 @@ from tools.drawing_tools import (
     delete_drawing_impl
 )
 from tools.template_tools import list_templates_impl
+from resources import ResourceManager
 
 # Setup logging
 logging.basicConfig(
@@ -182,9 +219,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AppContext:
-    """Application context with GNS3 client and console manager"""
+    """Application context with GNS3 client, console manager, and resource manager"""
     gns3: GNS3Client
     console: ConsoleManager
+    resource_manager: Optional[ResourceManager] = None
     current_project_id: str | None = None
     cleanup_task: Optional[asyncio.Task] = field(default=None)
 
@@ -239,12 +277,16 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     else:
         logger.warning("No opened project found - some tools require opening a project first")
 
+    # Create context (resource_manager needs context, so create first then update)
     context = AppContext(
         gns3=gns3,
         console=console,
         current_project_id=current_project_id,
         cleanup_task=cleanup_task
     )
+
+    # Initialize resource manager (needs context for callbacks)
+    context.resource_manager = ResourceManager(context)
 
     try:
         yield context
@@ -321,6 +363,60 @@ mcp = FastMCP(
     dependencies=["mcp>=1.2.1", "httpx>=0.28.1", "telnetlib3>=2.0.4", "pydantic>=2.0.0"]
 )
 
+
+# ============================================================================
+# MCP Resources - Browsable State
+# ============================================================================
+
+@mcp.list_resources()
+async def list_resources(ctx: Context) -> list[dict]:
+    """List all available MCP resources
+
+    Provides browsable access to GNS3 projects, nodes, sessions, and more.
+    Resources replace query tools for better discoverability.
+
+    Returns:
+        List of resource metadata dicts with uri, name, description, mimeType
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.list_resources()
+
+
+@mcp.resource("gns3://{+path}")
+async def get_resource(ctx: Context, path: str) -> str:
+    """Get resource by URI
+
+    Supported URIs:
+    - gns3://projects/ - List all projects
+    - gns3://projects/{id} - Project details
+    - gns3://projects/{id}/nodes/ - Nodes in project
+    - gns3://projects/{id}/nodes/{id} - Node details
+    - gns3://projects/{id}/links/ - Links in project
+    - gns3://projects/{id}/templates/ - Available templates
+    - gns3://projects/{id}/drawings/ - Drawings in project
+    - gns3://sessions/console/ - Active console sessions
+    - gns3://sessions/console/{node} - Console session status
+    - gns3://sessions/ssh/ - Active SSH sessions
+    - gns3://sessions/ssh/{node} - SSH session status
+    - gns3://sessions/ssh/{node}/history - SSH command history
+    - gns3://sessions/ssh/{node}/buffer - SSH continuous buffer
+    - gns3://proxy/status - SSH proxy service status
+    - gns3://proxy/sessions - All SSH proxy sessions
+
+    Args:
+        path: Resource path (everything after gns3://)
+
+    Returns:
+        JSON string with resource data
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    uri = f"gns3://{path}"
+    return await app.resource_manager.get_resource(uri)
+
+
+# ============================================================================
+# MCP Tools - Actions That Modify State
+# ============================================================================
 
 @mcp.tool()
 async def list_projects(ctx: Context) -> str:
