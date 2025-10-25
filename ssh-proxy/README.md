@@ -37,7 +37,7 @@ Storage:
 
 ```bash
 cd ssh-proxy
-docker build -t chistokhinsv/gns3-ssh-proxy:v0.1.0 .
+docker build -t chistokhinsv/gns3-ssh-proxy:v0.1.1 .
 ```
 
 ### 2. Run Container
@@ -47,7 +47,7 @@ docker run -d \
   --name gns3-ssh-proxy \
   --network host \
   --restart unless-stopped \
-  chistokhinsv/gns3-ssh-proxy:v0.1.0
+  chistokhinsv/gns3-ssh-proxy:v0.1.1
 ```
 
 ### 3. Verify
@@ -187,6 +187,11 @@ See [DEPLOYMENT.md](../DEPLOYMENT.md) for complete deployment instructions for G
 
 ## Version
 
-Current version: **0.1.0** (Phase 1 - Core Service)
+Current version: **0.1.1** (Bugfix - Output Capture & Execution Time)
+
+**v0.1.1 Changes:**
+- Fixed: `execution_time` always null (race condition in adaptive async)
+- Fixed: Empty output from commands (added delay_factor=2 for reliable capture)
+- Added: Output size logging for debugging
 
 See [CLAUDE.md](../CLAUDE.md) for full version history and changelog.

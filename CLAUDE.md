@@ -16,7 +16,7 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - **NEW**: SSH proxy service (FastAPI container, Python 3.13-slim)
   - Separate Docker container with network mode=host for GNS3 lab access
   - Port 8022 (SSH-like mnemonic)
-  - Docker Hub: `chistokhinsv/gns3-ssh-proxy:v0.1.0`
+  - Docker Hub: `chistokhinsv/gns3-ssh-proxy:v0.1.2`
   - Deployment via SSH to GNS3 host
 - **NEW**: Dual storage architecture
   - **Storage System 1**: Continuous buffer (10MB max, like console manager)
@@ -70,6 +70,26 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
   4. Review history with ssh_get_history() and ssh_get_command_output()
 - **NO BREAKING CHANGES**: All existing tools unchanged, SSH tools additive
 - **Rationale**: Enables SSH automation for devices without telnet console, handles interactive prompts and long-running installations, maintains searchable command history with audit trail
+
+**SSH Proxy v0.1.2** (Patch - Netmiko timeout and error handling fixes)
+- **FIXED**: Netmiko prompt detection timeout on Alpine Linux
+  - Increased delay_factor from 2 to 4 (provides 20s read window with read_timeout=5)
+  - Commands now complete in ~0.1s instead of timing out after 11s
+  - Empty output bug resolved - commands now capture actual output
+- **FIXED**: Exception handlers masking errors
+  - Changed to return `completed: False` for failures (was incorrectly True)
+  - Now includes error messages, execution_time calculation, and partial output
+  - Provides actionable error details instead of silent failures
+- **Files changed**:
+  - `ssh-proxy/server/session_manager.py`: delay_factor 2→4 (line 364), exception handlers rewritten (lines 323-339, 467-482)
+  - `ssh-proxy/server/main.py`: Version 0.1.1→0.1.2
+  - `.gitignore`: Added .coverage
+- **Testing**: Verified on B-Rec1 (Alpine Linux):
+  - `doas rc-service pdns-recursor status`: ✅ 0.107s, output: " * status: started"
+  - `echo "test" && pwd && whoami`: ✅ 0.107s, complete output captured
+  - Container logs: No "Pattern not detected" errors
+- **Deployment**: Built and deployed as `chistokhinsv/gns3-ssh-proxy:v0.1.2` and `latest` tags
+- **Rationale**: Resolves critical bugs where SSH commands returned empty output with 11-second timeouts due to Netmiko prompt detection issues
 
 **Previous:** v0.11.1 - Console Output Pagination (Patch)
 - **NEW**: Added `num_pages` mode to `read_console()` tool
@@ -1069,3 +1089,4 @@ git add . && git commit -m "feat: description"
 - rebuild desktop extensions after finishing modifications of the tools and skills
 - remember to restart chat when need to update mcp server
 - keep version history in CLAUDE.md
+- Remember that you need to update the version and set the 'latest' tag to the container
