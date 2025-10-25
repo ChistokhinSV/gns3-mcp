@@ -65,6 +65,22 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
   - MCP server: Packaged as gns3-mcp@0.12.1 desktop extension
 - **Rationale**: Enables efficient log analysis and troubleshooting by filtering large console/SSH buffers. Grep-style interface familiar to network engineers. Maintains full backward compatibility.
 
+**SSH Proxy v0.1.5** (Patch - API monitoring endpoints)
+- **NEW**: Added `/version` endpoint for version tracking
+  - GET `/version` - Returns service version and name
+  - Useful for compatibility checking and deployment tracking
+  - Example response: `{"version": "0.1.5", "service": "gns3-ssh-proxy"}`
+- **ENHANCED**: Improved `/health` endpoint documentation
+  - GET `/health` - Returns service health status, name, and version
+  - Example response: `{"status": "healthy", "service": "gns3-ssh-proxy", "version": "0.1.5"}`
+- **Files changed**:
+  - `ssh-proxy/server/main.py`: Added /version endpoint (lines 104-118), updated health endpoint docs (lines 90-101), version 0.1.4→0.1.5 (lines 81, 100, 117)
+- **Testing**: Verified both endpoints on deployed container
+  - `/health`: ✅ Returns healthy status with version
+  - `/version`: ✅ Returns version 0.1.5
+- **Deployment**: Built and deployed as `chistokhinsv/gns3-ssh-proxy:v0.1.5` and `latest` tags
+- **Rationale**: Standard REST API practice to provide health/version endpoints for monitoring, logging, and troubleshooting
+
 **Previous:** v0.12.0 - SSH Proxy Service (Feature - Phase 1)
 - **NEW**: SSH proxy service (FastAPI container, Python 3.13-slim)
   - Separate Docker container with network mode=host for GNS3 lab access

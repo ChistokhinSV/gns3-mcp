@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GNS3 SSH Proxy",
     description="SSH automation proxy for GNS3 network labs with Netmiko",
-    version="0.1.4",
+    version="0.1.5",
     lifespan=lifespan
 )
 
@@ -89,11 +89,32 @@ app = FastAPI(
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """
+    Health check endpoint
+
+    Returns service health status, name, and version.
+    """
     return {
         "status": "healthy",
         "service": "gns3-ssh-proxy",
-        "version": "0.1.4"
+        "version": "0.1.5"
+    }
+
+
+@app.get("/version")
+async def get_version():
+    """
+    Get service version
+
+    Returns the SSH proxy service version number.
+    Useful for tracking deployed versions and compatibility checking.
+
+    Returns:
+        Version information (version string and service name)
+    """
+    return {
+        "version": "0.1.5",
+        "service": "gns3-ssh-proxy"
     }
 
 
