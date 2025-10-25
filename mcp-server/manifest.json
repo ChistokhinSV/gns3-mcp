@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.14.0",
-  "description": "GNS3 lab automation - final architecture with 17 tools + 15 MCP resources - prefer SSH tools for automation",
-  "long_description": "FINAL ARCHITECTURE: 17 action tools + 15 browsable MCP resources. Use SSH MCP tools (ssh_send_command, ssh_send_config_set) for automation - better reliability and prompt detection. Console tools (send_console, read_console) only for initial SSH setup or troubleshooting. Version 0.14.0: REMOVED - 11 deprecated query tools (now available as MCP resources: gns3://projects/, gns3://sessions/ssh/{node}, etc.). Clear separation: Tools modify state, Resources browse state. Version 0.13.0: NEW - 15 MCP resources for browsable state providing better IDE integration. Version 0.12.4: Added SSH vs Console tool selection guidance. Supports GNS3 v3 API.",
+  "version": "0.15.0",
+  "description": "GNS3 lab automation - final architecture with 11 tools + 15 MCP resources - consistent naming and merged SSH commands",
+  "long_description": "FINAL ARCHITECTURE: 11 core tools + 15 browsable MCP resources with consistent {category}_{action} naming. Version 0.15.0 BREAKING CHANGES: Renamed all tools for consistency (console_send, console_read, ssh_configure), merged SSH commands (ssh_command auto-detects show vs config), removed 7 deprecated tools (send_and_wait_console, create_node/drawing, delete_drawing, ssh_cleanup_sessions, ssh_get_job_status). Use ssh_command() for all SSH operations - auto-detects command type. Console tools (console_send, console_read) only for initial SSH setup. Version 0.14.0: REMOVED 11 query tools (now MCP resources). Version 0.13.0: Added 15 MCP resources. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -66,24 +66,20 @@
       "description": "Configure node properties and/or control state (returns JSON status message)"
     },
     {
-      "name": "send_console",
-      "description": "Send commands to node console (returns status string, auto-connects if needed)"
+      "name": "console_send",
+      "description": "Send data to console (auto-connects, returns status string)"
     },
     {
-      "name": "read_console",
-      "description": "Read console output with mode parameter (returns console output string, mode='diff'/'last_page'/'num_pages'/'all', supports pages parameter for num_pages mode)"
+      "name": "console_read",
+      "description": "Read console output with mode parameter (mode='diff'/'last_page'/'num_pages'/'all', supports grep filtering)"
     },
     {
-      "name": "disconnect_console",
-      "description": "Disconnect from node console session (returns JSON status)"
+      "name": "console_disconnect",
+      "description": "Disconnect console session (returns JSON status)"
     },
     {
-      "name": "send_and_wait_console",
-      "description": "Send command and wait for specific prompt pattern (returns JSON with output, pattern_found, timeout_occurred)"
-    },
-    {
-      "name": "send_keystroke",
-      "description": "Send special keystroke to console (returns status string)"
+      "name": "console_keystroke",
+      "description": "Send special keystroke to console (navigation, editing, control keys)"
     },
     {
       "name": "set_connection",
@@ -94,36 +90,16 @@
       "description": "Delete a node from the current project (returns JSON confirmation)"
     },
     {
-      "name": "create_node",
-      "description": "Create a new node from a template at specified coordinates (returns JSON with NodeInfo)"
+      "name": "ssh_configure",
+      "description": "Configure SSH session for device (requires SSH enabled, returns JSON with session_id/connected status)"
     },
     {
-      "name": "create_drawing",
-      "description": "Create a drawing object (returns JSON DrawingInfo, types: rectangle/ellipse/line/text)"
+      "name": "ssh_command",
+      "description": "Execute SSH command(s) with auto-detection (string=show command, list=config commands)"
     },
     {
-      "name": "delete_drawing",
-      "description": "Delete a drawing object from the current project (returns JSON confirmation)"
-    },
-    {
-      "name": "configure_ssh",
-      "description": "Configure SSH session for device (requires SSH enabled on device, returns JSON with session_id/connected status)"
-    },
-    {
-      "name": "ssh_send_command",
-      "description": "Execute show command via SSH (returns JSON with job_id/output, supports adaptive async with wait_timeout)"
-    },
-    {
-      "name": "ssh_send_config_set",
-      "description": "Send configuration commands via SSH (returns JSON with job_id/output)"
-    },
-    {
-      "name": "ssh_cleanup_sessions",
-      "description": "Clean orphaned/all SSH sessions (keep_nodes/clean_all params, returns JSON with cleaned list)"
-    },
-    {
-      "name": "ssh_get_job_status",
-      "description": "Poll async SSH job status by job_id (returns JSON with completion status/output)"
+      "name": "ssh_disconnect",
+      "description": "Disconnect SSH session (returns JSON status)"
     }
   ],
   "compatibility": {

@@ -10,9 +10,50 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.14.0
+## Current Version: v0.15.0
 
-**Latest Release:** v0.14.0 - Tool Consolidation (BREAKING CHANGES - Final Architecture)
+**Latest Release:** v0.15.0 - Complete Tool Consolidation (BREAKING CHANGES)
+- **RENAMED**: All tools now follow `{category}_{action}` naming pattern for consistency
+  - `send_console` → `console_send`
+  - `read_console` → `console_read`
+  - `disconnect_console` → `console_disconnect`
+  - `send_keystroke` → `console_keystroke`
+  - `configure_ssh` → `ssh_configure`
+- **MERGED**: SSH command tools with auto-detection
+  - `ssh_send_command` + `ssh_send_config_set` → `ssh_command()`
+  - Auto-detects command type: string = show command, list = config commands
+  - Simpler API: one tool for all SSH operations
+- **REMOVED**: 7 deprecated/low-usage tools
+  - `send_and_wait_console` → Use `console_send` + `console_read` workflow
+  - `create_node` → Will be resource template in v0.16.0
+  - `create_drawing` → Will be resource template in v0.16.0
+  - `delete_drawing` → Use GNS3 GUI (low usage)
+  - `ssh_cleanup_sessions` → Use explicit `ssh_disconnect`
+  - `ssh_get_job_status` → Already available as resource `gns3://sessions/ssh/{node}/jobs/{id}`
+- **NEW**: `ssh_disconnect` tool for explicit SSH session cleanup
+- **FINAL ARCHITECTURE**: 11 core tools + 15 browsable resources
+  - **Tools (11)**: open_project, set_node, delete_node, console_send, console_read, console_disconnect, console_keystroke, set_connection, ssh_configure, ssh_command, ssh_disconnect
+  - **Resources (15)**: 15 `gns3://` URIs for browsing state
+  - **Clear patterns**: Console tools prefixed with `console_`, SSH tools prefixed with `ssh_`
+- **Tool count reduction**: 17 → 11 (-35% reduction from v0.14.0, -63% total from v0.12.4's 30 tools)
+- **Files changed**:
+  - `mcp-server/server/main.py`: Renamed 5 tools, merged 2 SSH tools, removed 7 tools, version 0.14.0→0.15.0
+  - `mcp-server/server/tools/ssh_tools.py`: Added `ssh_disconnect_impl()` function (48 LOC)
+  - `mcp-server/manifest.json`: Updated tool definitions, version 0.14.0→0.15.0
+  - `CLAUDE.md`: This version entry
+  - `mcp-server/mcp-server.mcpb`: Rebuilt desktop extension
+- **Migration Guide**:
+  - **Console tools**: Add `console_` prefix (e.g., `send_console` → `console_send`)
+  - **SSH configuration**: `configure_ssh` → `ssh_configure`
+  - **SSH commands**: Use `ssh_command()` for both show and config
+    - Show: `ssh_command("R1", "show ip route")` (string)
+    - Config: `ssh_command("R1", ["interface Gi0/0", "ip address..."])` (list)
+  - **Interactive workflows**: Replace `send_and_wait_console()` with `console_send()` + `console_read()`
+  - **Node/drawing creation**: Use GNS3 GUI until v0.16.0 resource templates available
+- **NO BREAKING CHANGES for resources**: All 15 MCP resources unchanged
+- **Rationale**: Consistent tool naming improves discoverability, merged SSH command simplifies API, reduced tool count lowers cognitive load
+
+**Previous:** v0.14.0 - Tool Consolidation (BREAKING CHANGES - Phase 1)
 - **REMOVED**: 11 deprecated query tools (replaced by MCP resources in v0.13.0)
   - `list_projects()` → resource `gns3://projects`
   - `list_nodes()` → resource `gns3://projects/{id}/nodes`

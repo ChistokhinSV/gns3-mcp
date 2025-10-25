@@ -1,4 +1,4 @@
-"""GNS3 MCP Server v0.14.0
+"""GNS3 MCP Server v0.15.0
 
 Model Context Protocol server for GNS3 lab automation.
 Provides console and SSH automation tools for network devices.
@@ -8,24 +8,47 @@ IMPORTANT: Tool Selection Guidelines
 When automating network devices, ALWAYS prefer SSH tools over console tools!
 
 SSH Tools (Preferred):
-- ssh_send_command(), ssh_send_config_set()
+- ssh_command() - Auto-detects show vs config commands
 - Better reliability with automatic prompt detection
 - Structured output and error handling
 - Supports 200+ device types via Netmiko
 
 Console Tools (Use Only When Necessary):
-- send_console(), read_console(), send_and_wait_console()
+- console_send(), console_read(), console_disconnect(), console_keystroke()
 - For initial device configuration (enabling SSH, creating users)
 - For troubleshooting when SSH is unavailable
 - For devices without SSH support (VPCS, simple switches)
 
 Typical Workflow:
 1. Use console tools to configure SSH access on device
-2. Establish SSH session with configure_ssh()
+2. Establish SSH session with ssh_configure()
 3. Switch to SSH tools for all automation tasks
 4. Return to console only if SSH fails
 
-Version 0.14.0 - Tool Consolidation (BREAKING CHANGES - Final Architecture):
+Version 0.15.0 - Complete Tool Consolidation (BREAKING CHANGES):
+- RENAMED: All tools now follow {category}_{action} pattern for consistency
+  * send_console → console_send
+  * read_console → console_read
+  * disconnect_console → console_disconnect
+  * send_keystroke → console_keystroke
+  * configure_ssh → ssh_configure
+- MERGED: SSH command tools with auto-detection
+  * ssh_send_command + ssh_send_config_set → ssh_command (auto-detects show vs config)
+- REMOVED: 7 deprecated/low-usage tools
+  * send_and_wait_console → Use console_send + console_read workflow
+  * create_node → Will be resource template in v0.16.0
+  * create_drawing → Will be resource template in v0.16.0
+  * delete_drawing → Use GNS3 GUI (low usage)
+  * ssh_cleanup_sessions → Use explicit ssh_disconnect
+  * ssh_get_job_status → Already available as resource gns3://sessions/ssh/{node}/jobs/{id}
+- NEW: ssh_disconnect tool for explicit session cleanup
+- FINAL ARCHITECTURE: 11 core tools + 15 browsable resources
+  * Tools: open_project, set_node, delete_node, console_send, console_read, console_disconnect,
+           console_keystroke, set_connection, ssh_configure, ssh_command, ssh_disconnect
+  * Resources: 15 gns3:// URIs for browsing state
+- RATIONALE: Consistent naming, simpler SSH interface, reduced tool count (17→11)
+
+Version 0.14.0 - Tool Consolidation (BREAKING CHANGES - Phase 1):
 - REMOVED: 11 deprecated query tools (replaced by MCP resources in v0.13.0)
   * list_projects → use resource gns3://projects
   * list_nodes → use resource gns3://projects/{id}/nodes
@@ -534,7 +557,7 @@ async def set_node(ctx: Context,
 
 
 @mcp.tool()
-async def send_console(ctx: Context, node_name: str, data: str, raw: bool = False) -> str:
+async def console_send(ctx: Context, node_name: str, data: str, raw: bool = False) -> str:
     """Send data to console (auto-connects if needed)
 
     IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
@@ -542,22 +565,22 @@ async def send_console(ctx: Context, node_name: str, data: str, raw: bool = Fals
     - Troubleshooting when SSH is unavailable
     - Devices without SSH support (VPCS, simple switches)
 
-    For automation workflows, use SSH tools (ssh_send_command, ssh_send_config_set)
-    which provide better reliability, error handling, and prompt detection.
+    For automation workflows, use ssh_command() which provides better
+    reliability, error handling, and automatic prompt detection.
 
     Sends data immediately to console without waiting for response.
-    For interactive workflows, use read_console() after sending to verify output.
+    For interactive workflows, use console_read() after sending to verify output.
 
     Timing Considerations:
-    - Console output appears in background buffer (read via read_console)
+    - Console output appears in background buffer (read via console_read)
     - Allow 0.5-2 seconds after send before reading for command processing
     - Interactive prompts (login, password) may need 1-3 seconds to appear
     - Boot/initialization sequences may take 30-60 seconds
 
     Auto-connect Behavior:
     - First send/read automatically connects to console (no manual connect needed)
-    - Connection persists until disconnect_console() or 30-minute timeout
-    - Check connection state with get_console_status()
+    - Connection persists until console_disconnect() or 30-minute timeout
+    - Check connection state with resource gns3://sessions/console/{node}
 
     Escape Sequence Processing:
     - By default, processes common escape sequences (\n, \r, \t, \x1b)
@@ -573,16 +596,16 @@ async def send_console(ctx: Context, node_name: str, data: str, raw: bool = Fals
         "Sent successfully" or error message
 
     Example - Wake console and check state:
-        send_console("R1", "\n")
+        console_send("R1", "\n")
         await 1 second
-        read_console("R1", diff=True)  # See what prompt appeared
+        console_read("R1", mode="diff")  # See what prompt appeared
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await send_console_impl(app, node_name, data, raw)
 
 
 @mcp.tool()
-async def read_console(
+async def console_read(
     ctx: Context,
     node_name: str,
     mode: str = "diff",
@@ -601,8 +624,8 @@ async def read_console(
     - Troubleshooting when SSH is unavailable
     - Devices without SSH support
 
-    For automation workflows, use ssh_send_command() and ssh_read_buffer()
-    which provide better reliability and structured output.
+    For automation workflows, use ssh_command() which provides better
+    reliability and structured output.
 
     Reads accumulated output from background console buffer. Output accumulates
     while device runs - this function retrieves it without blocking.
@@ -634,17 +657,17 @@ async def read_console(
         Console output (filtered if pattern provided)
 
     Example - Grep for errors:
-        read_console("R1", mode="all", pattern="error", case_insensitive=True)
+        console_read("R1", mode="all", pattern="error", case_insensitive=True)
 
     Example - Find interface with context:
-        read_console("R1", mode="diff", pattern="GigabitEthernet", context=2)
+        console_read("R1", mode="diff", pattern="GigabitEthernet", context=2)
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await read_console_impl(app, node_name, mode, pages, pattern, case_insensitive, invert, before, after, context)
 
 
 @mcp.tool()
-async def disconnect_console(ctx: Context, node_name: str) -> str:
+async def console_disconnect(ctx: Context, node_name: str) -> str:
     """Disconnect console session
 
     Args:
@@ -658,91 +681,7 @@ async def disconnect_console(ctx: Context, node_name: str) -> str:
 
 
 @mcp.tool()
-async def send_and_wait_console(
-    ctx: Context,
-    node_name: str,
-    command: str,
-    wait_pattern: Optional[str] = None,
-    timeout: int = 30,
-    raw: bool = False
-) -> str:
-    """Send command and wait for specific prompt pattern
-
-    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
-    - Initial device configuration (enabling SSH, creating users)
-    - Troubleshooting when SSH is unavailable
-    - Devices without SSH support
-
-    For automation workflows, use ssh_send_command() which provides automatic
-    prompt detection and better error handling.
-
-    Combines send + wait + read into single operation. Useful for interactive
-    workflows where you need to verify prompt before proceeding.
-
-    BEST PRACTICE: Before using this tool, first check what the prompt looks like:
-    1. Send "\n" with send_console() to wake the console
-    2. Use read_console() to see the current prompt (e.g., "Router#", "[admin@MikroTik] >")
-    3. Use that exact prompt pattern in wait_pattern parameter
-    4. This ensures you wait for the right prompt and don't miss command output
-
-    Workflow:
-    1. Send command to console
-    2. If wait_pattern provided: poll console until pattern appears or timeout
-    3. Return all output accumulated during wait
-
-    Args:
-        node_name: Name of the node
-        command: Command to send (include \n for newline)
-        wait_pattern: Optional regex pattern to wait for (e.g., "Router[>#]", "Login:")
-                      If None, waits 2 seconds and returns output
-                      TIP: Check prompt first with read_console() to get exact pattern
-        timeout: Maximum seconds to wait for pattern (default: 30)
-        raw: If True, send command without escape sequence processing (default: False)
-
-    Returns:
-        JSON with:
-        {
-            "output": "console output",
-            "pattern_found": true/false,
-            "timeout_occurred": true/false,
-            "wait_time": 2.5  # seconds actually waited
-        }
-
-    Example - Best practice workflow:
-        # Step 1: Check the prompt first
-        send_console("R1", "\n")
-        output = read_console("R1")  # Shows "Router#"
-
-        # Step 2: Use that prompt pattern
-        result = send_and_wait_console(
-            "R1",
-            "show ip interface brief\n",
-            wait_pattern="Router#",  # Wait for exact prompt
-            timeout=10
-        )
-        # Returns when "Router#" appears - command is complete
-
-    Example - Wait for login prompt:
-        result = send_and_wait_console(
-            "R1",
-            "\n",
-            wait_pattern="Login:",
-            timeout=10
-        )
-        # Returns when "Login:" appears or after 10 seconds
-
-    Example - No pattern (just wait 2s):
-        result = send_and_wait_console("R1", "enable\n")
-        # Sends command, waits 2s, returns output
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await send_and_wait_console_impl(
-        app, node_name, command, wait_pattern, timeout, raw
-    )
-
-
-@mcp.tool()
-async def send_keystroke(ctx: Context, node_name: str, key: str) -> str:
+async def console_keystroke(ctx: Context, node_name: str, key: str) -> str:
     """Send special keystroke to console (auto-connects if needed)
 
     IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
@@ -840,145 +779,6 @@ async def delete_node(ctx: Context, node_name: str) -> str:
     return await delete_node_impl(app, node_name)
 
 
-@mcp.tool()
-async def create_node(ctx: Context, template_name: str, x: int, y: int,
-                     node_name: Optional[str] = None, compute_id: str = "local") -> str:
-    """Create a new node from a template
-
-    Args:
-        template_name: Name of the template to use
-        x: X coordinate position (top-left corner of node icon)
-        y: Y coordinate position (top-left corner of node icon)
-        node_name: Optional custom name for the node
-        compute_id: Compute ID (default: "local")
-
-    Note: Coordinates represent the top-left corner of the node icon.
-    Icon sizes are PNG: 78×78, SVG/internal: 58×58.
-
-    Returns:
-        JSON with created NodeInfo
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await create_node_impl(app, template_name, x, y, node_name, compute_id)
-
-
-@mcp.tool()
-async def create_drawing(ctx: Context,
-                        drawing_type: str,
-                        x: int,
-                        y: int,
-                        z: int = 0,
-                        # Rectangle/Ellipse parameters
-                        width: Optional[int] = None,
-                        height: Optional[int] = None,
-                        rx: Optional[int] = None,
-                        ry: Optional[int] = None,
-                        fill_color: str = "#ffffff",
-                        border_color: str = "#000000",
-                        border_width: int = 2,
-                        # Line parameters
-                        x2: Optional[int] = None,
-                        y2: Optional[int] = None,
-                        # Text parameters
-                        text: Optional[str] = None,
-                        font_size: int = 10,
-                        font_weight: str = "normal",
-                        font_family: str = "TypeWriter",
-                        color: str = "#000000") -> str:
-    """Create a drawing object (rectangle, ellipse, line, or text)
-
-    Args:
-        drawing_type: Type of drawing - "rectangle", "ellipse", "line", or "text"
-        x: X coordinate (start point for line, top-left for others)
-        y: Y coordinate (start point for line, top-left for others)
-        z: Z-order/layer (default: 0 for shapes, 1 for text)
-
-        Rectangle parameters (drawing_type="rectangle"):
-            width: Rectangle width (required)
-            height: Rectangle height (required)
-            fill_color: Fill color (hex or name, default: white)
-            border_color: Border color (default: black)
-            border_width: Border width in pixels (default: 2)
-
-        Ellipse parameters (drawing_type="ellipse"):
-            rx: Horizontal radius (required)
-            ry: Vertical radius (required, use same as rx for circle)
-            fill_color: Fill color (hex or name, default: white)
-            border_color: Border color (default: black)
-            border_width: Border width in pixels (default: 2)
-            Note: Ellipse center will be at (x + rx, y + ry)
-
-        Line parameters (drawing_type="line"):
-            x2: X offset from start point (required, can be negative)
-            y2: Y offset from start point (required, can be negative)
-            color: Line color (hex or name, default: black)
-            border_width: Line width in pixels (default: 2)
-            Note: Line goes from (x, y) to (x+x2, y+y2)
-
-        Text parameters (drawing_type="text"):
-            text: Text content (required)
-            font_size: Font size in points (default: 10)
-            font_weight: Font weight - "normal" or "bold" (default: normal)
-            font_family: Font family (default: "TypeWriter")
-            color: Text color (hex or name, default: black)
-
-    Returns:
-        JSON with created drawing info
-
-    Examples:
-        # Create rectangle
-        create_drawing("rectangle", x=100, y=100, width=200, height=150,
-                      fill_color="#ff0000", z=0)
-
-        # Create circle
-        create_drawing("ellipse", x=100, y=100, rx=50, ry=50,
-                      fill_color="#00ff00", z=0)
-
-        # Create line from (100,100) to (300,200)
-        create_drawing("line", x=100, y=100, x2=200, y2=100,
-                      color="#0000ff", border_width=3, z=0)
-
-        # Create text label
-        create_drawing("text", x=100, y=100, text="Router1",
-                      font_size=12, font_weight="bold", z=1)
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await create_drawing_impl(
-        app, drawing_type, x, y, z, width, height, rx, ry,
-        fill_color, border_color, border_width,
-        x2, y2, text, font_size, font_weight, font_family, color
-    )
-
-
-@mcp.tool()
-async def delete_drawing(ctx: Context, drawing_id: str) -> str:
-    """Delete a drawing object from the current project
-
-    Args:
-        drawing_id: ID of the drawing to delete
-
-    Returns:
-        JSON confirmation message
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await delete_drawing_impl(app, drawing_id)
-
-
 # export_topology_diagram tool now registered from export_tools module
 # Register the imported tool with MCP
 mcp.tool()(export_topology_diagram)
@@ -992,17 +792,12 @@ from tools.ssh_tools import (
     configure_ssh_impl,
     ssh_send_command_impl,
     ssh_send_config_set_impl,
-    ssh_read_buffer_impl,
-    ssh_get_history_impl,
-    ssh_get_command_output_impl,
-    ssh_get_status_impl,
-    ssh_cleanup_sessions_impl,
-    ssh_get_job_status_impl
+    ssh_disconnect_impl
 )
 
 
 @mcp.tool()
-async def configure_ssh(
+async def ssh_configure(
     ctx: Context,
     node_name: str,
     device_dict: dict,
@@ -1025,91 +820,67 @@ async def configure_ssh(
 
 
 @mcp.tool()
-async def ssh_send_command(
+async def ssh_command(
     ctx: Context,
     node_name: str,
-    command: str,
+    command: str | list,
     expect_string: str = None,
     read_timeout: float = 30.0,
     wait_timeout: int = 30
 ) -> str:
-    """Execute show command via SSH with adaptive async
+    """Execute command(s) via SSH with auto-detection (show vs config)
 
-    Long commands: Set read_timeout high, wait_timeout=0 for job_id, poll with ssh_get_job_status().
+    Auto-detects command type:
+    - String: Single show command (uses ssh_send_command)
+    - List: Configuration commands (uses ssh_send_config_set)
+
+    Long commands: Set read_timeout high, wait_timeout=0 for job_id,
+    poll with resource gns3://sessions/ssh/{node}/jobs/{id}
 
     Args:
         node_name: Node identifier
-        command: Command to execute
+        command: Command(s) - string for show, list for config
         expect_string: Regex pattern to wait for (overrides prompt detection, optional)
         read_timeout: Max seconds to wait for output (default: 30)
         wait_timeout: Seconds to poll before returning job_id (default: 30)
 
     Returns:
         JSON with completed, job_id, output, execution_time
+
+    Examples:
+        # Show command (string)
+        ssh_command("R1", "show ip interface brief")
+
+        # Config commands (list)
+        ssh_command("R1", [
+            "interface GigabitEthernet0/0",
+            "ip address 192.168.1.1 255.255.255.0",
+            "no shutdown"
+        ])
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await ssh_send_command_impl(app, node_name, command, expect_string, read_timeout, wait_timeout)
+
+    # Auto-detect command type
+    if isinstance(command, list):
+        # Config mode: list of commands
+        return await ssh_send_config_set_impl(app, node_name, command, wait_timeout)
+    else:
+        # Show mode: single command
+        return await ssh_send_command_impl(app, node_name, command, expect_string, read_timeout, wait_timeout)
 
 
 @mcp.tool()
-async def ssh_send_config_set(
-    ctx: Context,
-    node_name: str,
-    config_commands: list,
-    wait_timeout: int = 30
-) -> str:
-    """Send configuration commands via SSH
+async def ssh_disconnect(ctx: Context, node_name: str) -> str:
+    """Disconnect SSH session
 
     Args:
         node_name: Node identifier
-        config_commands: List of configuration commands
-        wait_timeout: Seconds to poll before returning job_id (default: 30)
 
     Returns:
-        JSON with completed, job_id, output, execution_time
+        JSON with status
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await ssh_send_config_set_impl(app, node_name, config_commands, wait_timeout)
-
-
-@mcp.tool()
-async def ssh_cleanup_sessions(
-    ctx: Context,
-    keep_nodes: list = None,
-    clean_all: bool = False
-) -> str:
-    """Clean orphaned/all SSH sessions
-
-    Useful when project changes (different IPs on same node names).
-
-    Args:
-        keep_nodes: Node names to preserve (default: [])
-        clean_all: Clean all sessions, ignoring keep_nodes (default: False)
-
-    Returns:
-        JSON with cleaned and kept node lists
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await ssh_cleanup_sessions_impl(app, keep_nodes, clean_all)
-
-
-@mcp.tool()
-async def ssh_get_job_status(
-    ctx: Context,
-    job_id: str
-) -> str:
-    """Check job status by job_id (for async polling)
-
-    Poll long-running commands that returned job_id.
-
-    Args:
-        job_id: Job ID from ssh_send_command or ssh_send_config_set
-
-    Returns:
-        JSON with job status, output, execution_time
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await ssh_get_job_status_impl(app, job_id)
+    return await ssh_disconnect_impl(app, node_name)
 
 
 if __name__ == "__main__":

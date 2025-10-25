@@ -446,6 +446,54 @@ async def ssh_get_status_impl(
 # Session Cleanup
 # ============================================================================
 
+async def ssh_disconnect_impl(
+    app: "AppContext",
+    node_name: str
+) -> str:
+    """
+    Disconnect SSH session for specific node
+
+    Args:
+        node_name: Node identifier to disconnect
+
+    Returns:
+        JSON with status
+
+    Example:
+        ssh_disconnect('R1')
+    """
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            # Use cleanup endpoint to disconnect specific node
+            # Keep all nodes EXCEPT the one we want to disconnect
+            response = await client.delete(
+                f"{SSH_PROXY_URL}/ssh/session/{node_name}"
+            )
+
+            if response.status_code == 200:
+                return json.dumps({
+                    "status": "success",
+                    "message": f"Disconnected SSH session for {node_name}"
+                }, indent=2)
+            elif response.status_code == 404:
+                return json.dumps({
+                    "status": "success",
+                    "message": f"No active SSH session for {node_name}"
+                }, indent=2)
+            else:
+                error_data = response.json()
+                return json.dumps({
+                    "error": error_data.get("detail", {}).get("error", "Disconnect failed"),
+                    "details": error_data.get("detail", {}).get("details")
+                }, indent=2)
+
+        except Exception as e:
+            return json.dumps({
+                "error": "Disconnect failed",
+                "details": str(e)
+            }, indent=2)
+
+
 async def ssh_cleanup_sessions_impl(
     app: "AppContext",
     keep_nodes: List[str] = None,
