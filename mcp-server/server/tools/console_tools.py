@@ -495,6 +495,7 @@ async def send_and_wait_console_impl(
     start_time = time.time()
     pattern_found = False
     timeout_occurred = False
+    accumulated_output = []  # Accumulate all output chunks
 
     if wait_pattern:
         try:
@@ -510,25 +511,38 @@ async def send_and_wait_console_impl(
         # Poll console every 0.5s
         while (time.time() - start_time) < timeout:
             await asyncio.sleep(0.5)
-            output = app.console.get_diff_by_node(node_name) or ""
+            chunk = app.console.get_diff_by_node(node_name) or ""
 
-            if pattern_re.search(output):
+            if chunk:
+                accumulated_output.append(chunk)
+
+            # Search the complete accumulated output so far
+            full_output_so_far = ''.join(accumulated_output)
+            if pattern_re.search(full_output_so_far):
                 pattern_found = True
                 break
 
         if not pattern_found:
             timeout_occurred = True
+            # Get any remaining output after timeout
+            final_chunk = app.console.get_diff_by_node(node_name) or ""
+            if final_chunk:
+                accumulated_output.append(final_chunk)
     else:
         # No pattern - just wait 2 seconds
         await asyncio.sleep(2)
+        # Collect output after waiting
+        output_chunk = app.console.get_diff_by_node(node_name) or ""
+        if output_chunk:
+            accumulated_output.append(output_chunk)
 
     wait_time = time.time() - start_time
 
-    # Get all output since command was sent
-    output = app.console.get_diff_by_node(node_name) or ""
+    # Return all accumulated output
+    final_output = ''.join(accumulated_output)
 
     return json.dumps({
-        "output": output,
+        "output": final_output,
         "pattern_found": pattern_found,
         "timeout_occurred": timeout_occurred,
         "wait_time": round(wait_time, 2)

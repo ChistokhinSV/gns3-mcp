@@ -10,9 +10,30 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.12.2
+## Current Version: v0.12.3
 
-**Latest Release:** v0.12.2 - Lightweight list_nodes Output (Bugfix - Performance)
+**Latest Release:** v0.12.3 - send_and_wait_console Output Fix (Bugfix - Critical)
+- **FIXED**: `send_and_wait_console()` now correctly accumulates all output during polling
+  - Previous bug: Output was lost when pattern matched quickly
+  - Pattern would match on first poll (0.5s), but final output was empty
+  - Root cause: `get_diff_by_node()` called multiple times without accumulation
+- **Implementation**: Added output accumulation pattern
+  - Created `accumulated_output = []` list to collect all chunks
+  - Each poll iteration appends chunk to list
+  - Pattern search performed on complete accumulated output
+  - Timeout case collects remaining output after timeout
+  - No-pattern case collects output after 2-second wait
+  - Final output is `''.join(accumulated_output)`
+- **Files changed**:
+  - `mcp-server/server/tools/console_tools.py`: Fixed send_and_wait_console_impl (lines 494-549)
+  - `mcp-server/manifest.json`: Version 0.12.2→0.12.3
+  - `mcp-server/mcp-server.mcpb`: Rebuilt desktop extension (19.1MB, 2435 files)
+  - `CLAUDE.md`: This version entry
+- **Testing**: User-reported example now works correctly (command output returned with pattern_found=true)
+- **NO BREAKING CHANGES**: API unchanged, bug fix only
+- **Rationale**: Critical fix for interactive console workflows where command output was being silently lost
+
+**Previous:** v0.12.2 - Lightweight list_nodes Output (Bugfix - Performance)
 - **FIXED**: `list_nodes()` now returns lightweight NodeSummary instead of full NodeInfo
   - Prevents large output failures with projects containing many nodes
   - Reduces output size by ~80-90% (removes ports, hardware properties, position, label data)
