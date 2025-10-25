@@ -3,8 +3,8 @@
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
   "version": "0.12.4",
-  "description": "Control and automate GNS3 network labs with console and SSH automation",
-  "long_description": "Version 0.12.4: FIXED - configure_ssh error messages now properly distinguish SSH connection errors from server errors. Version 0.12.3: FIXED - send_and_wait_console now accumulates all output (was losing command output). Version 0.12.2: FIXED - list_nodes now returns lightweight NodeSummary (prevents large output failures). Version 0.12.1: FEATURE - Grep filtering for SSH/console buffers. Version 0.12.0: FEATURE - SSH proxy service for network device automation via Netmiko. 9 new MCP tools for SSH sessions, command execution, config management, and job history. Supports GNS3 v3 API.",
+  "description": "GNS3 lab automation - prefer SSH tools (ssh_send_command, ssh_send_config_set) over console tools for network device automation",
+  "long_description": "IMPORTANT: Use SSH MCP tools (ssh_send_command, ssh_send_config_set, ssh_read_buffer) for automation - better reliability and prompt detection. Console tools (send_console, read_console) only for initial SSH setup or troubleshooting. Version 0.12.4: ENHANCED - Added SSH vs Console tool selection guidance. FIXED - configure_ssh error messages now properly distinguish SSH connection errors from server errors. Version 0.12.3: FIXED - send_and_wait_console accumulates all output. Version 0.12.2: FIXED - list_nodes returns lightweight NodeSummary. Version 0.12.1: FEATURE - Grep filtering. Version 0.12.0: FEATURE - SSH proxy service with 9 MCP tools for SSH automation via Netmiko. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
