@@ -342,3 +342,68 @@ async def list_proxy_sessions_impl(app: "AppContext") -> str:
     """
     # Delegate to list_ssh_sessions_impl
     return await list_ssh_sessions_impl(app)
+
+
+async def list_proxies_impl(app: "AppContext") -> str:
+    """
+    List all discovered proxies (template-style resource)
+
+    Resource URI: gns3://proxies
+
+    Returns:
+        JSON array of proxy summaries suitable for selection/browsing
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.get(f"{SSH_PROXY_URL}/proxy/registry")
+
+            if response.status_code == 200:
+                data = response.json()
+                # Return just the proxies array for template-style browsing
+                return json.dumps(data.get("proxies", []), indent=2)
+            else:
+                return json.dumps([], indent=2)
+
+        except Exception:
+            return json.dumps([], indent=2)
+
+
+async def get_proxy_impl(app: "AppContext", proxy_id: str) -> str:
+    """
+    Get specific proxy details by proxy_id
+
+    Resource URI: gns3://proxy/{proxy_id}
+
+    Args:
+        proxy_id: GNS3 node_id of the proxy
+
+    Returns:
+        JSON object with full proxy details
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.get(f"{SSH_PROXY_URL}/proxy/registry")
+
+            if response.status_code == 200:
+                data = response.json()
+                proxies = data.get("proxies", [])
+
+                # Find proxy by proxy_id
+                for proxy in proxies:
+                    if proxy.get("proxy_id") == proxy_id:
+                        return json.dumps(proxy, indent=2)
+
+                # Proxy not found
+                return json.dumps({
+                    "error": f"Proxy not found: {proxy_id}",
+                    "available_proxies": [p.get("proxy_id") for p in proxies]
+                }, indent=2)
+            else:
+                return json.dumps({
+                    "error": "Failed to fetch proxy registry"
+                }, indent=2)
+
+        except Exception as e:
+            return json.dumps({
+                "error": str(e)
+            }, indent=2)

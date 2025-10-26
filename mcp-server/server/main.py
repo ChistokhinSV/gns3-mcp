@@ -627,6 +627,18 @@ async def resource_proxy_registry() -> str:
     """Get proxy registry (discovered lab proxies via Docker API)"""
     return await _app.resource_manager.get_proxy_registry()
 
+# Proxy resource templates
+@mcp.resource("gns3://proxies")
+async def resource_proxies() -> str:
+    """List all discovered lab proxies"""
+    return await _app.resource_manager.list_proxies()
+
+@mcp.resource("gns3://proxy/{proxy_id}")
+async def resource_proxy(ctx: Context, proxy_id: str) -> str:
+    """Get specific proxy details by proxy_id (GNS3 node_id)"""
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_proxy(proxy_id)
+
 
 # ============================================================================
 # MCP Prompts - Guided Workflows

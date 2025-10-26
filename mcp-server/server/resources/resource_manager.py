@@ -49,6 +49,10 @@ class ResourceManager:
         r'^gns3://proxy/status$': 'get_proxy_status',
         r'^gns3://proxy/registry$': 'get_proxy_registry',
         r'^gns3://proxy/sessions$': 'list_proxy_sessions',
+
+        # Proxy resource templates
+        r'^gns3://proxies$': 'list_proxies',
+        r'^gns3://proxy/(?P<proxy_id>[^/]+)$': 'get_proxy',
     }
 
     def __init__(self, app: "AppContext"):
@@ -331,3 +335,13 @@ class ResourceManager:
         """List all SSH proxy sessions"""
         from .session_resources import list_proxy_sessions_impl
         return await list_proxy_sessions_impl(self.app)
+
+    async def list_proxies(self) -> str:
+        """List all discovered proxies (template-style list)"""
+        from .session_resources import list_proxies_impl
+        return await list_proxies_impl(self.app)
+
+    async def get_proxy(self, proxy_id: str) -> str:
+        """Get specific proxy details by proxy_id"""
+        from .session_resources import get_proxy_impl
+        return await get_proxy_impl(self.app, proxy_id)
