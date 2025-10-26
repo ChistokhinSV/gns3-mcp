@@ -462,13 +462,13 @@ async def get_node_file_impl(app: "AppContext", node_name: str, file_path: str) 
             )
 
         # Validate node type
-        if node['node_type'] != 'docker':
+        if node['node_type'] not in ('docker', 'vpcs'):
             return create_error_response(
-                error=f"File operations only supported for Docker nodes",
-                error_code=ErrorCode.INVALID_OPERATION.value,
-                details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker'",
-                suggested_action="Only Docker nodes support file read/write operations",
-                context={"node_name": node_name, "node_type": node['node_type']}
+                error=f"File operations only supported for Docker and VPCS nodes",
+                error_code=ErrorCode.OPERATION_FAILED.value,
+                details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker' or 'vpcs'",
+                suggested_action="Only Docker and VPCS nodes support file read/write operations",
+                context={"node_name": node_name, "node_type": node['node_type'], "supported_types": ["docker", "vpcs"]}
             )
 
         content = await app.gns3.get_node_file(app.current_project_id, node['node_id'], file_path)
@@ -519,13 +519,13 @@ async def write_node_file_impl(app: "AppContext", node_name: str, file_path: str
             )
 
         # Validate node type
-        if node['node_type'] != 'docker':
+        if node['node_type'] not in ('docker', 'vpcs'):
             return create_error_response(
-                error=f"File operations only supported for Docker nodes",
-                error_code=ErrorCode.INVALID_OPERATION.value,
-                details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker'",
-                suggested_action="Only Docker nodes support file read/write operations",
-                context={"node_name": node_name, "node_type": node['node_type']}
+                error=f"File operations only supported for Docker and VPCS nodes",
+                error_code=ErrorCode.OPERATION_FAILED.value,
+                details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker' or 'vpcs'",
+                suggested_action="Only Docker and VPCS nodes support file read/write operations",
+                context={"node_name": node_name, "node_type": node['node_type'], "supported_types": ["docker", "vpcs"]}
             )
 
         await app.gns3.write_node_file(app.current_project_id, node['node_id'], file_path, content)
@@ -603,13 +603,13 @@ async def configure_node_network_impl(app: "AppContext", node_name: str, interfa
             )
 
         # Validate node type
-        if node['node_type'] != 'docker':
+        if node['node_type'] not in ('docker', 'vpcs'):
             return create_error_response(
-                error=f"Network configuration only supported for Docker nodes",
-                error_code=ErrorCode.INVALID_OPERATION.value,
-                details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker'",
-                suggested_action="Only Docker nodes support network configuration",
-                context={"node_name": node_name, "node_type": node['node_type']}
+                error=f"Network configuration only supported for Docker and VPCS nodes (not {node['node_type']})",
+                error_code=ErrorCode.OPERATION_FAILED.value,
+                details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker' or 'vpcs'. QEMU nodes don't support this tool - configure manually via console/SSH.",
+                suggested_action="Use console tools or SSH to manually configure network on QEMU/other node types",
+                context={"node_name": node_name, "node_type": node['node_type'], "supported_types": ["docker", "vpcs"]}
             )
 
         # Write interfaces file

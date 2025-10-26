@@ -8,7 +8,50 @@ _(No active issues)_
 
 ---
 
+---
+
 ## Resolved Issues
+
+### [RESOLVED] configure_node_network Tool: ErrorCode.INVALID_OPERATION + Wrong Node Type (v0.27.0)
+**Discovered**: 2025-10-26
+**Affects**: MCP Server v0.27.0
+**Severity**: High - Breaks network configuration for QEMU nodes
+**Resolved**: 2025-10-26 in v0.27.0
+
+#### Problem
+Two issues found in file operation tools (`get_node_file`, `write_node_file`, `configure_node_network`):
+1. Referenced non-existent `ErrorCode.INVALID_OPERATION` (should be `ErrorCode.OPERATION_FAILED`)
+2. Only allowed Docker nodes, but VPCS nodes also support file operations
+3. Error messages didn't clarify QEMU nodes are unsupported (by design)
+
+#### Error Message
+```json
+{
+  "error": "Failed to configure network on node 'A-CLIENT'",
+  "error_code": "OPERATION_FAILED",
+  "details": "type object 'ErrorCode' has no attribute 'INVALID_OPERATION'",
+  "exception": "type object 'ErrorCode' has no attribute 'INVALID_OPERATION'"
+}
+```
+
+#### Root Cause
+- Code used `ErrorCode.INVALID_OPERATION.value` which doesn't exist in ErrorCode enum
+- Node type check was `node['node_type'] != 'docker'` instead of checking for both docker and vpcs
+- Error messages didn't explain why QEMU is unsupported
+
+#### Resolution
+**All 3 tools fixed:**
+1. Changed `ErrorCode.INVALID_OPERATION` → `ErrorCode.OPERATION_FAILED`
+2. Changed validation from `!= 'docker'` → `not in ('docker', 'vpcs')`
+3. Updated error messages to clarify supported types and why QEMU doesn't work:
+   - "Network configuration only supported for Docker and VPCS nodes (not qemu)"
+   - "QEMU nodes don't support this tool - configure manually via console/SSH"
+   - Added `supported_types: ["docker", "vpcs"]` to error context
+
+#### Files Changed
+- `mcp-server/server/tools/node_tools.py`: Fixed 3 error codes, updated 3 validation checks, improved error messages
+
+---
 
 ### [RESOLVED] create_node Tool: Missing properties Parameter (v0.24.2)
 **Discovered**: 2025-10-26
