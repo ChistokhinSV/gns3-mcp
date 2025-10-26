@@ -10,12 +10,13 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.24.3
+## Current Version: v0.25.0
 
-**Latest Release:** v0.24.3 - create_node Tool Fix (BUGFIX)
+**Latest Release:** v0.25.0 - Docker Node File Operations (FEATURE)
 
-### Recent Changes (v0.22.0 - v0.24.3)
+### Recent Changes (v0.22.0 - v0.25.0)
 
+**v0.25.0** - Added Docker node file operations and network configuration (3 new tools)
 **v0.24.3** - Fixed create_node tool missing properties parameter
 **v0.24.2** - Fixed templates as global static resource (not project-scoped)
 **v0.24.1** - Added project-scoped session list templates, fixed naming consistency
@@ -27,10 +28,11 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 **v0.22.0** - Batch console operations (console_batch tool)
 
 ### Current State
-- **24 Tools**: Complete GNS3 lab automation toolkit
+- **27 Tools**: Complete GNS3 lab automation toolkit including Docker file operations
 - **19 Resources**: 3 static (projects, proxy/status, templates) + 16 templates (project-scoped)
 - **5 Prompts**: Guided workflows for SSH setup, topology discovery, troubleshooting, lab setup, node setup
 - **Project Memory**: Per-project README for IP schemes, credentials, architecture notes
+- **Docker File Ops**: Read/write files in containers, configure network interfaces (static/DHCP)
 
 For complete version history and detailed release notes, see [CHANGELOG.md](CHANGELOG.md).
 

@@ -382,6 +382,40 @@ class GNS3Client:
         )
         response.raise_for_status()
 
+    async def get_node_file(self, project_id: str, node_id: str, file_path: str) -> str:
+        """GET /v3/projects/{id}/nodes/{node_id}/files/{path} - read file from node filesystem
+
+        Args:
+            project_id: Project ID
+            node_id: Node ID
+            file_path: Path relative to container root (e.g., 'etc/network/interfaces')
+
+        Returns:
+            File contents as string
+        """
+        response = await self.client.get(
+            f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}/files/{file_path}",
+            headers=self._headers()
+        )
+        response.raise_for_status()
+        return response.text
+
+    async def write_node_file(self, project_id: str, node_id: str, file_path: str, content: str) -> None:
+        """POST /v3/projects/{id}/nodes/{node_id}/files/{path} - write file to node filesystem
+
+        Args:
+            project_id: Project ID
+            node_id: Node ID
+            file_path: Path relative to container root (e.g., 'etc/network/interfaces')
+            content: File contents to write
+        """
+        response = await self.client.post(
+            f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}/files/{file_path}",
+            headers={**self._headers(), "Content-Type": "text/plain"},
+            content=content
+        )
+        response.raise_for_status()
+
     async def get_version(self) -> Dict[str, Any]:
         """GET /v3/version - get GNS3 server version"""
         response = await self.client.get(

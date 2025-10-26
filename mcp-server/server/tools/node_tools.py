@@ -423,3 +423,220 @@ async def delete_node_impl(app: "AppContext", node_name: str) -> str:
             suggested_action="Verify the node exists, stop it if running, and check GNS3 server is accessible",
             context={"node_name": node_name, "project_id": app.current_project_id, "exception": str(e)}
         )
+
+
+async def get_node_file_impl(app: "AppContext", node_name: str, file_path: str) -> str:
+    """Read file from Docker node filesystem
+
+    Args:
+        node_name: Name of the node
+        file_path: Path relative to container root (e.g., 'etc/network/interfaces')
+
+    Returns:
+        JSON with file contents
+    """
+    if not app.current_project_id:
+        return project_not_found_error()
+
+    try:
+        nodes = await app.gns3.get_nodes(app.current_project_id)
+        node = next((n for n in nodes if n['name'] == node_name), None)
+
+        if not node:
+            available_nodes = [n['name'] for n in nodes]
+            return node_not_found_error(
+                node_name=node_name,
+                project_id=app.current_project_id,
+                available_nodes=available_nodes
+            )
+
+        # Validate node type
+        if node['node_type'] != 'docker':
+            return create_error_response(
+                error=f"File operations only supported for Docker nodes",
+                error_code=ErrorCode.INVALID_OPERATION.value,
+                details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker'",
+                suggested_action="Only Docker nodes support file read/write operations",
+                context={"node_name": node_name, "node_type": node['node_type']}
+            )
+
+        content = await app.gns3.get_node_file(app.current_project_id, node['node_id'], file_path)
+
+        return json.dumps({
+            "node_name": node_name,
+            "file_path": file_path,
+            "content": content
+        }, indent=2)
+
+    except Exception as e:
+        return create_error_response(
+            error=f"Failed to read file '{file_path}' from node '{node_name}'",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details=str(e),
+            suggested_action="Check that the file path is correct and the node is a Docker container",
+            context={"node_name": node_name, "file_path": file_path, "exception": str(e)}
+        )
+
+
+async def write_node_file_impl(app: "AppContext", node_name: str, file_path: str, content: str) -> str:
+    """Write file to Docker node filesystem
+
+    Note: File changes do NOT automatically restart the node or apply configuration.
+    For network configuration, use configure_node_network() which handles the full workflow.
+
+    Args:
+        node_name: Name of the node
+        file_path: Path relative to container root (e.g., 'etc/network/interfaces')
+        content: File contents to write
+
+    Returns:
+        JSON confirmation message
+    """
+    if not app.current_project_id:
+        return project_not_found_error()
+
+    try:
+        nodes = await app.gns3.get_nodes(app.current_project_id)
+        node = next((n for n in nodes if n['name'] == node_name), None)
+
+        if not node:
+            available_nodes = [n['name'] for n in nodes]
+            return node_not_found_error(
+                node_name=node_name,
+                project_id=app.current_project_id,
+                available_nodes=available_nodes
+            )
+
+        # Validate node type
+        if node['node_type'] != 'docker':
+            return create_error_response(
+                error=f"File operations only supported for Docker nodes",
+                error_code=ErrorCode.INVALID_OPERATION.value,
+                details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker'",
+                suggested_action="Only Docker nodes support file read/write operations",
+                context={"node_name": node_name, "node_type": node['node_type']}
+            )
+
+        await app.gns3.write_node_file(app.current_project_id, node['node_id'], file_path, content)
+
+        return json.dumps({
+            "message": f"File '{file_path}' written successfully to node '{node_name}'",
+            "node_name": node_name,
+            "file_path": file_path,
+            "note": "Node restart may be required for changes to take effect"
+        }, indent=2)
+
+    except Exception as e:
+        return create_error_response(
+            error=f"Failed to write file '{file_path}' to node '{node_name}'",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details=str(e),
+            suggested_action="Check that the file path is valid and the node is a Docker container",
+            context={"node_name": node_name, "file_path": file_path, "exception": str(e)}
+        )
+
+
+async def configure_node_network_impl(app: "AppContext", node_name: str, interfaces: list[Dict[str, Any]]) -> str:
+    """Configure network interfaces on Docker node
+
+    Generates /etc/network/interfaces file and restarts the node to apply configuration.
+    Supports both static IP and DHCP configuration for multiple interfaces.
+
+    Args:
+        node_name: Name of the node
+        interfaces: List of interface configurations, each with:
+            - name: Interface name (eth0, eth1, etc.)
+            - mode: "static" or "dhcp"
+            - address: IP address (static mode only)
+            - netmask: Network mask (static mode only)
+            - gateway: Default gateway (static mode, optional)
+            - dns: DNS server IP (optional, default: 8.8.8.8)
+
+    Returns:
+        JSON confirmation with configured interfaces
+    """
+    if not app.current_project_id:
+        return project_not_found_error()
+
+    try:
+        from models import NetworkConfig, NetworkInterfaceStatic, NetworkInterfaceDHCP
+
+        # Validate and parse interfaces
+        parsed_interfaces = []
+        for iface_dict in interfaces:
+            if iface_dict.get('mode') == 'static':
+                parsed_interfaces.append(NetworkInterfaceStatic(**iface_dict))
+            elif iface_dict.get('mode') == 'dhcp':
+                parsed_interfaces.append(NetworkInterfaceDHCP(**iface_dict))
+            else:
+                return validation_error(
+                    field="interfaces[].mode",
+                    message=f"Invalid mode '{iface_dict.get('mode')}', must be 'static' or 'dhcp'"
+                )
+
+        config = NetworkConfig(interfaces=parsed_interfaces)
+
+        # Generate interfaces file content
+        interfaces_content = config.to_debian_interfaces()
+
+        # Get node
+        nodes = await app.gns3.get_nodes(app.current_project_id)
+        node = next((n for n in nodes if n['name'] == node_name), None)
+
+        if not node:
+            available_nodes = [n['name'] for n in nodes]
+            return node_not_found_error(
+                node_name=node_name,
+                project_id=app.current_project_id,
+                available_nodes=available_nodes
+            )
+
+        # Validate node type
+        if node['node_type'] != 'docker':
+            return create_error_response(
+                error=f"Network configuration only supported for Docker nodes",
+                error_code=ErrorCode.INVALID_OPERATION.value,
+                details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker'",
+                suggested_action="Only Docker nodes support network configuration",
+                context={"node_name": node_name, "node_type": node['node_type']}
+            )
+
+        # Write interfaces file
+        await app.gns3.write_node_file(
+            app.current_project_id,
+            node['node_id'],
+            'etc/network/interfaces',
+            interfaces_content
+        )
+
+        # Restart node to apply configuration
+        # Note: Using restart action which stops with retry logic then starts
+        await app.gns3.stop_node(app.current_project_id, node['node_id'])
+
+        # Wait for confirmed stop
+        for _ in range(10):  # Try up to 10 times
+            await asyncio.sleep(1)
+            nodes = await app.gns3.get_nodes(app.current_project_id)
+            node = next((n for n in nodes if n['node_id'] == node['node_id']), None)
+            if node and node['status'] == 'stopped':
+                break
+
+        # Start node
+        await app.gns3.start_node(app.current_project_id, node['node_id'])
+
+        return json.dumps({
+            "message": f"Network configuration applied to node '{node_name}'",
+            "node_name": node_name,
+            "interfaces": [iface.model_dump() for iface in config.interfaces],
+            "status": "Node restarted to apply configuration",
+            "note": "Allow 10-15 seconds for node to complete startup and network configuration"
+        }, indent=2)
+
+    except Exception as e:
+        return create_error_response(
+            error=f"Failed to configure network on node '{node_name}'",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details=str(e),
+            suggested_action="Check interface configuration parameters and verify node is accessible",
+            context={"node_name": node_name, "interfaces": interfaces, "exception": str(e)}
+        )

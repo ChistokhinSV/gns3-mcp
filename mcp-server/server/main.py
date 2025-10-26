@@ -306,7 +306,10 @@ from tools.node_tools import (
     get_node_details_impl,
     set_node_impl,
     create_node_impl,
-    delete_node_impl
+    delete_node_impl,
+    get_node_file_impl,
+    write_node_file_impl,
+    configure_node_network_impl
 )
 from tools.console_tools import (
     send_console_impl,
@@ -1321,6 +1324,131 @@ async def delete_node(ctx: Context, node_name: str) -> str:
         return error
 
     return await delete_node_impl(app, node_name)
+
+
+@mcp.tool()
+async def get_node_file(ctx: Context, node_name: str, file_path: str) -> str:
+    """Read file from Docker node filesystem
+
+    Allows reading files from Docker node containers. Useful for inspecting
+    configuration files, logs, or other data inside containers.
+
+    Args:
+        node_name: Name of the Docker node
+        file_path: Path relative to container root (e.g., 'etc/network/interfaces')
+
+    Returns:
+        JSON with file contents
+
+    Example:
+        get_node_file("A-PROXY", "etc/network/interfaces")
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    return await get_node_file_impl(app, node_name, file_path)
+
+
+@mcp.tool()
+async def write_node_file(ctx: Context, node_name: str, file_path: str, content: str) -> str:
+    """Write file to Docker node filesystem
+
+    Allows writing configuration files or other data to Docker node containers.
+
+    IMPORTANT: File changes do NOT automatically restart the node or apply configuration.
+    For network configuration, use configure_node_network() which handles the full workflow.
+
+    Args:
+        node_name: Name of the Docker node
+        file_path: Path relative to container root (e.g., 'etc/network/interfaces')
+        content: File contents to write
+
+    Returns:
+        JSON confirmation message
+
+    Example:
+        write_node_file("A-PROXY", "etc/network/interfaces", "auto eth0\\niface eth0 inet dhcp")
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    return await write_node_file_impl(app, node_name, file_path, content)
+
+
+@mcp.tool(annotations={
+    "modifies_topology": True
+})
+async def configure_node_network(ctx: Context, node_name: str, interfaces: list) -> str:
+    """Configure network interfaces on Docker node
+
+    Generates /etc/network/interfaces file and restarts the node to apply configuration.
+    Supports both static IP and DHCP configuration for multiple interfaces (eth0, eth1, etc.).
+
+    This is the recommended way to configure network settings on Docker nodes, as it handles
+    the complete workflow: write config file → restart node → apply configuration.
+
+    Args:
+        node_name: Name of the Docker node
+        interfaces: List of interface configurations, each with:
+            Static mode:
+                - name: Interface name (eth0, eth1, etc.)
+                - mode: "static"
+                - address: IP address
+                - netmask: Network mask
+                - gateway: Default gateway (optional)
+                - dns: DNS server (optional, default: 8.8.8.8)
+            DHCP mode:
+                - name: Interface name (eth0, eth1, etc.)
+                - mode: "dhcp"
+                - dns: DNS server (optional, default: 8.8.8.8)
+
+    Returns:
+        JSON confirmation with configured interfaces
+
+    Examples:
+        # Static IP configuration
+        configure_node_network("A-PROXY", [{
+            "name": "eth0",
+            "mode": "static",
+            "address": "10.199.0.254",
+            "netmask": "255.255.255.0",
+            "gateway": "10.199.0.1"
+        }])
+
+        # DHCP configuration
+        configure_node_network("A-PROXY", [{
+            "name": "eth0",
+            "mode": "dhcp"
+        }])
+
+        # Multiple interfaces
+        configure_node_network("A-PROXY", [
+            {
+                "name": "eth0",
+                "mode": "static",
+                "address": "10.199.0.254",
+                "netmask": "255.255.255.0",
+                "gateway": "10.199.0.1"
+            },
+            {
+                "name": "eth1",
+                "mode": "dhcp"
+            }
+        ])
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    return await configure_node_network_impl(app, node_name, interfaces)
 
 
 @mcp.tool(annotations={

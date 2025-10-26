@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.24.3",
-  "description": "GNS3 lab automation - 24 tools + 19 resources (3 static + 16 templates) + 5 prompts with project notes/memory",
-  "long_description": "COMPLETE MCP SERVER: 24 tools + 19 browsable resources + 5 workflow prompts + project memory system.\n\nKEY FEATURES:\n• Project Notes/Memory: Store IPs, credentials, and architecture in per-project README to save conversation context\n  - Tools: get_project_readme(), update_project_readme()\n  - Resource: gns3://projects/{id}/readme\n  - Use Cases: IP schemes, credentials, topology diagrams, troubleshooting notes\n• Template Usage Notes: Access device-specific default credentials and setup instructions\n  - Resource: gns3://projects/{id}/nodes/{id}/template\n  - Contains: Default logins, boot timing, persistent storage info\n• 24 Action Tools: Create nodes, configure devices, manage connections, snapshots\n• 19 MCP Resources: Browse projects, nodes, sessions (3 static + 16 templates)\n• 5 Workflow Prompts: Guided setup for SSH, topology discovery, troubleshooting\n\nVersion 0.24.3: Fixed create_node tool. For complete docs see SKILL.md. Supports GNS3 v3 API.",
+  "version": "0.25.0",
+  "description": "GNS3 lab automation - 27 tools + 19 resources (3 static + 16 templates) + 5 prompts with Docker node file operations",
+  "long_description": "COMPLETE MCP SERVER: 27 tools + 19 browsable resources + 5 workflow prompts + Docker node configuration.\n\nKEY FEATURES:\n• Docker Node File Operations: Read/write files in Docker containers, configure network interfaces\n  - Tools: get_node_file(), write_node_file(), configure_node_network()\n  - Supports: Network config (static/DHCP), multi-interface setup, automatic node restart\n  - Use Cases: SSH proxy setup, custom container config, network troubleshooting\n• Project Notes/Memory: Store IPs, credentials, and architecture in per-project README\n  - Tools: get_project_readme(), update_project_readme()\n  - Resource: gns3://projects/{id}/readme\n• Template Usage Notes: Access device-specific default credentials and setup instructions\n  - Resource: gns3://projects/{id}/nodes/{id}/template\n• 27 Action Tools: Create nodes, configure devices, manage connections, Docker file ops\n• 19 MCP Resources: Browse projects, nodes, sessions (3 static + 16 templates)\n• 5 Workflow Prompts: Guided setup for SSH, topology discovery, troubleshooting\n\nVersion 0.25.0: Added Docker node file operations and network configuration. For complete docs see SKILL.md. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -108,6 +108,18 @@
     {
       "name": "delete_node",
       "description": "Delete a node from the current project (returns JSON confirmation)"
+    },
+    {
+      "name": "get_node_file",
+      "description": "Read file from Docker node filesystem (returns JSON with file contents)"
+    },
+    {
+      "name": "write_node_file",
+      "description": "Write file to Docker node filesystem - requires manual node restart to apply changes (returns JSON confirmation)"
+    },
+    {
+      "name": "configure_node_network",
+      "description": "Configure network interfaces on Docker node with static IP or DHCP - automatically restarts node to apply (returns JSON with configured interfaces)"
     },
     {
       "name": "create_snapshot",

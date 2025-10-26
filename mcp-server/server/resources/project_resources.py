@@ -237,20 +237,35 @@ async def list_links_impl(app: "AppContext", project_id: str) -> str:
                                 port_b_name = port.get('name')
                                 break
 
+                    # Build LinkEndpoint objects
+                    from models import LinkEndpoint
+
+                    endpoint_a = LinkEndpoint(
+                        node_id=node_a_id,
+                        node_name=node_a['name'],
+                        adapter_number=adapter_a_num,
+                        port_number=port_a_num,
+                        port_name=port_a_name
+                    )
+
+                    endpoint_b = LinkEndpoint(
+                        node_id=node_b_id,
+                        node_name=node_b['name'],
+                        adapter_number=adapter_b_num,
+                        port_number=port_b_num,
+                        port_name=port_b_name
+                    )
+
                     link_info = LinkInfo(
                         link_id=link['link_id'],
                         link_type=link.get('link_type', 'ethernet'),
-                        node_a=node_a['name'],
-                        node_a_id=node_a_id,
-                        port_a=port_a_num,
-                        adapter_a=adapter_a_num,
-                        port_a_name=port_a_name,
-                        node_b=node_b['name'],
-                        node_b_id=node_b_id,
-                        port_b=port_b_num,
-                        adapter_b=adapter_b_num,
-                        port_b_name=port_b_name,
-                        suspended=link.get('suspend', False)
+                        node_a=endpoint_a,
+                        node_b=endpoint_b,
+                        capturing=link.get('capturing', False),
+                        capture_file_name=link.get('capture_file_name'),
+                        capture_file_path=link.get('capture_file_path'),
+                        capture_compute_id=link.get('capture_compute_id'),
+                        suspend=link.get('suspend', False)
                     ).model_dump()
 
                     link_infos.append(link_info)

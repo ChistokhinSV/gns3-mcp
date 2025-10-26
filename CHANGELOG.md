@@ -5,6 +5,91 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.0] - Docker Node File Operations (FEATURE)
+
+### Added
+- **NEW**: Docker node file operations for reading/writing files in containers
+  - GNS3 Client: `get_node_file()` - GET `/v3/projects/{id}/nodes/{id}/files/{path}`
+  - GNS3 Client: `write_node_file()` - POST `/v3/projects/{id}/nodes/{id}/files/{path}`
+  - MCP Tool: `get_node_file(node_name, file_path)` - read file from Docker container filesystem
+  - MCP Tool: `write_node_file(node_name, file_path, content)` - write file to Docker container
+  - **Validation**: Docker node type check, proper error handling for non-Docker nodes
+  - **Note**: File changes do NOT auto-restart container, manual restart required for config to take effect
+
+- **NEW**: Network configuration tool for Docker nodes with automatic restart
+  - MCP Tool: `configure_node_network(node_name, interfaces)` - configure network interfaces
+  - **Supports**: Static IP configuration with address, netmask, gateway, DNS
+  - **Supports**: DHCP configuration for automatic IP assignment
+  - **Multi-interface**: Configure multiple interfaces (eth0, eth1, eth2, etc.) in single call
+  - **Automatic Restart**: Stops node, waits for confirmed stop, starts node to apply config
+  - **Generated File**: Creates proper Debian `/etc/network/interfaces` file format
+
+- **NEW**: Network configuration models (Pydantic)
+  - `NetworkInterfaceStatic`: Static IP configuration with address, netmask, gateway, DNS
+  - `NetworkInterfaceDHCP`: DHCP configuration with optional DNS
+  - `NetworkInterface`: Union type for static or DHCP
+  - `NetworkConfig`: Container for multiple interfaces with `to_debian_interfaces()` method
+  - **Validation**: Type-safe interface configuration with automatic validation
+
+### Use Cases
+- **SSH Proxy Setup**: Configure network interfaces on lab SSH proxy containers
+- **Container Networking**: Set static IPs or DHCP for Docker nodes in isolated lab networks
+- **Config Inspection**: Read configuration files from running containers for troubleshooting
+- **Custom Configuration**: Write custom config files to containers (beyond network interfaces)
+- **Network Troubleshooting**: Read network config, logs, or other files from containers
+
+### Changed
+- **UPDATED**: manifest.json version 0.24.3→0.25.0
+  - Updated description: "27 tools" (was 24 tools)
+  - Updated long_description to highlight Docker file operations
+  - Added 3 tool definitions for get_node_file, write_node_file, configure_node_network
+
+### Technical Details
+- **NO BREAKING CHANGES**: Additive feature, all existing tools unchanged
+- **FILES CHANGED**:
+  - `mcp-server/server/gns3_client.py`: Added get_node_file() and write_node_file() methods (+38 LOC)
+  - `mcp-server/server/models.py`: Added NetworkInterface* and NetworkConfig models (+92 LOC)
+  - `mcp-server/server/tools/node_tools.py`: Added 3 tool implementations (+217 LOC)
+  - `mcp-server/server/main.py`: Added 3 MCP tools with examples (+126 LOC), added imports
+  - `mcp-server/manifest.json`: Version 0.24.3→0.25.0, added 3 tools, updated descriptions
+  - `CLAUDE.md`: Updated current version and state (+5 LOC)
+- **NEW TOOLS**: 3 (get_node_file, write_node_file, configure_node_network)
+- **NEW MODELS**: 4 (NetworkInterfaceStatic, NetworkInterfaceDHCP, NetworkInterface, NetworkConfig)
+- **TOTAL NEW CODE**: ~478 LOC
+- **RATIONALE**: Enables configuration of Docker nodes via file operations, critical for multi-proxy SSH
+  architecture where lab proxies need network configuration. Provides foundation for Phase 1 of proxy
+  discovery feature. Supports both static and DHCP modes for flexibility in different network environments.
+
+### Examples
+
+**Static IP Configuration:**
+```python
+configure_node_network("A-PROXY", [{
+    "name": "eth0",
+    "mode": "static",
+    "address": "10.199.0.254",
+    "netmask": "255.255.255.0",
+    "gateway": "10.199.0.1",
+    "dns": "8.8.8.8"
+}])
+```
+
+**DHCP Configuration:**
+```python
+configure_node_network("A-PROXY", [{
+    "name": "eth0",
+    "mode": "dhcp"
+}])
+```
+
+**Multiple Interfaces:**
+```python
+configure_node_network("A-PROXY", [
+    {"name": "eth0", "mode": "static", "address": "10.199.0.254", "netmask": "255.255.255.0", "gateway": "10.199.0.1"},
+    {"name": "eth1", "mode": "dhcp"}
+])
+```
+
 ## [0.23.0] - Project Notes/Memory (FEATURE)
 
 ### Added

@@ -302,6 +302,100 @@ class TemplateInfo(BaseModel):
         }
 
 
+# Network Configuration Models
+
+class NetworkInterfaceStatic(BaseModel):
+    """Static IP network interface configuration"""
+    name: str = Field(description="Interface name (eth0, eth1, etc.)")
+    mode: Literal["static"] = "static"
+    address: str = Field(description="IP address")
+    netmask: str = Field(description="Network mask")
+    gateway: Optional[str] = Field(default=None, description="Default gateway IP")
+    dns: Optional[str] = Field(default="8.8.8.8", description="DNS server IP")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "eth0",
+                "mode": "static",
+                "address": "10.199.0.254",
+                "netmask": "255.255.255.0",
+                "gateway": "10.199.0.1",
+                "dns": "8.8.8.8"
+            }
+        }
+
+
+class NetworkInterfaceDHCP(BaseModel):
+    """DHCP network interface configuration"""
+    name: str = Field(description="Interface name (eth0, eth1, etc.)")
+    mode: Literal["dhcp"] = "dhcp"
+    dns: Optional[str] = Field(default="8.8.8.8", description="DNS server IP")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "eth0",
+                "mode": "dhcp",
+                "dns": "8.8.8.8"
+            }
+        }
+
+
+NetworkInterface = Union[NetworkInterfaceStatic, NetworkInterfaceDHCP]
+
+
+class NetworkConfig(BaseModel):
+    """Multi-interface network configuration for Docker nodes"""
+    interfaces: List[NetworkInterface] = Field(description="List of network interfaces to configure")
+
+    def to_debian_interfaces(self) -> str:
+        """Generate /etc/network/interfaces file content
+
+        Returns:
+            Debian-style interfaces configuration file content
+        """
+        lines = []
+        for iface in self.interfaces:
+            lines.append(f"auto {iface.name}")
+
+            if iface.mode == "static":
+                lines.append(f"iface {iface.name} inet static")
+                lines.append(f"    address {iface.address}")
+                lines.append(f"    netmask {iface.netmask}")
+                if iface.gateway:
+                    lines.append(f"    gateway {iface.gateway}")
+            else:  # dhcp
+                lines.append(f"iface {iface.name} inet dhcp")
+
+            if iface.dns:
+                lines.append(f"    up echo nameserver {iface.dns} > /etc/resolv.conf")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "interfaces": [
+                    {
+                        "name": "eth0",
+                        "mode": "static",
+                        "address": "10.199.0.254",
+                        "netmask": "255.255.255.0",
+                        "gateway": "10.199.0.1",
+                        "dns": "8.8.8.8"
+                    },
+                    {
+                        "name": "eth1",
+                        "mode": "dhcp",
+                        "dns": "8.8.8.8"
+                    }
+                ]
+            }
+        }
+
+
 # Drawing Models
 
 class DrawingInfo(BaseModel):
