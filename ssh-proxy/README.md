@@ -44,9 +44,21 @@ cd ssh-proxy
 docker build -t chistokhinsv/gns3-ssh-proxy:v0.2.0 .
 ```
 
-### 2. Run Container
+### 2. Deploy with Docker Compose (Recommended)
 
-#### Lab Proxy (Inside GNS3):
+#### Main Proxy on GNS3 Host:
+```bash
+# Create .env file with GNS3 credentials
+cp .env.example .env
+# Edit .env and set GNS3_PASSWORD
+
+# Start main proxy with discovery enabled
+docker-compose up -d gns3-ssh-proxy-main
+```
+
+#### Or Use Docker Run:
+
+**Lab Proxy (Inside GNS3):**
 ```bash
 docker run -d \
   --name gns3-ssh-proxy \
@@ -55,10 +67,10 @@ docker run -d \
   chistokhinsv/gns3-ssh-proxy:v0.2.0
 ```
 
-#### Main Proxy (On GNS3 Host, with Discovery):
+**Main Proxy (On GNS3 Host, with Discovery):**
 ```bash
 docker run -d \
-  --name gns3-ssh-proxy \
+  --name gns3-ssh-proxy-main \
   --network host \
   --restart unless-stopped \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
@@ -72,7 +84,11 @@ docker run -d \
 ### 3. Verify
 
 ```bash
+# Check health
 curl http://localhost:8022/health
+
+# Test proxy discovery (main proxy only)
+curl http://localhost:8022/proxy/registry
 ```
 
 ## API Endpoints
