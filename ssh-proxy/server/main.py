@@ -115,7 +115,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "gns3-ssh-proxy",
-        "version": "0.2.0"
+        "version": app.version
     }
 
 
@@ -131,7 +131,7 @@ async def get_version():
         Version information (version string and service name)
     """
     return {
-        "version": "0.2.0",
+        "version": app.version,
         "service": "gns3-ssh-proxy",
         "features": ["ssh_automation", "proxy_discovery"]
     }
