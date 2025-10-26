@@ -9,6 +9,73 @@ description: GNS3 network lab operations including topology management, device c
 
 GNS3 (Graphical Network Simulator-3) is a network emulation platform for building complex network topologies. This skill provides knowledge for automating GNS3 lab operations through the MCP server.
 
+## Key Features (Must Know!)
+
+### 🗒️ Project Notes/Memory System
+**Problem**: Lab configurations consume conversation context (IPs, credentials, architecture notes)
+**Solution**: Store persistent notes in per-project README
+
+**When to use:**
+- ✅ Always read notes when starting work on a project
+- ✅ Update notes after configuring new devices
+- ✅ Document IP schemes, credentials, topology changes
+- ✅ Record troubleshooting findings and solutions
+
+**Tools:**
+- `get_project_readme()` - Retrieve project documentation
+- `update_project_readme(content)` - Save/update documentation (markdown format)
+
+**Resource:** `gns3://projects/{id}/readme` (read-only browsing)
+
+**Example Workflow:**
+```python
+# 1. Always start by reading existing notes
+notes = get_project_readme()
+
+# 2. Do your work (configure router, add nodes, etc.)
+# ...
+
+# 3. Update notes with new information
+update_project_readme("""
+# Lab Configuration
+
+## Network Topology
+- Router1: 10.1.0.1/24 (GigabitEthernet0/0)
+- Router2: 10.1.0.2/24 (GigabitEthernet0/0)
+
+## Credentials
+- Username: admin
+- Password: cisco123
+
+## Last Updated
+2025-10-26: Added Router2, configured OSPF
+""")
+```
+
+### 📋 Template Usage Notes
+**Problem**: Forgetting default credentials, boot times, device-specific setup steps
+**Solution**: Templates include built-in usage notes with device info
+
+**What's included:**
+- Default credentials (username/password)
+- Boot timing estimates ("First boot takes 60 seconds...")
+- Persistent storage locations ("/root directory persists")
+- Console availability and device-specific quirks
+
+**How to access:**
+- **For specific node:** `gns3://projects/{id}/nodes/{node_id}/template`
+- **For template:** `gns3://templates/{template_id}`
+
+**Example:**
+```python
+# Get usage notes for a MikroTik node you just created
+usage = read_resource("gns3://projects/{id}/nodes/{node_id}/template")
+# Returns: "The login is admin, with no password by default.
+#           On first boot, RouterOS is actually being installed..."
+```
+
+**Pro Tip:** Check template usage before configuring new devices to avoid common mistakes!
+
 ## Core Concepts
 
 ### MCP Resources (v0.13.0 - NEW)
@@ -28,9 +95,16 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 - `gns3://projects/{project_id}` - Get project details by ID
 - `gns3://projects/{project_id}/nodes/` - List nodes in project (NodeSummary)
 - `gns3://projects/{project_id}/nodes/{node_id}` - Get node details (full NodeInfo)
+- `gns3://projects/{project_id}/nodes/{node_id}/template` - Get template usage notes for node (v0.23.0)
 - `gns3://projects/{project_id}/links/` - List network links in project
-- `gns3://projects/{project_id}/templates/` - List available templates
+- `gns3://projects/{project_id}/templates/` - List available templates (lightweight, no usage)
 - `gns3://projects/{project_id}/drawings/` - List drawing objects
+- `gns3://projects/{project_id}/snapshots/` - List project snapshots
+- `gns3://projects/{project_id}/snapshots/{snapshot_id}` - Get snapshot details
+- `gns3://projects/{project_id}/readme` - Get project README/notes (v0.23.0)
+
+**Template Resources:**
+- `gns3://templates/{template_id}` - Get template details with usage notes (v0.23.0)
 
 **Console Session Resources:**
 - `gns3://sessions/console/` - List all active console sessions
@@ -77,10 +151,10 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 - `ssh_get_command_output()` → Use resource with filtering
 - `ssh_read_buffer()` → Use resource `gns3://sessions/ssh/{node}/buffer`
 
-**Final Architecture (v0.20.0):**
-- **20 Action Tools**: Modify state (create, delete, configure, execute commands)
-- **17 MCP Resources**: Browse state (projects, nodes, sessions, status, snapshots)
-- **4 MCP Prompts**: Guided workflows (ssh_setup, topology_discovery, troubleshooting, lab_setup)
+**Final Architecture (v0.23.0):**
+- **24 Action Tools**: Modify state (create, delete, configure, execute commands)
+- **20 MCP Resources**: Browse state (projects, nodes, sessions, status, snapshots, templates)
+- **5 MCP Prompts**: Guided workflows (ssh_setup, topology_discovery, troubleshooting, lab_setup, node_setup)
 - **Clear separation**: Tools change things, Resources view things, Prompts guide workflows
 
 ### Projects
@@ -252,13 +326,218 @@ if "error" in result:
   - `spice+agent`: Enhanced graphical - not yet supported
   - `none`: No console
 - **Auto-connect workflow** (v0.2.0):
-  1. Just use `send_console(node_name, command)` - automatically connects if needed
-  2. Read output with `read_console(node_name)` - returns new output since last read (diff mode, default since v0.9.0)
-  3. Or use `read_console(node_name, mode="last_page")` for last ~25 lines
-  4. Or use `read_console(node_name, mode="all")` for full buffer
-  5. Disconnect with `disconnect_console(node_name)` when done
+  1. Just use `console_send(node_name, command)` - automatically connects if needed
+  2. Read output with `console_read(node_name)` - returns new output since last read (diff mode, default since v0.9.0)
+  3. Or use `console_read(node_name, mode="last_page")` for last ~25 lines
+  4. Or use `console_read(node_name, mode="all")` for full buffer
+  5. Disconnect with `console_disconnect(node_name)` when done
 - Sessions are managed automatically by node name
 - Session timeout: 30 minutes of inactivity
+
+### Interactive Console Automation (v0.21.1)
+
+For workflows that need to **wait for specific prompts** before proceeding:
+
+**Tool**: `console_send_and_wait(node_name, command, wait_pattern, timeout, raw)`
+
+**Best Practice Workflow:**
+1. **Check the prompt first** - See what you're waiting for:
+   ```
+   console_send("R1", "\n")  # Wake console
+   output = console_read("R1")  # Check output: "Router#"
+   ```
+
+2. **Use that pattern** in console_send_and_wait:
+   ```
+   result = console_send_and_wait(
+       "R1",
+       "show ip interface brief\n",
+       wait_pattern="Router#",  # Wait for this exact prompt
+       timeout=10
+   )
+   ```
+
+3. **Check the result**:
+   ```json
+   {
+       "output": "Interface    IP-Address   ...\nGi0/0        192.168.1.1  ...\nRouter#",
+       "pattern_found": true,
+       "timeout_occurred": false,
+       "wait_time": 0.8
+   }
+   ```
+
+**Use Cases:**
+- **Interactive logins**: Wait for "Login:" prompt
+- **Command completion**: Wait for prompt to return before next command
+- **Configuration mode**: Wait for "(config)#" before sending configs
+- **Reboots**: Wait for boot messages to complete
+
+**Examples:**
+```
+# Wait for login prompt
+console_send_and_wait("R1", "\n", wait_pattern="Login:", timeout=30)
+
+# Wait for enable prompt
+console_send_and_wait("R1", "enable\n", wait_pattern="#", timeout=5)
+
+# Configuration mode
+console_send_and_wait("R1", "configure terminal\n", wait_pattern="(config)#", timeout=5)
+
+# No pattern - just wait 2 seconds and return output
+console_send_and_wait("R1", "save config\n")
+```
+
+**Pattern Matching:**
+- Supports regex patterns: `"Router[>#]"` matches "Router>" OR "Router#"
+- Pattern search is case-sensitive by default
+- If `wait_pattern=None`, waits 2 seconds and returns output
+- Polls console every 0.5 seconds until pattern found or timeout
+
+**Error Handling:**
+- Invalid regex: Returns error with `error_code="INVALID_PARAMETER"`
+- Console disconnected: Returns error with `error_code="CONSOLE_DISCONNECTED"`
+- Timeout without pattern: Sets `timeout_occurred=true`, still returns accumulated output
+
+**When to Use:**
+- ✅ Interactive console workflows (logins, menus, confirmations)
+- ✅ Ensuring command completion before next step
+- ✅ Boot sequences with specific prompts
+- ❌ Simple command execution - use `console_send()` + `console_read()` instead
+- ❌ SSH-capable devices - use `ssh_command()` for better reliability
+
+### Batch Console Operations (v0.22.0)
+
+For workflows that need to **execute multiple console operations** efficiently:
+
+**Tool**: `console_batch(operations)` - Execute multiple console operations with two-phase validation
+
+**Two-Phase Execution:**
+1. **VALIDATE ALL** operations (check nodes exist, required params present)
+2. **EXECUTE ALL** operations (only if all valid, sequential execution)
+
+**Supported Operation Types:**
+Each operation in the batch can be any of these types with **full parameter support**:
+
+1. **"send"** - Send data to console
+   ```json
+   {
+       "type": "send",
+       "node_name": "R1",
+       "data": "show version\n",
+       "raw": false  // optional
+   }
+   ```
+
+2. **"send_and_wait"** - Send command and wait for pattern
+   ```json
+   {
+       "type": "send_and_wait",
+       "node_name": "R1",
+       "command": "show ip interface brief\n",
+       "wait_pattern": "Router#",  // optional
+       "timeout": 30,  // optional
+       "raw": false  // optional
+   }
+   ```
+
+3. **"read"** - Read console output
+   ```json
+   {
+       "type": "read",
+       "node_name": "R1",
+       "mode": "diff",  // optional: diff/last_page/num_pages/all
+       "pattern": "error",  // optional grep pattern
+       "case_insensitive": true  // optional
+   }
+   ```
+
+4. **"keystroke"** - Send special keystroke
+   ```json
+   {
+       "type": "keystroke",
+       "node_name": "R1",
+       "key": "enter"  // up/down/enter/ctrl_c/etc
+   }
+   ```
+
+**Use Case 1: Multiple Commands on One Node**
+```json
+console_batch([
+    {"type": "send_and_wait", "node_name": "R1", "command": "show version\n", "wait_pattern": "Router#"},
+    {"type": "send_and_wait", "node_name": "R1", "command": "show ip route\n", "wait_pattern": "Router#"},
+    {"type": "send_and_wait", "node_name": "R1", "command": "show running-config\n", "wait_pattern": "Router#"}
+])
+```
+
+**Use Case 2: Same Command on Multiple Nodes** (Parallel Analysis)
+```json
+console_batch([
+    {"type": "send_and_wait", "node_name": "R1", "command": "show ip int brief\n", "wait_pattern": "#"},
+    {"type": "send_and_wait", "node_name": "R2", "command": "show ip int brief\n", "wait_pattern": "#"},
+    {"type": "send_and_wait", "node_name": "R3", "command": "show ip int brief\n", "wait_pattern": "#"}
+])
+```
+
+**Use Case 3: Mixed Operations** (Interactive Workflow)
+```json
+console_batch([
+    {"type": "send", "node_name": "R1", "data": "\n"},  // Wake console
+    {"type": "read", "node_name": "R1", "mode": "last_page"},  // Check prompt
+    {"type": "send_and_wait", "node_name": "R1", "command": "show version\n", "wait_pattern": "#"},
+    {"type": "keystroke", "node_name": "R1", "key": "ctrl_c"}  // Cancel if needed
+])
+```
+
+**Return Format:**
+```json
+{
+    "completed": [0, 1, 2],  // Indices of successful operations
+    "failed": [3],  // Indices of failed operations
+    "results": [
+        {
+            "operation_index": 0,
+            "success": true,
+            "operation_type": "send_and_wait",
+            "node_name": "R1",
+            "result": {
+                "output": "...",
+                "pattern_found": true,
+                "timeout_occurred": false,
+                "wait_time": 1.2
+            }
+        },
+        {
+            "operation_index": 3,
+            "success": false,
+            "operation_type": "send_and_wait",
+            "node_name": "R4",
+            "error": {
+                "error": "Node not found: R4",
+                "error_code": "NODE_NOT_FOUND",
+                "suggested_action": "..."
+            }
+        }
+    ],
+    "total_operations": 4,
+    "execution_time": 5.3
+}
+```
+
+**When to Use:**
+- ✅ Running same diagnostic command on multiple routers
+- ✅ Executing multi-step workflows on one device
+- ✅ Gathering data from multiple nodes for comparison/analysis
+- ✅ Interactive sequences with validation checks between steps
+- ❌ Single operations - use individual tools for simplicity
+- ❌ SSH-capable devices - consider SSH batch operations for better reliability
+
+**Advantages:**
+- **Validation**: All operations validated before execution (prevents partial failures)
+- **Structured Results**: Clear success/failure status per operation
+- **Timing**: Execution time tracking for performance analysis
+- **Flexibility**: Mix different operation types in one batch
+- **Error Isolation**: Failed operations don't stop the batch, all results returned
 
 ### Coordinate System and Topology Layout
 
@@ -560,6 +839,65 @@ ssh_get_history('R1', search='interface')
 ssh_get_command_output('R1', job_id='...')
 ```
 
+### Session Management (v0.1.6)
+
+SSH sessions are automatically managed with the following features:
+
+**30-Minute Session TTL:**
+- Sessions automatically expire after 30 minutes of inactivity
+- Activity timestamp updated on every operation:
+  - SSH command execution (`ssh_send_command`, `ssh_send_config_set`)
+  - Buffer reads (via resources)
+  - Session configuration (reuse of existing session)
+- Expired sessions are automatically detected and recreated
+- No manual intervention required
+
+**Session Health Checks:**
+- Before reusing existing sessions, health checks verify connection is still alive
+- Health check methods:
+  1. Netmiko `is_alive()` if available (Netmiko 4.0+)
+  2. Lightweight empty command test (fallback)
+- Stale/closed connections automatically recreated
+- Ensures reliable session reuse
+
+**Auto-Recovery from Stale Sessions (THE KEY FEATURE):**
+
+When commands fail with "Socket is closed":
+1. Stale session **automatically removed** from session manager
+2. Error response includes `error_code="SSH_DISCONNECTED"` and `suggested_action`
+3. **Just retry configure_ssh() with same parameters - no force needed!**
+4. Fresh session will be created automatically
+5. Retry your ssh_command() - it will work
+
+**Recovery Workflow:**
+```
+# 1. Command fails with "Socket is closed"
+result = ssh_send_command('R1', 'show version')
+# Returns: error_code="SSH_DISCONNECTED",
+#          suggested_action="Session was stale and has been removed. Reconnect..."
+
+# 2. Simply retry configure_ssh() - NO force parameter needed
+#    Stale session already cleaned up, new session will be created
+configure_ssh('R1', device_dict)
+
+# 3. Retry command - works now
+result = ssh_send_command('R1', 'show version')  # ✅ Works
+```
+
+**Force Recreation Parameter (rarely needed):**
+- Use `force=True` ONLY for: credential changes, manual troubleshooting
+- NOT needed for stale session recovery (auto-cleanup handles it)
+- Example:
+```
+# Force recreation to change credentials (uncommon use case)
+configure_ssh('R1', device_dict, force=True)
+```
+
+**Error Codes (v0.1.6):**
+- `SSH_DISCONNECTED` - Session closed (stale connection) → Just retry configure_ssh()
+- `TIMEOUT` - Command timed out → Increase read_timeout parameter
+- `COMMAND_FAILED` - Generic command failure → Check command syntax
+
 ### Adaptive Async for Long Commands
 
 For long-running operations (firmware upgrades, backups):
@@ -833,6 +1171,202 @@ View snapshot details:
 ```
 gns3://projects/{project_id}/snapshots/{snapshot_id}
 ```
+
+## Project Notes/Memory (v0.23.0)
+
+**Store project-specific context** to avoid consuming conversation context. Agent can maintain persistent notes about IPs, credentials, and architecture.
+
+### Features
+
+- **Per-Project Storage**: Each lab has separate README.txt file
+- **Zero Context Cost**: Notes loaded only on explicit tool call
+- **Markdown Format**: Human-readable, supports formatting
+- **Native GNS3 Storage**: Uses built-in README.txt via API
+- **Persistent**: Saved with project, portable
+
+### Tools
+
+**get_project_readme(project_id?)**
+- Retrieve project documentation
+- Returns markdown content
+- Uses current project if ID not specified
+
+**update_project_readme(content, project_id?)**
+- Save project documentation
+- Markdown format
+- Creates README.txt if doesn't exist
+
+### MCP Resource
+
+```
+gns3://projects/{project_id}/readme
+```
+
+Browsable resource for read-only access to project notes.
+
+### Common Use Cases
+
+**IP Addressing Documentation:**
+```markdown
+# Network Lab
+
+## IP Addressing
+- Router1: 10.1.0.1/24 (GigabitEthernet0/0)
+- Router2: 10.1.0.2/24 (GigabitEthernet0/0)
+- Management VLAN: 192.168.100.0/24
+
+## VLANs
+- VLAN 10: Users (10.10.0.0/24)
+- VLAN 20: Servers (10.20.0.0/24)
+- VLAN 100: Management (192.168.100.0/24)
+```
+
+**Credentials & Access:**
+```markdown
+## Device Credentials
+- Router1: admin / vault:router1-pass
+- Router2: admin / vault:router2-pass
+- Switches: admin / vault:switch-default
+
+## SSH Access
+- Router1: ssh://10.1.0.1:22
+- Router2: ssh://10.1.0.2:22
+```
+
+**Architecture Notes:**
+```markdown
+## Lab Architecture
+
+### Topology
+Router1 ← → Router2 (OSPF backbone)
+  |            |
+Switch1     Switch2
+  |            |
+Clients     Servers
+
+### Protocols
+- OSPF Area 0: Backbone between routers
+- HSRP: VIP 10.1.0.254 (priority R1=110, R2=100)
+- STP: Root bridge is Switch1
+```
+
+**Configuration Snippets:**
+```markdown
+## Standard Configs
+
+### OSPF Template
+```
+router ospf 1
+ network 10.0.0.0 0.255.255.255 area 0
+ passive-interface default
+ no passive-interface GigabitEthernet0/0
+```
+
+### HSRP Template
+```
+interface GigabitEthernet0/1
+ standby 1 ip 10.1.0.254
+ standby 1 priority 110
+ standby 1 preempt
+```
+```
+
+**Troubleshooting Notes:**
+```markdown
+## Known Issues
+
+### Router1 High CPU
+- **Symptom**: CPU >80% after OSPF config
+- **Cause**: Debug logging enabled
+- **Fix**: `no debug all`
+
+### Switch1 Port Flapping
+- **Symptom**: Port Gi0/1 up/down
+- **Cause**: Bad cable in lab
+- **Fix**: Use port Gi0/2 instead
+```
+
+### Workflow Example
+
+```python
+# Agent discovers lab setup
+# Get current notes
+notes = get_project_readme()
+
+# Agent configures new router, updates notes
+update_project_readme("""
+# Lab Update 2025-10-26
+
+## New Router Added
+- Router3: 10.1.0.3/24
+- SSH: admin / vault:router3-pass
+- Role: Border router for internet access
+
+## OSPF Updated
+- Added Router3 to Area 0
+- Redistributing default route from Router3
+
+## Next Steps
+- Configure NAT on Router3
+- Test internet connectivity from clients
+""")
+```
+
+## Template Usage Notes (v0.23.0)
+
+**Templates have built-in usage notes** with default credentials, setup instructions, and important information about persistent storage.
+
+### What Template Usage Contains
+
+- **Default Credentials** - Username/password for pre-configured images
+  - Example: "Username: ubuntu, Password: ubuntu"
+  - Example: "The login is admin, with no password by default"
+- **Setup Instructions** - First-boot procedures and installation details
+  - Boot timing estimates (e.g., "On first boot, RouterOS is actually being installed...")
+  - Console availability notes
+- **Persistent Storage Info** - Which directories persist across reboots
+  - Example: "The /root directory is persistent."
+- **Configuration Guidance** - Device-specific quirks and recommendations
+
+### Accessing Template Usage (Read-Only)
+
+**For a specific template:**
+```
+Resource: gns3://templates/{template_id}
+Returns: Full template details including usage field
+```
+
+**For a specific node (most common):**
+```
+Resource: gns3://projects/{project_id}/nodes/{node_id}/template
+Returns: Template usage notes for that node
+```
+
+**Lazy Loading Pattern:**
+- Template list (`gns3://projects/{id}/templates/`) excludes usage to keep lightweight
+- Usage loaded separately only when needed to avoid context bloat
+- Each node has `template_id` linking to its template
+
+### Usage Examples
+
+**Check default credentials before connecting:**
+```
+1. Get node details: gns3://projects/{id}/nodes/{node_id}
+2. Note template_id from node
+3. Check template usage: gns3://templates/{template_id}
+4. See "Username: admin" in usage field
+5. Use those credentials with ssh_configure()
+```
+
+**Find persistent storage directories:**
+```
+1. Browse node's template: gns3://projects/{id}/nodes/{node_id}/template
+2. Look for "persistent" in usage field
+3. Note which directories survive reboots
+4. Store important data in those locations
+```
+
+**Best Practice:** Always check template usage before initial configuration to find default credentials and understand device-specific setup requirements.
 
 ## Lab Setup Automation (v0.18.0)
 

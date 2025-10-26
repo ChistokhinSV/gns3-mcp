@@ -4,7 +4,7 @@
   "display_name": "GNS3 Lab Controller",
   "version": "0.24.3",
   "description": "GNS3 lab automation - 24 tools + 19 resources (3 static + 16 templates) + 5 prompts with project notes/memory",
-  "long_description": "COMPLETE MCP SERVER: 24 tools + 19 browsable resources (3 static lists + 16 project-scoped templates) + 5 workflow prompts. Version 0.24.3: Fixed create_node tool - added missing properties parameter that caused signature mismatch error. Tool now fully functional. For complete version history see CHANGELOG.md. Supports GNS3 v3 API.",
+  "long_description": "COMPLETE MCP SERVER: 24 tools + 19 browsable resources + 5 workflow prompts + project memory system.\n\nKEY FEATURES:\n• Project Notes/Memory: Store IPs, credentials, and architecture in per-project README to save conversation context\n  - Tools: get_project_readme(), update_project_readme()\n  - Resource: gns3://projects/{id}/readme\n  - Use Cases: IP schemes, credentials, topology diagrams, troubleshooting notes\n• Template Usage Notes: Access device-specific default credentials and setup instructions\n  - Resource: gns3://projects/{id}/nodes/{id}/template\n  - Contains: Default logins, boot timing, persistent storage info\n• 24 Action Tools: Create nodes, configure devices, manage connections, snapshots\n• 19 MCP Resources: Browse projects, nodes, sessions (3 static + 16 templates)\n• 5 Workflow Prompts: Guided setup for SSH, topology discovery, troubleshooting\n\nVersion 0.24.3: Fixed create_node tool. For complete docs see SKILL.md. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
