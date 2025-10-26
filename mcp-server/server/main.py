@@ -621,24 +621,68 @@ async def resource_ssh_buffer(ctx: Context, node_name: str) -> str:
 # SSH proxy resources
 @mcp.resource("gns3://proxy/status")
 async def resource_proxy_status() -> str:
-    """Get SSH proxy service status"""
+    """Get SSH proxy service status (main proxy on GNS3 host)
+
+    Returns health status and version of the main SSH proxy running on the GNS3 host.
+    This is the default proxy used when ssh_configure() is called without a proxy parameter.
+    """
     return await _app.resource_manager.get_proxy_status()
 
 @mcp.resource("gns3://proxy/registry")
 async def resource_proxy_registry() -> str:
-    """Get proxy registry (discovered lab proxies via Docker API)"""
+    """Discover lab SSH proxies via Docker API (v0.26.0 Multi-Proxy Support)
+
+    Returns all discovered SSH proxy containers running inside GNS3 lab projects.
+    Use the proxy_id from this list to route SSH connections through lab proxies
+    for accessing isolated networks not reachable from the GNS3 host.
+
+    Example workflow:
+    1. Check this resource to find available lab proxies
+    2. Use proxy_id in ssh_configure(proxy=proxy_id) for isolated network access
+    3. All subsequent ssh_command() calls will route through the selected proxy
+
+    Returns: {available, proxies[], count} where each proxy has:
+    - proxy_id: Use this with ssh_configure(proxy=...)
+    - hostname: Node name in GNS3
+    - project_id: Which project this proxy belongs to
+    - url: Proxy API endpoint
+    - console_port: Port mapped from GNS3 host
+    """
     return await _app.resource_manager.get_proxy_registry()
+
+@mcp.resource("gns3://proxy/sessions")
+async def resource_proxy_sessions() -> str:
+    """List all SSH sessions across all proxies (v0.26.0 Multi-Proxy Aggregation)
+
+    Queries the main SSH proxy on GNS3 host plus all discovered lab proxies,
+    returning a combined list of ALL active SSH sessions regardless of project.
+
+    Each session includes proxy attribution (proxy_id, proxy_url, proxy_hostname)
+    so you can see which proxy manages each session.
+
+    Use this for a global view of all SSH connectivity across the entire lab infrastructure.
+    For project-specific sessions, use gns3://projects/{id}/sessions/ssh instead.
+    """
+    return await _app.resource_manager.list_proxy_sessions()
 
 # Proxy resource templates (project-scoped)
 @mcp.resource("gns3://projects/{project_id}/proxies")
 async def resource_project_proxies(ctx: Context, project_id: str) -> str:
-    """List proxies for specific project"""
+    """List lab proxies for specific project (filtered view of registry)
+
+    Returns only the SSH proxy containers running in the specified GNS3 project.
+    Useful for project-specific proxy discovery without seeing proxies from other projects.
+    """
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_project_proxies(project_id)
 
 @mcp.resource("gns3://proxy/{proxy_id}")
 async def resource_proxy(ctx: Context, proxy_id: str) -> str:
-    """Get specific proxy details by proxy_id (GNS3 node_id)"""
+    """Get detailed information about a specific lab proxy
+
+    Returns full details for a lab proxy identified by its proxy_id (GNS3 node_id).
+    Includes container details, network configuration, and connection information.
+    """
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_proxy(proxy_id)
 
