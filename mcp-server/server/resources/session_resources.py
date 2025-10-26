@@ -346,14 +346,14 @@ async def list_proxy_sessions_impl(app: "AppContext") -> str:
     return await list_ssh_sessions_impl(app)
 
 
-async def list_proxies_impl(app: "AppContext") -> str:
+async def list_project_proxies_impl(app: "AppContext", project_id: str) -> str:
     """
-    List all discovered proxies (template-style resource)
+    List proxies for specific project (template-style resource)
 
-    Resource URI: gns3://proxies
+    Resource URI: gns3://projects/{project_id}/proxies
 
     Returns:
-        JSON array of proxy summaries suitable for selection/browsing
+        JSON array of proxy summaries for the specified project
     """
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
@@ -361,8 +361,11 @@ async def list_proxies_impl(app: "AppContext") -> str:
 
             if response.status_code == 200:
                 data = response.json()
-                # Return just the proxies array for template-style browsing
-                return json.dumps(data.get("proxies", []), indent=2)
+                proxies = data.get("proxies", [])
+
+                # Filter proxies by project_id
+                project_proxies = [p for p in proxies if p.get("project_id") == project_id]
+                return json.dumps(project_proxies, indent=2)
             else:
                 return json.dumps([], indent=2)
 

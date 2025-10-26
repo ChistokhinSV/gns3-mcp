@@ -50,8 +50,8 @@ class ResourceManager:
         r'^gns3://proxy/registry$': 'get_proxy_registry',
         r'^gns3://proxy/sessions$': 'list_proxy_sessions',
 
-        # Proxy resource templates
-        r'^gns3://proxies$': 'list_proxies',
+        # Proxy resource templates (project-scoped)
+        r'^gns3://projects/(?P<project_id>[^/]+)/proxies$': 'list_project_proxies',
         r'^gns3://proxy/(?P<proxy_id>[^/]+)$': 'get_proxy',
     }
 
@@ -336,10 +336,10 @@ class ResourceManager:
         from .session_resources import list_proxy_sessions_impl
         return await list_proxy_sessions_impl(self.app)
 
-    async def list_proxies(self) -> str:
-        """List all discovered proxies (template-style list)"""
-        from .session_resources import list_proxies_impl
-        return await list_proxies_impl(self.app)
+    async def list_project_proxies(self, project_id: str) -> str:
+        """List proxies for specific project (template-style)"""
+        from .session_resources import list_project_proxies_impl
+        return await list_project_proxies_impl(self.app, project_id)
 
     async def get_proxy(self, proxy_id: str) -> str:
         """Get specific proxy details by proxy_id"""
