@@ -19,27 +19,36 @@ _gns3_host = os.getenv("GNS3_HOST", "localhost")
 SSH_PROXY_URL = os.getenv("SSH_PROXY_URL", f"http://{_gns3_host}:8022")
 
 
-async def list_console_sessions_impl(app: "AppContext") -> str:
+async def list_console_sessions_impl(app: "AppContext", project_id: str) -> str:
     """
-    List all active console sessions
+    List all active console sessions for nodes in a project
 
-    Resource URI: gns3://sessions/console/
+    Resource URI: gns3://projects/{project_id}/sessions/console
+
+    Args:
+        project_id: Project ID to filter sessions by
 
     Returns:
-        JSON array of console session information
+        JSON array of console session information for project nodes
     """
     try:
+        # Get nodes in the project to filter sessions
+        nodes_data = await app.gns3.get_nodes(project_id)
+        project_node_names = {node["name"] for node in nodes_data}
+
+        # Filter sessions to only include nodes in this project
         sessions = []
-        for node_name, session_info in app.console_manager.sessions.items():
-            sessions.append({
-                "node_name": node_name,
-                "connected": session_info.connected,
-                "session_id": session_info.session_id,
-                "host": session_info.host,
-                "port": session_info.port,
-                "buffer_size": len(session_info.buffer),
-                "created_at": session_info.created_at.isoformat() if session_info.created_at else None
-            })
+        for node_name, session_info in app.console.sessions.items():
+            if node_name in project_node_names:
+                sessions.append({
+                    "node_name": node_name,
+                    "connected": session_info.connected,
+                    "session_id": session_info.session_id,
+                    "host": session_info.host,
+                    "port": session_info.port,
+                    "buffer_size": len(session_info.buffer),
+                    "created_at": session_info.created_at.isoformat() if session_info.created_at else None
+                })
 
         return json.dumps(sessions, indent=2)
     except Exception as e:
@@ -62,7 +71,7 @@ async def get_console_session_impl(app: "AppContext", node_name: str) -> str:
         JSON object with console session status
     """
     try:
-        session_info = app.console_manager.sessions.get(node_name)
+        session_info = app.console.sessions.get(node_name)
 
         if not session_info:
             return json.dumps({
@@ -92,31 +101,43 @@ async def get_console_session_impl(app: "AppContext", node_name: str) -> str:
         }, indent=2)
 
 
-async def list_ssh_sessions_impl(app: "AppContext") -> str:
+async def list_ssh_sessions_impl(app: "AppContext", project_id: str) -> str:
     """
-    List all active SSH sessions from SSH proxy
+    List all active SSH sessions for nodes in a project
 
-    Resource URI: gns3://sessions/ssh/
+    Resource URI: gns3://projects/{project_id}/sessions/ssh
+
+    Args:
+        project_id: Project ID to filter sessions by
 
     Returns:
-        JSON array of SSH session information
+        JSON array of SSH session information for project nodes
     """
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = await client.get(f"{SSH_PROXY_URL}/ssh/sessions")
+            # Get nodes in the project
+            nodes_data = await app.gns3.get_nodes(project_id)
 
-            if response.status_code == 200:
-                return json.dumps(response.json(), indent=2)
-            else:
-                error_data = response.json()
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "Failed to list SSH sessions"),
-                    "details": error_data.get("detail", {}).get("details")
-                }, indent=2)
+            # Check SSH status for each node
+            sessions = []
+            for node in nodes_data:
+                node_name = node["name"]
+                try:
+                    response = await client.get(f"{SSH_PROXY_URL}/ssh/status/{node_name}")
+                    if response.status_code == 200:
+                        status = response.json()
+                        # Only include if connected
+                        if status.get("connected", False):
+                            sessions.append(status)
+                except Exception:
+                    # Skip nodes that fail status check
+                    continue
+
+            return json.dumps(sessions, indent=2)
 
         except Exception as e:
             return json.dumps({
-                "error": "Failed to connect to SSH proxy",
+                "error": "Failed to list SSH sessions",
                 "details": str(e),
                 "suggestion": "Ensure SSH proxy service is running: docker ps | grep gns3-ssh-proxy"
             }, indent=2)

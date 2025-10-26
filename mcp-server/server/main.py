@@ -314,7 +314,8 @@ from tools.console_tools import (
     disconnect_console_impl,
     get_console_status_impl,
     send_and_wait_console_impl,
-    send_keystroke_impl
+    send_keystroke_impl,
+    console_batch_impl
 )
 from tools.link_tools import get_links_impl, set_connection_impl
 from tools.drawing_tools import (
@@ -330,7 +331,8 @@ from prompts import (
     render_ssh_setup_prompt,
     render_topology_discovery_prompt,
     render_troubleshooting_prompt,
-    render_lab_setup_prompt
+    render_lab_setup_prompt,
+    render_node_setup_prompt
 )
 
 # Read version from manifest.json (single source of truth)
@@ -363,6 +365,10 @@ class AppContext:
     resource_manager: Optional[ResourceManager] = None
     current_project_id: str | None = None
     cleanup_task: Optional[asyncio.Task] = field(default=None)
+
+
+# Global app context for static resources (set during lifespan)
+_app: Optional[AppContext] = None
 
 
 async def periodic_console_cleanup(console: ConsoleManager):
@@ -426,9 +432,14 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     # Initialize resource manager (needs context for callbacks)
     context.resource_manager = ResourceManager(context)
 
+    # Set global app for static resources
+    global _app
+    _app = context
+
     try:
         yield context
     finally:
+        _app = None  # Clear global on shutdown
         # Cleanup
         if cleanup_task:
             cleanup_task.cancel()
@@ -508,9 +519,9 @@ mcp = FastMCP(
 
 # Project resources
 @mcp.resource("gns3://projects")
-async def resource_projects(ctx: Context) -> str:
-    app: AppContext = ctx.request_context.lifespan_context
-    return await app.resource_manager.list_projects()
+async def resource_projects() -> str:
+    """List all GNS3 projects"""
+    return await _app.resource_manager.list_projects()
 
 @mcp.resource("gns3://projects/{project_id}")
 async def resource_project(ctx: Context, project_id: str) -> str:
@@ -542,23 +553,51 @@ async def resource_drawings(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_drawings(project_id)
 
-# Console session resources
-@mcp.resource("gns3://sessions/console")
-async def resource_console_sessions(ctx: Context) -> str:
+@mcp.resource("gns3://projects/{project_id}/snapshots")
+async def resource_snapshots(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
-    return await app.resource_manager.list_console_sessions()
+    return await app.resource_manager.list_snapshots(project_id)
 
+@mcp.resource("gns3://projects/{project_id}/snapshots/{snapshot_id}")
+async def resource_snapshot(ctx: Context, project_id: str, snapshot_id: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_snapshot(project_id, snapshot_id)
+
+@mcp.resource("gns3://projects/{project_id}/readme")
+async def resource_project_readme(ctx: Context, project_id: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_project_readme(project_id)
+
+@mcp.resource("gns3://projects/{project_id}/sessions/console")
+async def resource_console_sessions(ctx: Context, project_id: str) -> str:
+    """List console sessions for project nodes"""
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.list_console_sessions(project_id)
+
+@mcp.resource("gns3://projects/{project_id}/sessions/ssh")
+async def resource_ssh_sessions(ctx: Context, project_id: str) -> str:
+    """List SSH sessions for project nodes"""
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.list_ssh_sessions(project_id)
+
+# Template resources
+@mcp.resource("gns3://templates/{template_id}")
+async def resource_template(ctx: Context, template_id: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_template(template_id)
+
+@mcp.resource("gns3://projects/{project_id}/nodes/{node_id}/template")
+async def resource_node_template(ctx: Context, project_id: str, node_id: str) -> str:
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_node_template_usage(project_id, node_id)
+
+# Console session resources (node-specific templates only)
 @mcp.resource("gns3://sessions/console/{node_name}")
 async def resource_console_session(ctx: Context, node_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_console_session(node_name)
 
-# SSH session resources
-@mcp.resource("gns3://sessions/ssh")
-async def resource_ssh_sessions(ctx: Context) -> str:
-    app: AppContext = ctx.request_context.lifespan_context
-    return await app.resource_manager.list_ssh_sessions()
-
+# SSH session resources (node-specific templates only)
 @mcp.resource("gns3://sessions/ssh/{node_name}")
 async def resource_ssh_session(ctx: Context, node_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
@@ -576,14 +615,9 @@ async def resource_ssh_buffer(ctx: Context, node_name: str) -> str:
 
 # SSH proxy resources
 @mcp.resource("gns3://proxy/status")
-async def resource_proxy_status(ctx: Context) -> str:
-    app: AppContext = ctx.request_context.lifespan_context
-    return await app.resource_manager.get_proxy_status()
-
-@mcp.resource("gns3://proxy/sessions")
-async def resource_proxy_sessions(ctx: Context) -> str:
-    app: AppContext = ctx.request_context.lifespan_context
-    return await app.resource_manager.list_proxy_sessions()
+async def resource_proxy_status() -> str:
+    """Get SSH proxy service status"""
+    return await _app.resource_manager.get_proxy_status()
 
 
 # ============================================================================
@@ -689,6 +723,49 @@ async def lab_setup(
         - bgp: Multiple AS with iBGP and eBGP peering
     """
     return render_lab_setup_prompt(topology_type, device_count, template_name, project_name)
+
+
+@mcp.prompt()
+async def node_setup(
+    node_name: str,
+    template_name: str,
+    ip_address: str,
+    subnet_mask: str = "255.255.255.0",
+    device_type: str = "cisco_ios",
+    username: str = "admin",
+    password: str = "admin"
+) -> str:
+    """Node Setup Workflow - Complete workflow for adding a new node to a lab
+
+    Guides through the entire process of:
+    1. Creating a new node from template
+    2. Starting the node and waiting for boot
+    3. Configuring IP address via console
+    4. Documenting IP/credentials in project README
+    5. Establishing SSH session for automation
+
+    Args:
+        node_name: Name for the new node (e.g., "Router1")
+        template_name: GNS3 template to use (e.g., "Cisco IOSv", "Alpine Linux")
+        ip_address: Management IP to assign (e.g., "192.168.1.10")
+        subnet_mask: Subnet mask (default: "255.255.255.0")
+        device_type: Device type for SSH (cisco_ios, linux, mikrotik_routeros)
+        username: SSH username to create (default: "admin")
+        password: SSH password to set (default: "admin")
+
+    Returns:
+        Complete workflow with device-specific commands for IP configuration,
+        README documentation template, SSH session setup, and verification steps
+    """
+    return render_node_setup_prompt(
+        node_name=node_name,
+        template_name=template_name,
+        ip_address=ip_address,
+        subnet_mask=subnet_mask,
+        device_type=device_type,
+        username=username,
+        password=password
+    )
 
 
 # ============================================================================
@@ -966,6 +1043,176 @@ async def console_keystroke(ctx: Context, node_name: str, key: str) -> str:
     return await send_keystroke_impl(app, node_name, key)
 
 
+@mcp.tool()
+async def console_send_and_wait(
+    ctx: Context,
+    node_name: str,
+    command: str,
+    wait_pattern: Optional[str] = None,
+    timeout: int = 30,
+    raw: bool = False
+) -> str:
+    """Send command and wait for prompt pattern with timeout
+
+    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
+    - Initial device configuration (enabling SSH, creating users)
+    - Troubleshooting when SSH is unavailable
+    - Devices without SSH support (VPCS, simple switches)
+
+    Combines send + wait + read into single operation. Useful for interactive
+    workflows where you need to verify prompt before proceeding.
+
+    BEST PRACTICE: Check the prompt first!
+    1. Send "\\n" with console_send() to wake the console
+    2. Use console_read() to see the current prompt (e.g., "Router#", "[admin@MikroTik] >")
+    3. Use that exact prompt pattern in wait_pattern parameter
+    4. This ensures you wait for the right prompt and don't miss command output
+
+    Args:
+        node_name: Name of the node
+        command: Command to send (include \\n for newline)
+        wait_pattern: Optional regex pattern to wait for (e.g., "Router[>#]", "Login:")
+                      If None, waits 2 seconds and returns output
+                      TIP: Check prompt first with console_read() to get exact pattern
+        timeout: Maximum seconds to wait for pattern (default: 30)
+        raw: If True, send command without escape sequence processing (default: False)
+
+    Returns:
+        JSON with:
+        {
+            "output": "console output",
+            "pattern_found": true/false,
+            "timeout_occurred": true/false,
+            "wait_time": 2.5  // seconds actually waited
+        }
+
+    Examples:
+        # Step 1: Check the prompt first
+        console_send("R1", "\\n")
+        output = console_read("R1")  # Shows "Router#"
+
+        # Step 2: Use that prompt pattern
+        result = console_send_and_wait(
+            "R1",
+            "show ip interface brief\\n",
+            wait_pattern="Router#",  # Wait for exact prompt
+            timeout=10
+        )
+        # Returns when "Router#" appears - command is complete
+
+        # Wait for login prompt:
+        console_send_and_wait("R1", "\\n", wait_pattern="Login:", timeout=10)
+
+        # No pattern (just wait 2s):
+        console_send_and_wait("R1", "enable\\n")
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await send_and_wait_console_impl(app, node_name, command, wait_pattern, timeout, raw)
+
+
+@mcp.tool()
+async def console_batch(ctx: Context, operations: List[Dict[str, Any]]) -> str:
+    """Execute multiple console operations in batch with validation
+
+    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
+    - Initial device configuration (enabling SSH, creating users)
+    - Troubleshooting when SSH is unavailable
+    - Devices without SSH support (VPCS, simple switches)
+
+    Two-phase execution:
+    1. VALIDATE ALL operations (check nodes exist, required params present)
+    2. EXECUTE ALL operations (only if all valid, sequential execution)
+
+    Each operation supports all parameters from the underlying console tool:
+
+    - "send": Send data to console
+        {
+            "type": "send",
+            "node_name": "R1",
+            "data": "show version\\n",
+            "raw": false  // optional
+        }
+
+    - "send_and_wait": Send command and wait for pattern
+        {
+            "type": "send_and_wait",
+            "node_name": "R1",
+            "command": "show ip interface brief\\n",
+            "wait_pattern": "Router#",  // optional
+            "timeout": 30,  // optional
+            "raw": false  // optional
+        }
+
+    - "read": Read console output
+        {
+            "type": "read",
+            "node_name": "R1",
+            "mode": "diff",  // optional: diff/last_page/num_pages/all
+            "pages": 1,  // optional, only with mode="num_pages"
+            "pattern": "error",  // optional grep pattern
+            "case_insensitive": true,  // optional
+            "invert": false,  // optional
+            "before": 0,  // optional context lines
+            "after": 0,  // optional context lines
+            "context": 0  // optional context lines (overrides before/after)
+        }
+
+    - "keystroke": Send special keystroke
+        {
+            "type": "keystroke",
+            "node_name": "R1",
+            "key": "enter"  // up/down/enter/ctrl_c/etc
+        }
+
+    Args:
+        operations: List of operation dictionaries (see examples above)
+
+    Returns:
+        JSON with execution results:
+        {
+            "completed": [0, 1, 2],  // Indices of successful operations
+            "failed": [3],  // Indices of failed operations
+            "results": [
+                {
+                    "operation_index": 0,
+                    "success": true,
+                    "operation_type": "send_and_wait",
+                    "node_name": "R1",
+                    "result": {...}  // Operation-specific result
+                },
+                ...
+            ],
+            "total_operations": 4,
+            "execution_time": 5.3
+        }
+
+    Examples:
+        # Multiple commands on one node:
+        console_batch([
+            {"type": "send_and_wait", "node_name": "R1", "command": "show version\\n", "wait_pattern": "Router#"},
+            {"type": "send_and_wait", "node_name": "R1", "command": "show ip route\\n", "wait_pattern": "Router#"},
+            {"type": "read", "node_name": "R1", "mode": "diff"}
+        ])
+
+        # Same command on multiple nodes:
+        console_batch([
+            {"type": "send_and_wait", "node_name": "R1", "command": "show ip int brief\\n", "wait_pattern": "#"},
+            {"type": "send_and_wait", "node_name": "R2", "command": "show ip int brief\\n", "wait_pattern": "#"},
+            {"type": "send_and_wait", "node_name": "R3", "command": "show ip int brief\\n", "wait_pattern": "#"}
+        ])
+
+        # Mixed operations:
+        console_batch([
+            {"type": "send", "node_name": "R1", "data": "\\n"},  // Wake console
+            {"type": "read", "node_name": "R1", "mode": "last_page"},  // Check prompt
+            {"type": "send_and_wait", "node_name": "R1", "command": "show version\\n", "wait_pattern": "#"},
+            {"type": "keystroke", "node_name": "R1", "key": "ctrl_c"}  // Cancel if needed
+        ])
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await console_batch_impl(app, operations)
+
+
 @mcp.tool(annotations={
     "modifies_topology": True
 })
@@ -1142,6 +1389,106 @@ async def restore_snapshot(ctx: Context, snapshot_name: str) -> str:
     return await restore_snapshot_impl(app, snapshot_name)
 
 
+@mcp.tool()
+async def get_project_readme(ctx: Context, project_id: Optional[str] = None) -> str:
+    """Get project README/notes
+
+    Returns project documentation in markdown format including:
+    - IP addressing schemes and VLANs
+    - Node credentials and details
+    - Architecture notes and diagrams
+    - Configuration snippets
+    - Troubleshooting notes
+
+    Args:
+        project_id: Project ID (uses current project if not specified)
+
+    Returns:
+        JSON with project_id and markdown content
+
+    Example:
+        >>> get_project_readme()
+        >>> get_project_readme("a920c77d-6e9b-41b8-9311-b4b866a2fbb0")
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    if not project_id:
+        error = await validate_current_project(app)
+        if error:
+            return error
+        project_id = app.current_project_id
+
+    try:
+        content = await app.gns3.get_project_readme(project_id)
+        return json.dumps({
+            "project_id": project_id,
+            "content": content if content else "# Project Notes\n\n(No notes yet)",
+            "format": "markdown"
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to get project README",
+            "project_id": project_id,
+            "details": str(e)
+        }, indent=2)
+
+
+@mcp.tool()
+async def update_project_readme(ctx: Context, content: str, project_id: Optional[str] = None) -> str:
+    """Update project README/notes
+
+    Saves project documentation in markdown format. Agent can store:
+    - IP addressing schemes and VLANs
+    - Node credentials (usernames, password vault keys)
+    - Architecture diagrams (text-based)
+    - Configuration templates and snippets
+    - Troubleshooting notes and runbooks
+
+    Args:
+        content: Markdown content to save
+        project_id: Project ID (uses current project if not specified)
+
+    Returns:
+        JSON with success confirmation
+
+    Example:
+        >>> update_project_readme(\"\"\"
+        ... # HA PowerDNS
+        ... ## IPs
+        ... - B-Rec1: 10.2.0.1/24
+        ... - B-Rec2: 10.2.0.2/24
+        ... \"\"\")
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    if not project_id:
+        error = await validate_current_project(app)
+        if error:
+            return error
+        project_id = app.current_project_id
+
+    try:
+        success = await app.gns3.update_project_readme(project_id, content)
+        if success:
+            return json.dumps({
+                "success": True,
+                "project_id": project_id,
+                "message": "README updated successfully",
+                "content_length": len(content)
+            }, indent=2)
+        else:
+            return json.dumps({
+                "error": "Failed to update README",
+                "project_id": project_id
+            }, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to update README",
+            "project_id": project_id,
+            "details": str(e)
+        }, indent=2)
+
+
 # export_topology_diagram tool now registered from export_tools module
 # Register the imported tool with MCP
 mcp.tool(annotations={
@@ -1307,22 +1654,49 @@ async def ssh_configure(
     ctx: Context,
     node_name: str,
     device_dict: dict,
-    persist: bool = True
+    persist: bool = True,
+    force: bool = False
 ) -> str:
     """Configure SSH session for network device
 
     IMPORTANT: Enable SSH on device first using console tools.
 
+    Session Management (v0.1.6) - AUTOMATIC RECOVERY:
+    - Reuses existing healthy sessions automatically
+    - Detects expired sessions (30min TTL) and recreates automatically
+    - Detects stale/closed connections via health check and recreates automatically
+    - On "Socket is closed" errors: Just call ssh_configure() again (no force needed)
+
+    When ssh_command() fails with "Socket is closed":
+    1. Session is auto-removed from memory
+    2. Simply call ssh_configure() again with same parameters
+    3. Fresh session will be created automatically
+    4. Retry your ssh_command() - it will work
+
     Args:
         node_name: Node identifier
         device_dict: Netmiko config dict (device_type, host, username, password, port, secret)
         persist: Store credentials for reconnection (default: True)
+        force: Force recreation even if healthy session exists (default: False)
+               Only needed for: manual credential refresh, troubleshooting
 
     Returns:
         JSON with session_id, connected, device_type
+
+    Examples:
+        # Normal usage - creates session or reuses healthy one
+        ssh_configure("R1", {"device_type": "cisco_ios", "host": "10.1.0.1",
+                             "username": "admin", "password": "cisco123"})
+
+        # After "Socket is closed" error - just retry (auto-recovery)
+        # NO force parameter needed - stale session already cleaned up
+        ssh_configure("R1", device_dict)
+
+        # Force recreation (rarely needed)
+        ssh_configure("R1", device_dict, force=True)
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await configure_ssh_impl(app, node_name, device_dict, persist)
+    return await configure_ssh_impl(app, node_name, device_dict, persist, force)
 
 
 @mcp.tool()
@@ -1577,10 +1951,31 @@ async def complete_topology_types_DISABLED(ctx: Context, prefix: str) -> list[Co
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="GNS3 MCP Server")
+
+    # GNS3 connection arguments
     parser.add_argument("--host", default="localhost", help="GNS3 server host")
     parser.add_argument("--port", type=int, default=80, help="GNS3 server port")
     parser.add_argument("--username", default="admin", help="GNS3 username")
     parser.add_argument("--password", default="", help="GNS3 password")
+
+    # MCP transport mode arguments
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "http", "sse"],
+        default="stdio",
+        help="MCP transport mode: stdio (process-based, default), http (Streamable HTTP, recommended for network), sse (legacy SSE, deprecated)"
+    )
+    parser.add_argument(
+        "--http-host",
+        default="127.0.0.1",
+        help="HTTP server host (only for http/sse transport, default: 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--http-port",
+        type=int,
+        default=8000,
+        help="HTTP server port (only for http/sse transport, default: 8000)"
+    )
 
     args = parser.parse_args()
 
@@ -1588,5 +1983,38 @@ if __name__ == "__main__":
     mcp._args = args
     mcp.get_args = lambda: args
 
-    # Run server
-    mcp.run()
+    # Run server with selected transport mode
+    if args.transport == "stdio":
+        # Process-based communication (default for Claude Desktop/Code)
+        mcp.run()
+    elif args.transport == "http":
+        # Streamable HTTP transport (recommended for network access)
+        import uvicorn
+        print(f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp/")
+
+        # Create ASGI app for Streamable HTTP transport
+        app = mcp.streamable_http_app()
+
+        # Run with uvicorn
+        uvicorn.run(
+            app,
+            host=args.http_host,
+            port=args.http_port,
+            log_level="info"
+        )
+    elif args.transport == "sse":
+        # Legacy SSE transport (deprecated, use HTTP instead)
+        import uvicorn
+        print(f"WARNING: SSE transport is deprecated. Consider using --transport http instead.")
+        print(f"Starting MCP server with SSE transport at http://{args.http_host}:{args.http_port}/sse")
+
+        # Create ASGI app for SSE transport
+        app = mcp.sse_app()
+
+        # Run with uvicorn
+        uvicorn.run(
+            app,
+            host=args.http_host,
+            port=args.http_port,
+            log_level="info"
+        )

@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.20.0",
-  "description": "GNS3 lab automation - 20 tools + 17 resources + 4 prompts with standardized error handling and version tracking",
-  "long_description": "COMPLETE MCP SERVER: 20 tools + 17 browsable resources + 4 workflow prompts. Version 0.20.0 NEW: Single source of truth for version (manifest.json), standardized error handling with 26 error codes, comprehensive error utilities with suggested actions, version tracking in all errors. Foundation for improved developer experience. Version 0.19.0: MCP tool annotations (destructive/idempotent/read_only/creates_resource/modifies_topology), drawing tools with hybrid architecture. Version 0.18.0: Core Lab Automation - project/node/snapshot management, lab setup with 6 topology types. Supports GNS3 v3 API.",
+  "version": "0.24.1",
+  "description": "GNS3 lab automation - 24 tools + 19 resources (2 static + 17 templates) + 5 prompts with project notes/memory",
+  "long_description": "COMPLETE MCP SERVER: 24 tools + 19 browsable resources (2 static lists + 17 project-scoped templates) + 5 workflow prompts. Version 0.24.1: Fixed session list resources - now project-scoped templates (gns3://projects/{id}/sessions/console and /ssh) instead of global static. Sessions properly filtered by project nodes. Fixed SSH proxy sessions endpoint. Only 2 static resources remain: projects list and proxy/status. For complete version history see CHANGELOG.md. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -94,6 +94,14 @@
       "description": "Send special keystroke to console (navigation, editing, control keys)"
     },
     {
+      "name": "console_send_and_wait",
+      "description": "Send command and wait for prompt pattern with timeout (pattern matching + auto-polling, returns JSON with output and timing)"
+    },
+    {
+      "name": "console_batch",
+      "description": "Execute multiple console operations in batch (send/send_and_wait/read/keystroke) with two-phase validation and full parameter support"
+    },
+    {
       "name": "set_connection",
       "description": "Batch manage network connections with two-phase validation (returns JSON OperationResult)"
     },
@@ -110,8 +118,16 @@
       "description": "Restore project to a previous snapshot state (returns JSON success message)"
     },
     {
+      "name": "get_project_readme",
+      "description": "Get project README/notes in markdown format - IP schemes, credentials, architecture notes (returns JSON with content)"
+    },
+    {
+      "name": "update_project_readme",
+      "description": "Update project README/notes - agent can store IP addresses, credentials, architecture diagrams, troubleshooting notes (returns JSON success)"
+    },
+    {
       "name": "ssh_configure",
-      "description": "Configure SSH session for device (requires SSH enabled, returns JSON with session_id/connected status)"
+      "description": "Configure SSH session with auto-recovery (30min TTL, health checks, auto-recreates stale sessions). After 'Socket is closed' error: just retry same call - no force needed. Requires SSH enabled on device first."
     },
     {
       "name": "ssh_command",
@@ -158,6 +174,11 @@
       "name": "lab_setup",
       "description": "Lab Setup Workflow - Automated lab topology creation with 6 topology types (star, mesh, linear, ring, OSPF, BGP)",
       "text": "Automated lab topology creation supporting star, mesh, linear, ring, OSPF, and BGP topologies"
+    },
+    {
+      "name": "node_setup",
+      "description": "Node Setup Workflow - Complete workflow for adding a new node to a lab (create, configure IP, document in README, establish SSH)",
+      "text": "Complete workflow covering: create node from template, start and wait for boot, configure IP address via console, document IP/credentials in project README, and establish SSH session for automation. Supports Cisco IOS, Linux, and MikroTik with device-specific configuration commands."
     }
   ],
   "compatibility": {

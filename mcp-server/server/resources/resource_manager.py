@@ -24,11 +24,16 @@ class ResourceManager:
         r'^gns3://projects/(?P<project_id>[^/]+)$': 'get_project',
         r'^gns3://projects/(?P<project_id>[^/]+)/nodes/$': 'list_nodes',
         r'^gns3://projects/(?P<project_id>[^/]+)/nodes/(?P<node_id>[^/]+)$': 'get_node',
+        r'^gns3://projects/(?P<project_id>[^/]+)/nodes/(?P<node_id>[^/]+)/template$': 'get_node_template_usage',
         r'^gns3://projects/(?P<project_id>[^/]+)/links/$': 'list_links',
         r'^gns3://projects/(?P<project_id>[^/]+)/templates/$': 'list_templates',
         r'^gns3://projects/(?P<project_id>[^/]+)/drawings/$': 'list_drawings',
         r'^gns3://projects/(?P<project_id>[^/]+)/snapshots/$': 'list_snapshots',
         r'^gns3://projects/(?P<project_id>[^/]+)/snapshots/(?P<snapshot_id>[^/]+)$': 'get_snapshot',
+        r'^gns3://projects/(?P<project_id>[^/]+)/readme$': 'get_project_readme',
+
+        # Template resources
+        r'^gns3://templates/(?P<template_id>[^/]+)$': 'get_template',
 
         # Console session resources
         r'^gns3://sessions/console/$': 'list_console_sessions',
@@ -262,24 +267,39 @@ class ResourceManager:
         from .project_resources import get_snapshot_impl
         return await get_snapshot_impl(self.app, project_id, snapshot_id)
 
+    async def get_project_readme(self, project_id: str) -> str:
+        """Get project README/notes"""
+        from .project_resources import get_project_readme_impl
+        return await get_project_readme_impl(self.app, project_id)
+
+    async def get_template(self, template_id: str) -> str:
+        """Get template details with usage notes"""
+        from .project_resources import get_template_impl
+        return await get_template_impl(self.app, template_id)
+
+    async def get_node_template_usage(self, project_id: str, node_id: str) -> str:
+        """Get template usage notes for a specific node"""
+        from .project_resources import get_node_template_usage_impl
+        return await get_node_template_usage_impl(self.app, project_id, node_id)
+
     # ========================================================================
     # Session Resource Handlers
     # ========================================================================
 
-    async def list_console_sessions(self) -> str:
-        """List all active console sessions"""
+    async def list_console_sessions(self, project_id: str) -> str:
+        """List all active console sessions for a project"""
         from .session_resources import list_console_sessions_impl
-        return await list_console_sessions_impl(self.app)
+        return await list_console_sessions_impl(self.app, project_id)
 
     async def get_console_session(self, node_name: str) -> str:
         """Get console session status"""
         from .session_resources import get_console_session_impl
         return await get_console_session_impl(self.app, node_name)
 
-    async def list_ssh_sessions(self) -> str:
-        """List all active SSH sessions"""
+    async def list_ssh_sessions(self, project_id: str) -> str:
+        """List all active SSH sessions for a project"""
         from .session_resources import list_ssh_sessions_impl
-        return await list_ssh_sessions_impl(self.app)
+        return await list_ssh_sessions_impl(self.app, project_id)
 
     async def get_ssh_session(self, node_name: str) -> str:
         """Get SSH session status"""
