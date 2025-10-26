@@ -1,10 +1,7 @@
 {
   "mcpServers": {
     "gns3-lab": {
-      "command": "python",
-      "args": [
-        "./mcp-server/start_mcp.py"
-      ]
+      "url": "http://127.0.0.1:8100/mcp/"
     }
   }
 }
