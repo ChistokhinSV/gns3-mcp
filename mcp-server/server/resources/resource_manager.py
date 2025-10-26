@@ -247,10 +247,10 @@ class ResourceManager:
         from .project_resources import list_links_impl
         return await list_links_impl(self.app, project_id)
 
-    async def list_templates(self, project_id: str) -> str:
+    async def list_templates(self) -> str:
         """List available templates"""
         from .project_resources import list_templates_impl
-        return await list_templates_impl(self.app, project_id)
+        return await list_templates_impl(self.app)
 
     async def list_drawings(self, project_id: str) -> str:
         """List drawings in project"""

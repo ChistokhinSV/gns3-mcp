@@ -543,10 +543,10 @@ async def resource_links(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_links(project_id)
 
-@mcp.resource("gns3://projects/{project_id}/templates")
-async def resource_templates(ctx: Context, project_id: str) -> str:
-    app: AppContext = ctx.request_context.lifespan_context
-    return await app.resource_manager.list_templates(project_id)
+@mcp.resource("gns3://templates")
+async def resource_templates() -> str:
+    """List all available GNS3 templates"""
+    return await _app.resource_manager.list_templates()
 
 @mcp.resource("gns3://projects/{project_id}/drawings")
 async def resource_drawings(ctx: Context, project_id: str) -> str:

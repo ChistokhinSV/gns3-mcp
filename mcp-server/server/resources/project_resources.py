@@ -264,14 +264,11 @@ async def list_links_impl(app: "AppContext", project_id: str) -> str:
         }, indent=2)
 
 
-async def list_templates_impl(app: "AppContext", project_id: str) -> str:
+async def list_templates_impl(app: "AppContext") -> str:
     """
     List available GNS3 templates
 
-    Resource URI: gns3://projects/{project_id}/templates/
-
-    Args:
-        project_id: GNS3 project UUID (not used but keeps URI consistent)
+    Resource URI: gns3://templates
 
     Returns:
         JSON array of template information
@@ -279,17 +276,18 @@ async def list_templates_impl(app: "AppContext", project_id: str) -> str:
     try:
         templates = await app.gns3.get_templates()
 
-        # Build template info
+        # Build template info (excludes usage to keep list lightweight)
         from models import TemplateInfo
         template_infos = [
             TemplateInfo(
                 template_id=t['template_id'],
                 name=t['name'],
                 category=t.get('category', 'guest'),
-                template_type=t.get('template_type'),
+                node_type=t.get('template_type'),
                 builtin=t.get('builtin', False),
                 compute_id=t.get('compute_id', 'local'),
                 symbol=t.get('symbol')
+                # usage excluded - use gns3://templates/{id} for full details
             ).model_dump()
             for t in templates
         ]
@@ -299,6 +297,96 @@ async def list_templates_impl(app: "AppContext", project_id: str) -> str:
         return json.dumps({
             "error": "Failed to list templates",
             "project_id": project_id,
+            "details": str(e)
+        }, indent=2)
+
+
+async def get_template_impl(app: "AppContext", template_id: str) -> str:
+    """
+    Get template details including usage notes
+
+    Resource URI: gns3://templates/{template_id}
+
+    Args:
+        template_id: Template UUID
+
+    Returns:
+        JSON object with full template details including usage field
+        (credentials, setup instructions, persistent storage notes)
+    """
+    try:
+        template = await app.gns3.get_template(template_id)
+
+        from models import TemplateInfo
+        template_info = TemplateInfo(
+            template_id=template['template_id'],
+            name=template['name'],
+            category=template.get('category', 'guest'),
+            node_type=template.get('template_type'),
+            builtin=template.get('builtin', False),
+            compute_id=template.get('compute_id', 'local'),
+            symbol=template.get('symbol'),
+            usage=template.get('usage', '')  # Includes credentials/setup instructions
+        )
+
+        return json.dumps(template_info.model_dump(), indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to get template",
+            "template_id": template_id,
+            "details": str(e)
+        }, indent=2)
+
+
+async def get_node_template_usage_impl(app: "AppContext", project_id: str, node_id: str) -> str:
+    """
+    Get template usage notes for a specific node
+
+    Resource URI: gns3://projects/{project_id}/nodes/{node_id}/template
+
+    Args:
+        project_id: GNS3 project UUID
+        node_id: Node UUID
+
+    Returns:
+        JSON object with template details and usage notes for the node's template
+    """
+    try:
+        nodes = await app.gns3.get_nodes(project_id)
+        node = next((n for n in nodes if n['node_id'] == node_id), None)
+
+        if not node:
+            return json.dumps({
+                "error": "Node not found",
+                "project_id": project_id,
+                "node_id": node_id
+            }, indent=2)
+
+        template_id = node.get('template_id')
+        if not template_id:
+            return json.dumps({
+                "error": "Node has no associated template",
+                "node_id": node_id,
+                "node_name": node.get('name')
+            }, indent=2)
+
+        # Get template with usage
+        template = await app.gns3.get_template(template_id)
+
+        return json.dumps({
+            "node_id": node_id,
+            "node_name": node.get('name'),
+            "template_id": template_id,
+            "template_name": template['name'],
+            "usage": template.get('usage', ''),
+            "category": template.get('category'),
+            "node_type": template.get('template_type')
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to get node template usage",
+            "project_id": project_id,
+            "node_id": node_id,
             "details": str(e)
         }, indent=2)
 
@@ -449,5 +537,30 @@ async def get_snapshot_impl(app: "AppContext", project_id: str, snapshot_id: str
             "error": "Failed to get snapshot",
             "project_id": project_id,
             "snapshot_id": snapshot_id,
+            "details": str(e)
+        }, indent=2)
+
+
+async def get_project_readme_impl(app: "AppContext", project_id: str):
+    """Resource handler for gns3://projects/{id}/readme
+
+    Returns project README/notes in markdown format
+    """
+    try:
+        content = await app.gns3.get_project_readme(project_id)
+
+        # If empty, provide default template
+        if not content:
+            content = "# Project Notes\n\n(No notes yet - use update_project_readme tool to add documentation)"
+
+        return json.dumps({
+            "project_id": project_id,
+            "content": content,
+            "format": "markdown"
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to get project README",
+            "project_id": project_id,
             "details": str(e)
         }, indent=2)

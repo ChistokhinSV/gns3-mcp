@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.24.1",
-  "description": "GNS3 lab automation - 24 tools + 19 resources (2 static + 17 templates) + 5 prompts with project notes/memory",
-  "long_description": "COMPLETE MCP SERVER: 24 tools + 19 browsable resources (2 static lists + 17 project-scoped templates) + 5 workflow prompts. Version 0.24.1: Fixed session list resources - now project-scoped templates (gns3://projects/{id}/sessions/console and /ssh) instead of global static. Sessions properly filtered by project nodes. Fixed SSH proxy sessions endpoint. Only 2 static resources remain: projects list and proxy/status. For complete version history see CHANGELOG.md. Supports GNS3 v3 API.",
+  "version": "0.24.2",
+  "description": "GNS3 lab automation - 24 tools + 19 resources (3 static + 16 templates) + 5 prompts with project notes/memory",
+  "long_description": "COMPLETE MCP SERVER: 24 tools + 19 browsable resources (3 static lists + 16 project-scoped templates) + 5 workflow prompts. Version 0.24.2: Fixed templates resource - now global static resource (gns3://templates) instead of project-scoped. Templates are global and independent of projects. Static resources: projects, proxy/status, templates. For complete version history see CHANGELOG.md. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
