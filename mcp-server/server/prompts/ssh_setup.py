@@ -265,7 +265,9 @@ Identify the management IP (e.g., 192.168.1.10).
 
 ## Step 4: Establish SSH Session
 
-Configure SSH session with the IP from Step 3:
+### Option A: Direct Connection (Default)
+
+For devices reachable from GNS3 host, use default proxy:
 ```
 ssh_configure("{node_name}", {{
     "device_type": "{device_type}",
@@ -275,6 +277,45 @@ ssh_configure("{node_name}", {{
     "port": 22
 }})
 ```
+
+### Option B: Via Lab Proxy (Isolated Networks - v0.26.0)
+
+**Use this when the device is on an isolated network unreachable from GNS3 host.**
+
+1. Discover available lab proxies:
+```
+# Check resource: gns3://proxy/registry
+```
+
+2. Configure SSH through lab proxy:
+```
+ssh_configure("{node_name}", {{
+    "device_type": "{device_type}",
+    "host": "10.199.0.20",  # Device IP on isolated network
+    "username": "{username}",
+    "password": "{password}",
+    "port": 22
+}}, proxy="<proxy_id>")  # Use proxy_id from registry
+```
+
+Example for isolated network 10.199.0.0/24:
+```
+# 1. Find A-PROXY's proxy_id from gns3://proxy/registry
+# Returns: proxy_id="3f3a56de-19d3-40c3-9806-76bee4fe96d4"
+
+# 2. Configure SSH through A-PROXY
+ssh_configure("A-CLIENT", {{
+    "device_type": "linux",
+    "host": "10.199.0.20",
+    "username": "alpine",
+    "password": "alpine"
+}}, proxy="3f3a56de-19d3-40c3-9806-76bee4fe96d4")
+```
+
+**How Multi-Proxy Routing Works:**
+- First call to ssh_configure() stores proxy mapping
+- All subsequent ssh_command() calls automatically route through same proxy
+- No need to specify proxy again for each command
 
 ## Step 5: Test SSH Connection
 

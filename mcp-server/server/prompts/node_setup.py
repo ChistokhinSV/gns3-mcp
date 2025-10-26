@@ -302,6 +302,8 @@ update_project_readme(f\"\"\"
 
 Configure SSH session for automated management:
 
+### Standard Connection (Devices Reachable from GNS3 Host):
+
 ```python
 ssh_configure("{node_name}", {{
     "device_type": "{device_type}",
@@ -310,6 +312,22 @@ ssh_configure("{node_name}", {{
     "password": "{password}",
     "port": 22
 }})
+```
+
+### Isolated Network Connection (v0.26.0 Multi-Proxy):
+
+For devices on isolated networks, use lab proxy:
+
+```python
+# 1. Discover lab proxies: check gns3://proxy/registry
+# 2. Configure SSH through lab proxy:
+ssh_configure("{node_name}", {{
+    "device_type": "{device_type}",
+    "host": "{ip_address}",
+    "username": "{username}",
+    "password": "{password}",
+    "port": 22
+}}, proxy="<proxy_id>")  # proxy_id from registry
 ```
 
 ## Step 6: Verify SSH Connection
