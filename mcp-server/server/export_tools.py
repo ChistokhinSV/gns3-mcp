@@ -94,16 +94,21 @@ def create_rectangle_svg(width: int, height: int, fill: str = "#ffffff",
 
 def create_text_svg(text: str, font_size: int = 10, font_weight: str = "normal",
                    font_family: str = "TypeWriter", color: str = "#000000") -> str:
-    """Generate SVG for text"""
+    """Generate SVG for text
+
+    Uses GNS3-compatible dimensions for TypeWriter monospace font:
+    - Width: ~0.9 * font_size per character (e.g., "test" at size 10 = 35px)
+    - Height: ~2.4 * font_size (e.g., size 10 = 24px)
+    """
     # Escape XML special characters
     text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
-    return f'''<svg height="{font_size + 2}" width="{len(text) * font_size}">
-  <text fill="{color}" fill-opacity="1.0" font-family="{font_family}"
-        font-size="{font_size}" font-weight="{font_weight}">
-    {text}
-  </text>
-</svg>'''
+    # Calculate dimensions matching GNS3's text rendering
+    # TypeWriter monospace: ~0.9 pixels per character per font size point
+    width = int(len(text) * font_size * 0.9)
+    height = int(font_size * 2.4)
+
+    return f'''<svg width="{width}" height="{height}"><text font-family="{font_family}" font-size="{font_size}" font-weight="{font_weight}" fill="{color}" fill-opacity="1.0">{text}</text></svg>'''
 
 
 def create_ellipse_svg(rx: int, ry: int, fill: str = "#ffffff",

@@ -145,7 +145,7 @@ class SSHSessionManager:
     - Ordered by sequence_number
 
     Session Management (v0.1.6):
-    - 30-minute TTL with automatic expiry detection
+    - Configurable TTL with automatic expiry detection (v0.27.0: default 4 hours)
     - Activity tracking - updates on every operation
     - Health checks - detects stale/closed connections
     - Auto-cleanup on socket errors
@@ -154,7 +154,7 @@ class SSHSessionManager:
     MAX_BUFFER_SIZE = 10 * 1024 * 1024  # 10MB
     TRIM_BUFFER_SIZE = 5 * 1024 * 1024  # 5MB
     MAX_HISTORY_JOBS = 1000  # Per session
-    SESSION_TTL = 30 * 60  # 30 minutes in seconds (v0.1.6)
+    SESSION_TTL = 4 * 60 * 60  # 4 hours in seconds (v0.27.0, changed from 30 minutes)
 
     def __init__(self):
         self.sessions: Dict[str, SessionInfo] = {}
@@ -169,10 +169,14 @@ class SSHSessionManager:
         node_name: str,
         device_config: SSHDeviceConfig,
         persist: bool,
-        force_recreate: bool
+        force_recreate: bool,
+        session_timeout: int = 14400
     ) -> Tuple[str, Optional[SSHConnectionError]]:
         """
         Create or recreate SSH session
+
+        Args:
+            session_timeout: Session timeout in seconds (default: 4 hours = 14400)
 
         Returns:
             (session_id, error) - error is None if successful
@@ -183,7 +187,7 @@ class SSHSessionManager:
                 logger.info(f"Force recreate requested for {node_name}")
                 await self.disconnect_session(node_name)
             else:
-                # Check if session is expired (30min TTL)
+                # Check if session is expired (per-session TTL)
                 if self._is_session_expired(node_name):
                     logger.info(f"Session expired for {node_name}, recreating")
                     await self.disconnect_session(node_name)
@@ -234,6 +238,7 @@ class SSHSessionManager:
             persist=persist,
             created_at=now,
             last_activity=now,  # Initialize activity timestamp (v0.1.6)
+            session_timeout=session_timeout,  # Per-session timeout (v0.27.0)
             buffer="",
             buffer_read_pos=0,
             jobs=[],
@@ -276,18 +281,18 @@ class SSHSessionManager:
     # ========================================================================
 
     def _update_activity(self, node_name: str) -> None:
-        """Update last_activity timestamp for session (30min TTL)"""
+        """Update last_activity timestamp for session"""
         if node_name in self.sessions:
             self.sessions[node_name].last_activity = datetime.now(timezone.utc)
 
     def _is_session_expired(self, node_name: str) -> bool:
-        """Check if session has exceeded 30-minute TTL"""
+        """Check if session has exceeded its TTL (v0.27.0: per-session timeout)"""
         if node_name not in self.sessions:
             return True
 
         session = self.sessions[node_name]
         age = (datetime.now(timezone.utc) - session.last_activity).total_seconds()
-        return age > self.SESSION_TTL
+        return age > session.session_timeout  # Use per-session timeout (v0.27.0)
 
     async def _is_session_healthy(self, node_name: str) -> bool:
         """

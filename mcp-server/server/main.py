@@ -325,7 +325,8 @@ from tools.drawing_tools import (
     list_drawings_impl,
     create_drawing_impl,
     update_drawing_impl,
-    delete_drawing_impl
+    delete_drawing_impl,
+    create_drawings_batch_impl
 )
 from tools.template_tools import list_templates_impl
 from tools.snapshot_tools import create_snapshot_impl, restore_snapshot_impl
@@ -1827,6 +1828,53 @@ async def delete_drawing(ctx: Context, drawing_id: str) -> str:
     return await delete_drawing_impl(app, drawing_id)
 
 
+@mcp.tool()
+async def create_drawings_batch(ctx: Context, drawings: list[dict]) -> str:
+    """Create multiple drawing objects in batch with validation
+
+    Two-phase execution prevents partial failures:
+    1. VALIDATE ALL drawings (check required params, valid types)
+    2. CREATE ALL drawings (only if all valid, sequential execution)
+
+    Supported drawing types:
+    - "rectangle": Rectangle with width, height
+    - "ellipse": Ellipse/circle with rx, ry (radii)
+    - "line": Line with x2, y2 (offsets)
+    - "text": Text label with text content
+
+    Args:
+        drawings: List of drawing dicts, each with:
+            - drawing_type (str): Drawing type (required)
+            - x (int): X coordinate (required)
+            - y (int): Y coordinate (required)
+            - z (int): Z-order/layer (optional, default: 0)
+            - Additional params specific to drawing type
+
+    Returns:
+        JSON with execution results including completed/failed indices
+
+    Examples:
+        # Create multiple shapes:
+        create_drawings_batch([
+            {"drawing_type": "rectangle", "x": 100, "y": 100, "width": 200, "height": 100},
+            {"drawing_type": "ellipse", "x": 400, "y": 100, "rx": 50, "ry": 50}
+        ])
+
+        # Create labeled diagram:
+        create_drawings_batch([
+            {"drawing_type": "rectangle", "x": 100, "y": 100, "width": 150, "height": 80, "z": 0},
+            {"drawing_type": "text", "x": 175, "y": 140, "text": "Router1", "z": 1}
+        ])
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    return await create_drawings_batch_impl(app, drawings)
+
+
 # ============================================================================
 # SSH Proxy Tools
 # ============================================================================
@@ -1835,7 +1883,8 @@ from tools.ssh_tools import (
     configure_ssh_impl,
     ssh_send_command_impl,
     ssh_send_config_set_impl,
-    ssh_disconnect_impl
+    ssh_disconnect_impl,
+    ssh_batch_impl
 )
 
 
@@ -1848,7 +1897,8 @@ async def ssh_configure(
     device_dict: dict,
     persist: bool = True,
     force: bool = False,
-    proxy: str = "host"
+    proxy: str = "host",
+    session_timeout: int = 14400
 ) -> str:
     """Configure SSH session for network device
 
@@ -1862,7 +1912,7 @@ async def ssh_configure(
 
     Session Management (v0.1.6) - AUTOMATIC RECOVERY:
     - Reuses existing healthy sessions automatically
-    - Detects expired sessions (30min TTL) and recreates automatically
+    - Detects expired sessions (default 4hr TTL) and recreates automatically (v0.27.0)
     - Detects stale/closed connections via health check and recreates automatically
     - On "Socket is closed" errors: Just call ssh_configure() again (no force needed)
 
@@ -1879,6 +1929,7 @@ async def ssh_configure(
         force: Force recreation even if healthy session exists (default: False)
                Only needed for: manual credential refresh, troubleshooting
         proxy: Proxy to route through - "host" (default) or proxy_id from registry (v0.26.0)
+        session_timeout: Session timeout in seconds (default: 4 hours = 14400s) (v0.27.0)
 
     Returns:
         JSON with session_id, connected, device_type, proxy_url, proxy
@@ -1908,7 +1959,7 @@ async def ssh_configure(
         ssh_configure("R1", device_dict, force=True)
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await configure_ssh_impl(app, node_name, device_dict, persist, force, proxy)
+    return await configure_ssh_impl(app, node_name, device_dict, persist, force, proxy, session_timeout)
 
 
 @mcp.tool()
@@ -1975,6 +2026,56 @@ async def ssh_disconnect(ctx: Context, node_name: str) -> str:
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await ssh_disconnect_impl(app, node_name)
+
+
+@mcp.tool()
+async def ssh_batch(ctx: Context, operations: list[dict]) -> str:
+    """Execute multiple SSH operations in batch with validation
+
+    Two-phase execution prevents partial failures:
+    1. VALIDATE ALL operations (check required params, valid types)
+    2. EXECUTE ALL operations (only if all valid, sequential execution)
+
+    Supported operation types:
+    - "send_command": Execute show command
+    - "send_config_set": Send configuration commands
+    - "read_buffer": Read SSH buffer with optional grep
+
+    Args:
+        operations: List of operation dicts, each with:
+            - type (str): Operation type (required)
+            - node_name (str): Node name (required)
+            - Additional params specific to operation type
+
+    Returns:
+        JSON with execution results including completed/failed indices
+
+    Examples:
+        # Multiple commands on one node:
+        ssh_batch([
+            {"type": "send_command", "node_name": "R1", "command": "show version"},
+            {"type": "send_command", "node_name": "R1", "command": "show ip route"}
+        ])
+
+        # Same command on multiple nodes:
+        ssh_batch([
+            {"type": "send_command", "node_name": "R1", "command": "show ip int brief"},
+            {"type": "send_command", "node_name": "R2", "command": "show ip int brief"}
+        ])
+
+        # Configuration commands:
+        ssh_batch([{
+            "type": "send_config_set",
+            "node_name": "R1",
+            "config_commands": [
+                "interface GigabitEthernet0/0",
+                "ip address 10.1.1.1 255.255.255.0",
+                "no shutdown"
+            ]
+        }])
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await ssh_batch_impl(app, operations)
 
 
 # ============================================================================

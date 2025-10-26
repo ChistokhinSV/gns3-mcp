@@ -6,7 +6,7 @@ import json
 from typing import TYPE_CHECKING, Optional
 
 from models import DrawingInfo, ErrorResponse, ErrorCode
-from error_utils import create_error_response, drawing_not_found_error
+from error_utils import create_error_response, drawing_not_found_error, validation_error
 from export_tools import (
     create_rectangle_svg,
     create_ellipse_svg,
@@ -313,3 +313,251 @@ async def delete_drawing_impl(app: "AppContext", drawing_id: str) -> str:
             suggested_action="Verify drawing ID exists using list_drawings() or resource gns3://projects/{id}/drawings/",
             context={"drawing_id": drawing_id, "project_id": app.current_project_id, "exception": str(e)}
         )
+
+
+# ============================================================================
+# Batch Drawing Operations
+# ============================================================================
+
+async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) -> str:
+    """Create multiple drawing objects in batch with validation
+
+    Two-phase execution:
+    1. VALIDATE ALL drawings (check required params, valid types)
+    2. CREATE ALL drawings (only if all valid, sequential execution)
+
+    Args:
+        app: Application context
+        drawings: List of drawing dicts, each containing:
+            {
+                "drawing_type": "rectangle" | "ellipse" | "line" | "text",
+                "x": int,
+                "y": int,
+                "z": int (optional),
+                ...type-specific parameters
+            }
+
+            Drawing types and their parameters:
+
+            - "rectangle": Rectangle drawing
+                x (int): Top-left X coordinate
+                y (int): Top-left Y coordinate
+                width (int): Rectangle width (required)
+                height (int): Rectangle height (required)
+                fill_color (str, optional): Fill color (default: "#ffffff")
+                border_color (str, optional): Border color (default: "#000000")
+                border_width (int, optional): Border width in pixels (default: 2)
+                z (int, optional): Z-order/layer (default: 0)
+
+            - "ellipse": Ellipse/circle drawing
+                x (int): Top-left X coordinate
+                y (int): Top-left Y coordinate
+                rx (int): Horizontal radius (required)
+                ry (int): Vertical radius (required)
+                fill_color (str, optional): Fill color (default: "#ffffff")
+                border_color (str, optional): Border color (default: "#000000")
+                border_width (int, optional): Border width in pixels (default: 2)
+                z (int, optional): Z-order/layer (default: 0)
+
+            - "line": Line drawing
+                x (int): Start X coordinate
+                y (int): Start Y coordinate
+                x2 (int): X offset from start (required)
+                y2 (int): Y offset from start (required)
+                color (str, optional): Line color (default: "#000000")
+                border_width (int, optional): Line width in pixels (default: 2)
+                z (int, optional): Z-order/layer (default: 0)
+
+            - "text": Text label
+                x (int): Text X coordinate
+                y (int): Text Y coordinate
+                text (str): Text content (required)
+                font_size (int, optional): Font size in points (default: 10)
+                font_weight (str, optional): Font weight (default: "normal")
+                font_family (str, optional): Font family (default: "TypeWriter")
+                color (str, optional): Text color (default: "#000000")
+                z (int, optional): Z-order/layer (default: 1)
+
+    Returns:
+        JSON with execution results:
+        {
+            "completed": [0, 1, 2],  // Indices of successful drawings
+            "failed": [3],  // Indices of failed drawings
+            "results": [
+                {
+                    "drawing_index": 0,
+                    "success": true,
+                    "drawing_type": "rectangle",
+                    "drawing_id": "abc-123-def",
+                    "result": {...}  // Drawing info
+                },
+                ...
+            ],
+            "total_drawings": 4,
+            "execution_time": 2.3
+        }
+
+    Examples:
+        # Create multiple shapes:
+        create_drawings_batch([
+            {"drawing_type": "rectangle", "x": 100, "y": 100, "width": 200, "height": 100},
+            {"drawing_type": "ellipse", "x": 400, "y": 100, "rx": 50, "ry": 50},
+            {"drawing_type": "line", "x": 100, "y": 250, "x2": 300, "y2": 0}
+        ])
+
+        # Create labeled diagram:
+        create_drawings_batch([
+            {"drawing_type": "rectangle", "x": 100, "y": 100, "width": 150, "height": 80, "z": 0},
+            {"drawing_type": "text", "x": 175, "y": 140, "text": "Router1", "z": 1}
+        ])
+    """
+    import time
+    start_time = time.time()
+
+    # Validation: Check all drawings first
+    VALID_TYPES = {"rectangle", "ellipse", "line", "text"}
+
+    for idx, drawing in enumerate(drawings):
+        # Check required fields
+        if "drawing_type" not in drawing:
+            return validation_error(
+                parameter="drawings",
+                details=f"Drawing {idx} missing required field 'drawing_type'",
+                valid_values=list(VALID_TYPES)
+            )
+
+        drawing_type = drawing["drawing_type"].lower()
+        if drawing_type not in VALID_TYPES:
+            return validation_error(
+                parameter=f"drawings[{idx}].drawing_type",
+                details=f"Invalid drawing type: {drawing['drawing_type']}",
+                valid_values=list(VALID_TYPES)
+            )
+
+        if "x" not in drawing:
+            return create_error_response(
+                error=f"Drawing {idx} missing required field 'x'",
+                error_code=ErrorCode.MISSING_PARAMETER.value,
+                details=f"All drawings must specify 'x' coordinate",
+                suggested_action="Add 'x' field to drawing",
+                context={"drawing_index": idx, "drawing": drawing}
+            )
+
+        if "y" not in drawing:
+            return create_error_response(
+                error=f"Drawing {idx} missing required field 'y'",
+                error_code=ErrorCode.MISSING_PARAMETER.value,
+                details=f"All drawings must specify 'y' coordinate",
+                suggested_action="Add 'y' field to drawing",
+                context={"drawing_index": idx, "drawing": drawing}
+            )
+
+        # Type-specific validation
+        if drawing_type == "rectangle":
+            if "width" not in drawing or "height" not in drawing:
+                return create_error_response(
+                    error=f"Drawing {idx} (type='rectangle') missing required parameters",
+                    error_code=ErrorCode.MISSING_PARAMETER.value,
+                    details="Rectangle requires 'width' and 'height' parameters",
+                    suggested_action="Add width and height fields to drawing",
+                    context={"drawing_index": idx, "drawing_type": drawing_type}
+                )
+
+        elif drawing_type == "ellipse":
+            if "rx" not in drawing or "ry" not in drawing:
+                return create_error_response(
+                    error=f"Drawing {idx} (type='ellipse') missing required parameters",
+                    error_code=ErrorCode.MISSING_PARAMETER.value,
+                    details="Ellipse requires 'rx' and 'ry' parameters",
+                    suggested_action="Add rx and ry fields to drawing",
+                    context={"drawing_index": idx, "drawing_type": drawing_type}
+                )
+
+        elif drawing_type == "line":
+            if "x2" not in drawing or "y2" not in drawing:
+                return create_error_response(
+                    error=f"Drawing {idx} (type='line') missing required parameters",
+                    error_code=ErrorCode.MISSING_PARAMETER.value,
+                    details="Line requires 'x2' and 'y2' parameters",
+                    suggested_action="Add x2 and y2 fields to drawing",
+                    context={"drawing_index": idx, "drawing_type": drawing_type}
+                )
+
+        elif drawing_type == "text":
+            if "text" not in drawing:
+                return create_error_response(
+                    error=f"Drawing {idx} (type='text') missing required parameter",
+                    error_code=ErrorCode.MISSING_PARAMETER.value,
+                    details="Text drawing requires 'text' parameter",
+                    suggested_action="Add text field to drawing",
+                    context={"drawing_index": idx, "drawing_type": drawing_type}
+                )
+
+    # Validation passed - create all drawings sequentially
+    results = []
+    completed_indices = []
+    failed_indices = []
+
+    for idx, drawing in enumerate(drawings):
+        drawing_type = drawing["drawing_type"]
+
+        try:
+            # Execute drawing creation with all parameters
+            result = await create_drawing_impl(
+                app,
+                drawing_type=drawing_type,
+                x=drawing["x"],
+                y=drawing["y"],
+                z=drawing.get("z", 0),
+                # Rectangle/Ellipse parameters
+                width=drawing.get("width"),
+                height=drawing.get("height"),
+                rx=drawing.get("rx"),
+                ry=drawing.get("ry"),
+                fill_color=drawing.get("fill_color", "#ffffff"),
+                border_color=drawing.get("border_color", "#000000"),
+                border_width=drawing.get("border_width", 2),
+                # Line parameters
+                x2=drawing.get("x2"),
+                y2=drawing.get("y2"),
+                # Text parameters
+                text=drawing.get("text"),
+                font_size=drawing.get("font_size", 10),
+                font_weight=drawing.get("font_weight", "normal"),
+                font_family=drawing.get("font_family", "TypeWriter"),
+                color=drawing.get("color", "#000000")
+            )
+
+            # Parse result to extract drawing_id
+            result_data = json.loads(result) if isinstance(result, str) else result
+            drawing_id = result_data.get("drawing_id")
+
+            # Drawing created successfully
+            results.append({
+                "drawing_index": idx,
+                "success": True,
+                "drawing_type": drawing_type,
+                "drawing_id": drawing_id,
+                "result": result_data
+            })
+            completed_indices.append(idx)
+
+        except Exception as e:
+            # Drawing creation failed
+            results.append({
+                "drawing_index": idx,
+                "success": False,
+                "drawing_type": drawing_type,
+                "error": str(e)
+            })
+            failed_indices.append(idx)
+
+    execution_time = time.time() - start_time
+
+    return json.dumps({
+        "completed": completed_indices,
+        "failed": failed_indices,
+        "results": results,
+        "total_drawings": len(drawings),
+        "execution_time": round(execution_time, 2)
+    }, indent=2)

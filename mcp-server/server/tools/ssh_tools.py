@@ -17,6 +17,9 @@ from typing import Dict, List, Optional, TYPE_CHECKING
 
 import httpx
 
+from error_utils import create_error_response, validation_error
+from models import ErrorCode
+
 if TYPE_CHECKING:
     from main import AppContext
 
@@ -108,7 +111,8 @@ async def configure_ssh_impl(
     device_dict: Dict,
     persist: bool = True,
     force: bool = False,
-    proxy: str = "host"
+    proxy: str = "host",
+    session_timeout: int = 14400
 ) -> str:
     """
     Configure SSH session for network device
@@ -118,6 +122,11 @@ async def configure_ssh_impl(
     - Default: proxy="host" routes through main proxy on GNS3 host:8022
     - Lab proxy: proxy="<proxy_id>" routes through discovered lab proxy
     - Discovery: Use gns3://proxy/registry resource to list available proxies
+
+    Session Timeout (v0.27.0):
+    - Default: 4 hours (14400 seconds)
+    - Sessions auto-expire after timeout period of inactivity
+    - Can be customized per session
 
     IMPORTANT: Use console tools to enable SSH first!
 
@@ -157,6 +166,7 @@ async def configure_ssh_impl(
         persist: Store credentials for reconnection
         force: Force recreation even if session exists (v0.1.6)
         proxy: Proxy to route through - "host" (default) or proxy_id from registry (v0.26.0)
+        session_timeout: Session timeout in seconds (default: 4 hours = 14400) (v0.27.0)
 
     Returns:
         JSON with session_id, connected, device_type, proxy_url
@@ -179,7 +189,8 @@ async def configure_ssh_impl(
                     "node_name": node_name,
                     "device": device_dict,
                     "persist": persist,
-                    "force_recreate": force  # v0.1.6: Allow forced recreation
+                    "force_recreate": force,  # v0.1.6: Allow forced recreation
+                    "session_timeout": session_timeout  # v0.27.0: Per-session timeout
                 }
             )
 
@@ -742,3 +753,244 @@ async def ssh_get_job_status_impl(
                 "error": "Job status check failed",
                 "details": str(e)
             }, indent=2)
+
+
+# ============================================================================
+# Batch SSH Operations
+# ============================================================================
+
+async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
+    """Execute multiple SSH operations in batch with validation
+
+    Two-phase execution:
+    1. VALIDATE ALL operations (check required params, valid types)
+    2. EXECUTE ALL operations (only if all valid, sequential execution)
+
+    Args:
+        app: Application context
+        operations: List of operation dicts, each containing:
+            {
+                "type": "send_command" | "send_config_set" | "read_buffer",
+                "node_name": "NodeName",
+                ...other parameters specific to operation type
+            }
+
+            Operation types and their parameters:
+
+            - "send_command": Execute show command
+                node_name (str): Node name
+                command (str): Command to execute
+                expect_string (str, optional): Regex pattern to wait for
+                read_timeout (float, optional): Max time to wait (default: 30.0)
+                wait_timeout (int, optional): Polling timeout (default: 30)
+                strip_prompt (bool, optional): Remove trailing prompt (default: True)
+                strip_command (bool, optional): Remove command echo (default: True)
+                proxy (str, optional): Proxy ID (default: "host")
+
+            - "send_config_set": Send configuration commands
+                node_name (str): Node name
+                config_commands (list): List of configuration commands
+                wait_timeout (int, optional): Polling timeout (default: 30)
+                exit_config_mode (bool, optional): Exit config mode (default: True)
+                proxy (str, optional): Proxy ID (default: "host")
+
+            - "read_buffer": Read SSH buffer with optional grep
+                node_name (str): Node name
+                mode (str, optional): "diff" (default), "last_page", "num_pages", "all"
+                pages (int, optional): Number of pages (only with mode="num_pages")
+                pattern (str, optional): Grep regex pattern
+                case_insensitive (bool, optional): Case insensitive grep
+                invert (bool, optional): Invert grep match
+                before (int, optional): Context lines before match
+                after (int, optional): Context lines after match
+                context (int, optional): Context lines before AND after
+                proxy (str, optional): Proxy ID (default: "host")
+
+    Returns:
+        JSON with execution results:
+        {
+            "completed": [0, 1, 2],  // Indices of successful operations
+            "failed": [3],  // Indices of failed operations
+            "results": [
+                {
+                    "operation_index": 0,
+                    "success": true,
+                    "operation_type": "send_command",
+                    "node_name": "R1",
+                    "result": {...}  // Operation-specific result
+                },
+                ...
+            ],
+            "total_operations": 4,
+            "execution_time": 5.3
+        }
+
+    Examples:
+        # Multiple commands on one node:
+        ssh_batch([
+            {"type": "send_command", "node_name": "R1", "command": "show version"},
+            {"type": "send_command", "node_name": "R1", "command": "show ip route"}
+        ])
+
+        # Same command on multiple nodes:
+        ssh_batch([
+            {"type": "send_command", "node_name": "R1", "command": "show ip int brief"},
+            {"type": "send_command", "node_name": "R2", "command": "show ip int brief"},
+            {"type": "send_command", "node_name": "R3", "command": "show ip int brief"}
+        ])
+
+        # Configuration commands:
+        ssh_batch([
+            {
+                "type": "send_config_set",
+                "node_name": "R1",
+                "config_commands": [
+                    "interface GigabitEthernet0/0",
+                    "ip address 10.1.1.1 255.255.255.0",
+                    "no shutdown"
+                ]
+            }
+        ])
+    """
+    import time
+    start_time = time.time()
+
+    # Validation: Check all operations first
+    VALID_TYPES = {"send_command", "send_config_set", "read_buffer"}
+
+    for idx, op in enumerate(operations):
+        # Check required fields
+        if "type" not in op:
+            return validation_error(
+                parameter="operations",
+                details=f"Operation {idx} missing required field 'type'",
+                valid_values=list(VALID_TYPES)
+            )
+
+        if op["type"] not in VALID_TYPES:
+            return validation_error(
+                parameter=f"operations[{idx}].type",
+                details=f"Invalid operation type: {op['type']}",
+                valid_values=list(VALID_TYPES)
+            )
+
+        if "node_name" not in op:
+            return create_error_response(
+                error=f"Operation {idx} missing required field 'node_name'",
+                error_code=ErrorCode.INVALID_PARAMETER.value,
+                details=f"All operations must specify 'node_name'",
+                suggested_action="Add 'node_name' field to operation",
+                context={"operation_index": idx, "operation": op}
+            )
+
+        # Type-specific validation
+        op_type = op["type"]
+        node_name = op["node_name"]
+
+        if op_type == "send_command":
+            if "command" not in op:
+                return create_error_response(
+                    error=f"Operation {idx} (type='send_command') missing required parameter 'command'",
+                    error_code=ErrorCode.INVALID_PARAMETER.value,
+                    details="send_command operations require 'command' parameter",
+                    suggested_action="Add 'command' field to operation",
+                    context={"operation_index": idx, "node_name": node_name}
+                )
+
+        elif op_type == "send_config_set":
+            if "config_commands" not in op:
+                return create_error_response(
+                    error=f"Operation {idx} (type='send_config_set') missing required parameter 'config_commands'",
+                    error_code=ErrorCode.INVALID_PARAMETER.value,
+                    details="send_config_set operations require 'config_commands' parameter (list of strings)",
+                    suggested_action="Add 'config_commands' field to operation",
+                    context={"operation_index": idx, "node_name": node_name}
+                )
+            if not isinstance(op["config_commands"], list):
+                return create_error_response(
+                    error=f"Operation {idx} (type='send_config_set') 'config_commands' must be a list",
+                    error_code=ErrorCode.INVALID_PARAMETER.value,
+                    details=f"Expected list, got {type(op['config_commands']).__name__}",
+                    suggested_action="Provide config_commands as a list of strings",
+                    context={"operation_index": idx, "node_name": node_name}
+                )
+
+    # Validation passed - execute all operations sequentially
+    results = []
+    completed_indices = []
+    failed_indices = []
+
+    for idx, op in enumerate(operations):
+        op_type = op["type"]
+        node_name = op["node_name"]
+
+        try:
+            # Execute operation based on type
+            if op_type == "send_command":
+                result = await ssh_send_command_impl(
+                    app,
+                    node_name,
+                    op["command"],
+                    op.get("expect_string"),
+                    op.get("read_timeout", 30.0),
+                    op.get("wait_timeout", 30),
+                    op.get("strip_prompt", True),
+                    op.get("strip_command", True),
+                    op.get("proxy", "host")
+                )
+
+            elif op_type == "send_config_set":
+                result = await ssh_send_config_set_impl(
+                    app,
+                    node_name,
+                    op["config_commands"],
+                    op.get("wait_timeout", 30),
+                    op.get("exit_config_mode", True),
+                    op.get("proxy", "host")
+                )
+
+            elif op_type == "read_buffer":
+                result = await ssh_read_buffer_impl(
+                    app,
+                    node_name,
+                    op.get("mode", "diff"),
+                    op.get("pages", 1),
+                    op.get("pattern"),
+                    op.get("case_insensitive", False),
+                    op.get("invert", False),
+                    op.get("before", 0),
+                    op.get("after", 0),
+                    op.get("context", 0),
+                    op.get("proxy", "host")
+                )
+
+            # Operation succeeded
+            results.append({
+                "operation_index": idx,
+                "success": True,
+                "operation_type": op_type,
+                "node_name": node_name,
+                "result": json.loads(result) if isinstance(result, str) else result
+            })
+            completed_indices.append(idx)
+
+        except Exception as e:
+            # Operation failed
+            results.append({
+                "operation_index": idx,
+                "success": False,
+                "operation_type": op_type,
+                "node_name": node_name,
+                "error": str(e)
+            })
+            failed_indices.append(idx)
+
+    execution_time = time.time() - start_time
+
+    return json.dumps({
+        "completed": completed_indices,
+        "failed": failed_indices,
+        "results": results,
+        "total_operations": len(operations),
+        "execution_time": round(execution_time, 2)
+    }, indent=2)

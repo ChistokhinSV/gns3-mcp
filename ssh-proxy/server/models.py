@@ -93,6 +93,10 @@ class ConfigureSSHRequest(BaseModel):
         default=False,
         description="Drop existing session and recreate"
     )
+    session_timeout: int = Field(
+        default=14400,
+        description="Session timeout in seconds (default: 4 hours = 14400s)"
+    )
 
 
 class SendCommandRequest(BaseModel):
@@ -337,7 +341,11 @@ class SessionInfo(BaseModel):
     persist: bool
     created_at: datetime
     last_activity: datetime = Field(
-        description="Last activity timestamp - updated on every operation (30min TTL)"
+        description="Last activity timestamp - updated on every operation"
+    )
+    session_timeout: int = Field(
+        default=14400,
+        description="Session timeout in seconds (default: 4 hours)"
     )
     buffer: str = ""
     buffer_read_pos: int = 0

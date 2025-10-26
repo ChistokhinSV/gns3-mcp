@@ -137,7 +137,9 @@ async def set_node_impl(app: "AppContext",
     """Configure node properties and/or control node state
 
     Validation Rules:
-    - name parameter requires node to be stopped
+    - name parameter requires node to be stopped (except for stateless devices)
+    - Stateless devices can be renamed while running: ethernet_switch, ethernet_hub,
+      atm_switch, frame_relay_switch, cloud, nat
     - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU nodes only
     - ports parameter applies to ethernet_switch nodes only
     - action values: start, stop, suspend, reload, restart
@@ -151,7 +153,7 @@ async def set_node_impl(app: "AppContext",
         z: Z-order (layer) for overlapping nodes
         locked: Lock node position (prevents accidental moves in GUI)
         ports: Number of ports (ethernet_switch nodes only)
-        name: New name for the node (REQUIRES node to be stopped)
+        name: New name for the node (requires stop for QEMU/Docker, not for stateless devices)
         ram: RAM in MB (QEMU nodes only)
         cpus: Number of CPUs (QEMU nodes only)
         hdd_disk_image: Path to HDD disk image (QEMU nodes only)
@@ -178,12 +180,21 @@ async def set_node_impl(app: "AppContext",
 
     node_id = node['node_id']
     node_status = node.get('status', 'unknown')
+    node_type = node.get('node_type', '')
     results = []
+
+    # Stateless built-in devices that can be renamed without stopping
+    STATELESS_DEVICES = {
+        'ethernet_switch', 'ethernet_hub', 'atm_switch',
+        'frame_relay_switch', 'cloud', 'nat'
+    }
 
     # Validate stopped state for properties that require it
     requires_stopped = []
     if name is not None:
-        requires_stopped.append('name')
+        # Stateless devices don't need to be stopped for renaming
+        if node_type not in STATELESS_DEVICES:
+            requires_stopped.append('name')
 
     if requires_stopped and node_status != 'stopped':
         properties_str = ', '.join(requires_stopped)

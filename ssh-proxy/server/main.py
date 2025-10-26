@@ -164,7 +164,8 @@ async def configure_ssh(request: ConfigureSSHRequest):
             node_name=request.node_name,
             device_config=request.device,
             persist=request.persist,
-            force_recreate=request.force_recreate
+            force_recreate=request.force_recreate,
+            session_timeout=request.session_timeout  # Per-session timeout (v0.27.0)
         )
 
         if error:
