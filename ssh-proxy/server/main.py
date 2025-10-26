@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GNS3 SSH Proxy",
     description="SSH automation proxy for GNS3 network labs with Netmiko and proxy discovery",
-    version="0.2.0",
+    version="0.2.1",
     lifespan=lifespan
 )
 

@@ -159,10 +159,15 @@ class DockerProxyDiscovery:
         proxies = []
 
         try:
-            # Find all gns3-ssh-proxy containers
-            containers = self.docker_client.containers.list(
-                filters={"ancestor": "chistokhinsv/gns3-ssh-proxy"}
-            )
+            # List all running containers and filter by Config.Image
+            # (ancestor filter doesn't match containers from old image tags)
+            all_containers = self.docker_client.containers.list()
+
+            containers = []
+            for container in all_containers:
+                config_image = container.attrs.get('Config', {}).get('Image', '')
+                if 'chistokhinsv/gns3-ssh-proxy' in config_image:
+                    containers.append(container)
 
             logger.info(f"Found {len(containers)} gns3-ssh-proxy container(s)")
 
