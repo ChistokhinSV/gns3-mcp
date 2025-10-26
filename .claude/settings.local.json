@@ -14,7 +14,10 @@
       "Bash(fc-list:*)",
       "Bash(python:*)",
       "mcp__gns3-lab__list_drawings",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(ssh gns3:*)",
+      "WebFetch(domain:gns3-server.readthedocs.io)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []

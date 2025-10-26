@@ -686,3 +686,243 @@ async def send_keystroke_impl(app: "AppContext", node_name: str, key: str) -> st
             suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
             context={"node_name": node_name, "key": key}
         )
+
+
+async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
+    """Execute multiple console operations in batch with validation
+
+    Two-phase execution:
+    1. VALIDATE ALL operations (check nodes exist, required params present)
+    2. EXECUTE ALL operations (only if all valid, sequential execution)
+
+    Args:
+        app: Application context
+        operations: List of operation dicts, each containing:
+            {
+                "type": "send" | "send_and_wait" | "read" | "keystroke",
+                "node_name": "NodeName",
+                ...other parameters specific to operation type
+            }
+
+            Operation types and their parameters:
+
+            - "send": Send data to console
+                node_name (str): Node name
+                data (str): Data to send
+                raw (bool, optional): Send without escape sequence processing
+
+            - "send_and_wait": Send command and wait for pattern
+                node_name (str): Node name
+                command (str): Command to send
+                wait_pattern (str, optional): Regex pattern to wait for
+                timeout (int, optional): Max seconds to wait
+                raw (bool, optional): Send without escape sequence processing
+
+            - "read": Read console output
+                node_name (str): Node name
+                mode (str, optional): "diff" (default), "last_page", "num_pages", "all"
+                pages (int, optional): Number of pages (only with mode="num_pages")
+                pattern (str, optional): Grep regex pattern
+                case_insensitive (bool, optional): Case insensitive grep
+                invert (bool, optional): Invert grep match
+                before (int, optional): Context lines before match
+                after (int, optional): Context lines after match
+                context (int, optional): Context lines before AND after
+
+            - "keystroke": Send special keystroke
+                node_name (str): Node name
+                key (str): Key to send (up, down, enter, ctrl_c, etc.)
+
+    Returns:
+        JSON with execution results:
+        {
+            "completed": [0, 1, 2],  // Indices of successful operations
+            "failed": [3],  // Indices of failed operations
+            "results": [
+                {
+                    "operation_index": 0,
+                    "success": true,
+                    "operation_type": "send_and_wait",
+                    "node_name": "R1",
+                    "result": {...}  // Operation-specific result
+                },
+                ...
+            ],
+            "total_operations": 4,
+            "execution_time": 5.3
+        }
+    """
+    import time
+    start_time = time.time()
+
+    # Validation: Check all operations first
+    VALID_TYPES = {"send", "send_and_wait", "read", "keystroke"}
+
+    for idx, op in enumerate(operations):
+        # Check required fields
+        if "type" not in op:
+            return validation_error(
+                parameter="operations",
+                details=f"Operation {idx} missing required field 'type'",
+                valid_values=list(VALID_TYPES)
+            )
+
+        if op["type"] not in VALID_TYPES:
+            return validation_error(
+                parameter=f"operations[{idx}].type",
+                details=f"Invalid operation type: {op['type']}",
+                valid_values=list(VALID_TYPES)
+            )
+
+        if "node_name" not in op:
+            return create_error_response(
+                error=f"Operation {idx} missing required field 'node_name'",
+                error_code=ErrorCode.INVALID_PARAMETER.value,
+                details=f"All operations must specify 'node_name'",
+                suggested_action="Add 'node_name' field to operation",
+                context={"operation_index": idx, "operation": op}
+            )
+
+        # Type-specific validation
+        op_type = op["type"]
+        node_name = op["node_name"]
+
+        if op_type == "send":
+            if "data" not in op:
+                return create_error_response(
+                    error=f"Operation {idx} (type='send') missing required parameter 'data'",
+                    error_code=ErrorCode.INVALID_PARAMETER.value,
+                    details="send operations require 'data' parameter",
+                    suggested_action="Add 'data' field to operation",
+                    context={"operation_index": idx, "node_name": node_name}
+                )
+
+        elif op_type == "send_and_wait":
+            if "command" not in op:
+                return create_error_response(
+                    error=f"Operation {idx} (type='send_and_wait') missing required parameter 'command'",
+                    error_code=ErrorCode.INVALID_PARAMETER.value,
+                    details="send_and_wait operations require 'command' parameter",
+                    suggested_action="Add 'command' field to operation",
+                    context={"operation_index": idx, "node_name": node_name}
+                )
+
+        elif op_type == "keystroke":
+            if "key" not in op:
+                return create_error_response(
+                    error=f"Operation {idx} (type='keystroke') missing required parameter 'key'",
+                    error_code=ErrorCode.INVALID_PARAMETER.value,
+                    details="keystroke operations require 'key' parameter",
+                    suggested_action="Add 'key' field to operation",
+                    context={"operation_index": idx, "node_name": node_name}
+                )
+
+    # Validation passed - execute all operations sequentially
+    results = []
+    completed_indices = []
+    failed_indices = []
+
+    for idx, op in enumerate(operations):
+        op_type = op["type"]
+        node_name = op["node_name"]
+
+        try:
+            # Execute operation based on type
+            if op_type == "send":
+                result = await send_console_impl(
+                    app,
+                    node_name,
+                    op["data"],
+                    op.get("raw", False)
+                )
+
+            elif op_type == "send_and_wait":
+                result = await send_and_wait_console_impl(
+                    app,
+                    node_name,
+                    op["command"],
+                    op.get("wait_pattern"),
+                    op.get("timeout", 30),
+                    op.get("raw", False)
+                )
+
+            elif op_type == "read":
+                result = await read_console_impl(
+                    app,
+                    node_name,
+                    op.get("mode", "diff"),
+                    op.get("pages", 1),
+                    op.get("pattern"),
+                    op.get("case_insensitive", False),
+                    op.get("invert", False),
+                    op.get("before", 0),
+                    op.get("after", 0),
+                    op.get("context", 0)
+                )
+
+            elif op_type == "keystroke":
+                result = await send_keystroke_impl(
+                    app,
+                    node_name,
+                    op["key"]
+                )
+
+            # Check if result is an error (error responses are JSON strings with "error" field)
+            try:
+                result_dict = json.loads(result) if isinstance(result, str) else result
+                if isinstance(result_dict, dict) and "error" in result_dict:
+                    # Operation failed
+                    failed_indices.append(idx)
+                    results.append({
+                        "operation_index": idx,
+                        "success": False,
+                        "operation_type": op_type,
+                        "node_name": node_name,
+                        "error": result_dict
+                    })
+                else:
+                    # Operation succeeded
+                    completed_indices.append(idx)
+                    results.append({
+                        "operation_index": idx,
+                        "success": True,
+                        "operation_type": op_type,
+                        "node_name": node_name,
+                        "result": result_dict if isinstance(result_dict, dict) else result
+                    })
+            except (json.JSONDecodeError, TypeError):
+                # Non-JSON result (like "Sent successfully" string)
+                completed_indices.append(idx)
+                results.append({
+                    "operation_index": idx,
+                    "success": True,
+                    "operation_type": op_type,
+                    "node_name": node_name,
+                    "result": result
+                })
+
+        except Exception as e:
+            # Unexpected error during execution
+            failed_indices.append(idx)
+            results.append({
+                "operation_index": idx,
+                "success": False,
+                "operation_type": op_type,
+                "node_name": node_name,
+                "error": {
+                    "error": str(e),
+                    "error_code": ErrorCode.INTERNAL_ERROR.value,
+                    "details": f"Unexpected error executing {op_type} operation",
+                    "suggested_action": "Check operation parameters and node status"
+                }
+            })
+
+    execution_time = time.time() - start_time
+
+    return json.dumps({
+        "completed": completed_indices,
+        "failed": failed_indices,
+        "results": results,
+        "total_operations": len(operations),
+        "execution_time": round(execution_time, 2)
+    }, indent=2)

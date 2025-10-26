@@ -225,6 +225,19 @@ class CommandResponse(BaseModel):
         default=None,
         description="Message if not completed (e.g., polling instructions)"
     )
+    # Error fields (v0.1.6)
+    error: Optional[str] = Field(
+        default=None,
+        description="Error message if command failed"
+    )
+    error_code: Optional[str] = Field(
+        default=None,
+        description="Machine-readable error code (SSH_DISCONNECTED, TIMEOUT, etc.)"
+    )
+    suggested_action: Optional[str] = Field(
+        default=None,
+        description="Suggested fix for the error"
+    )
 
 
 class BufferResponse(BaseModel):
@@ -323,6 +336,9 @@ class SessionInfo(BaseModel):
     device_config: SSHDeviceConfig
     persist: bool
     created_at: datetime
+    last_activity: datetime = Field(
+        description="Last activity timestamp - updated on every operation (30min TTL)"
+    )
     buffer: str = ""
     buffer_read_pos: int = 0
     jobs: List[Job] = []

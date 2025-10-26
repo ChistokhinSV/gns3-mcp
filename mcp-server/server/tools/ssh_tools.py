@@ -34,7 +34,8 @@ async def configure_ssh_impl(
     app: "AppContext",
     node_name: str,
     device_dict: Dict,
-    persist: bool = True
+    persist: bool = True,
+    force: bool = False
 ) -> str:
     """
     Configure SSH session for network device
@@ -63,6 +64,7 @@ async def configure_ssh_impl(
         node_name: Node identifier
         device_dict: Netmiko device configuration dict
         persist: Store credentials for reconnection
+        force: Force recreation even if session exists (v0.1.6)
 
     Returns:
         JSON with session_id, connected, device_type
@@ -75,7 +77,7 @@ async def configure_ssh_impl(
                     "node_name": node_name,
                     "device": device_dict,
                     "persist": persist,
-                    "force_recreate": False
+                    "force_recreate": force  # v0.1.6: Allow forced recreation
                 }
             )
 

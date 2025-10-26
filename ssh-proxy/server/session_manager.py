@@ -143,11 +143,18 @@ class SSHSessionManager:
     - Jobs persist until session cleanup
     - Searchable by command text
     - Ordered by sequence_number
+
+    Session Management (v0.1.6):
+    - 30-minute TTL with automatic expiry detection
+    - Activity tracking - updates on every operation
+    - Health checks - detects stale/closed connections
+    - Auto-cleanup on socket errors
     """
 
     MAX_BUFFER_SIZE = 10 * 1024 * 1024  # 10MB
     TRIM_BUFFER_SIZE = 5 * 1024 * 1024  # 5MB
     MAX_HISTORY_JOBS = 1000  # Per session
+    SESSION_TTL = 30 * 60  # 30 minutes in seconds (v0.1.6)
 
     def __init__(self):
         self.sessions: Dict[str, SessionInfo] = {}
@@ -170,15 +177,27 @@ class SSHSessionManager:
         Returns:
             (session_id, error) - error is None if successful
         """
-        # Drop existing session if exists (handles IP changes)
+        # Check existing session (v0.1.6: health check + TTL)
         if node_name in self.sessions:
             if force_recreate:
+                logger.info(f"Force recreate requested for {node_name}")
                 await self.disconnect_session(node_name)
             else:
-                # Return existing session
-                session = self.sessions[node_name]
-                logger.info(f"Session already exists for {node_name}, returning existing")
-                return session.session_id, None
+                # Check if session is expired (30min TTL)
+                if self._is_session_expired(node_name):
+                    logger.info(f"Session expired for {node_name}, recreating")
+                    await self.disconnect_session(node_name)
+                # Check if connection is still alive (health check)
+                elif not await self._is_session_healthy(node_name):
+                    logger.warning(f"Session unhealthy for {node_name}, recreating")
+                    await self.disconnect_session(node_name)
+                else:
+                    # Session healthy and not expired - reuse it
+                    session = self.sessions[node_name]
+                    # Update activity on reuse
+                    self._update_activity(node_name)
+                    logger.info(f"Session already exists for {node_name}, returning existing (healthy)")
+                    return session.session_id, None
 
         # Create Netmiko connection
         try:
@@ -207,12 +226,14 @@ class SSHSessionManager:
 
         # Create session
         session_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
         session = SessionInfo(
             session_id=session_id,
             node_name=node_name,
             device_config=device_config,
             persist=persist,
-            created_at=datetime.now(timezone.utc),
+            created_at=now,
+            last_activity=now,  # Initialize activity timestamp (v0.1.6)
             buffer="",
             buffer_read_pos=0,
             jobs=[],
@@ -251,6 +272,66 @@ class SSHSessionManager:
         return self.sessions.get(node_name)
 
     # ========================================================================
+    # Session Health and Activity Tracking (v0.1.6)
+    # ========================================================================
+
+    def _update_activity(self, node_name: str) -> None:
+        """Update last_activity timestamp for session (30min TTL)"""
+        if node_name in self.sessions:
+            self.sessions[node_name].last_activity = datetime.now(timezone.utc)
+
+    def _is_session_expired(self, node_name: str) -> bool:
+        """Check if session has exceeded 30-minute TTL"""
+        if node_name not in self.sessions:
+            return True
+
+        session = self.sessions[node_name]
+        age = (datetime.now(timezone.utc) - session.last_activity).total_seconds()
+        return age > self.SESSION_TTL
+
+    async def _is_session_healthy(self, node_name: str) -> bool:
+        """
+        Check if SSH session is still alive
+
+        Uses lightweight test to verify connection without full command execution.
+        Returns False if socket closed or connection dead.
+
+        Approach:
+        1. Try Netmiko is_alive() method if available (Netmiko 4.0+)
+        2. Fallback: Send empty command with short timeout (lightweight test)
+
+        Returns:
+            True if connection is healthy, False if dead/closed
+        """
+        if node_name not in self.connections:
+            return False
+
+        connection = self.connections[node_name]
+
+        try:
+            # Method 1: Try Netmiko is_alive() if available (Netmiko 4.0+)
+            if hasattr(connection, 'is_alive'):
+                is_alive = await asyncio.to_thread(connection.is_alive)
+                if not is_alive:
+                    logger.warning(f"Health check failed for {node_name}: is_alive() returned False")
+                return is_alive
+
+            # Method 2: Fallback - send empty command (very lightweight)
+            # This will fail quickly if socket is closed
+            await asyncio.to_thread(
+                connection.send_command,
+                "",
+                expect_string=r".*",
+                read_timeout=2
+            )
+            return True
+
+        except Exception as e:
+            # Any exception = connection dead
+            logger.warning(f"Health check failed for {node_name}: {e}")
+            return False
+
+    # ========================================================================
     # Command Execution (Adaptive Async)
     # ========================================================================
 
@@ -272,6 +353,9 @@ class SSHSessionManager:
 
         session = self.sessions[node_name]
         connection = self.connections[node_name]
+
+        # Update activity timestamp (v0.1.6)
+        self._update_activity(node_name)
 
         # Create Job immediately (status=running)
         job = Job(
@@ -324,6 +408,21 @@ class SSHSessionManager:
                     # Command failed or timed out
                     error_msg = str(e)
                     logger.error(f"Command failed: {error_msg}")
+
+                    # Detect error type and provide helpful message (v0.1.6)
+                    if "Socket is closed" in error_msg:
+                        error_code = "SSH_DISCONNECTED"
+                        suggested_action = (
+                            "Session was stale and has been removed. "
+                            "Reconnect with ssh_configure() and try again."
+                        )
+                    elif "timed out" in error_msg.lower() or "timeout" in error_msg.lower():
+                        error_code = "TIMEOUT"
+                        suggested_action = "Command timed out. Increase read_timeout or check device responsiveness."
+                    else:
+                        error_code = "COMMAND_FAILED"
+                        suggested_action = "Check command syntax and device state."
+
                     # Calculate execution time for failed command
                     completed_at = datetime.now(timezone.utc)
                     exec_time = (completed_at - job.started_at).total_seconds()
@@ -335,7 +434,9 @@ class SSHSessionManager:
                         "execution_time": exec_time,
                         "started_at": job.started_at,
                         "completed_at": completed_at,
-                        "error": error_msg
+                        "error": error_msg,
+                        "error_code": error_code,
+                        "suggested_action": suggested_action
                     }
 
         # Still running - return job_id for polling
@@ -391,9 +492,30 @@ class SSHSessionManager:
             return output
 
         except Exception as e:
-            # Update job as failed
+            error_str = str(e)
+
+            # Detect socket closure and cleanup stale session (v0.1.6)
+            if "Socket is closed" in error_str or "Socket error" in error_str:
+                logger.error(f"Stale session detected for {node_name}, cleaning up")
+
+                # Mark job as failed
+                job.status = "failed"
+                job.error = "SSH connection closed - session was stale"
+                job.completed_at = datetime.now(timezone.utc)
+                job.execution_time = (job.completed_at - job.started_at).total_seconds()
+
+                # Cleanup stale session (removes from self.sessions and self.connections)
+                await self.disconnect_session(node_name)
+
+                # Raise informative error
+                raise RuntimeError(
+                    f"SSH session closed for {node_name}. "
+                    "Session removed. Please reconnect with ssh_configure()."
+                )
+
+            # Other errors - just mark job as failed
             job.status = "failed"
-            job.error = str(e)
+            job.error = error_str
             job.completed_at = datetime.now(timezone.utc)
             job.execution_time = (job.completed_at - job.started_at).total_seconds()
 
@@ -417,6 +539,9 @@ class SSHSessionManager:
 
         session = self.sessions[node_name]
         connection = self.connections[node_name]
+
+        # Update activity timestamp (v0.1.6)
+        self._update_activity(node_name)
 
         # Create Job
         command_str = "\n".join(config_commands)
@@ -468,6 +593,21 @@ class SSHSessionManager:
                     # Config command failed or timed out
                     error_msg = str(e)
                     logger.error(f"Config failed: {error_msg}")
+
+                    # Detect error type and provide helpful message (v0.1.6)
+                    if "Socket is closed" in error_msg:
+                        error_code = "SSH_DISCONNECTED"
+                        suggested_action = (
+                            "Session was stale and has been removed. "
+                            "Reconnect with ssh_configure() and try again."
+                        )
+                    elif "timed out" in error_msg.lower() or "timeout" in error_msg.lower():
+                        error_code = "TIMEOUT"
+                        suggested_action = "Config commands timed out. Increase read_timeout or check device responsiveness."
+                    else:
+                        error_code = "COMMAND_FAILED"
+                        suggested_action = "Check config command syntax and device state."
+
                     completed_at = datetime.now(timezone.utc)
                     exec_time = (completed_at - job.started_at).total_seconds()
 
@@ -478,7 +618,9 @@ class SSHSessionManager:
                         "execution_time": exec_time,
                         "started_at": job.started_at,
                         "completed_at": completed_at,
-                        "error": error_msg
+                        "error": error_msg,
+                        "error_code": error_code,
+                        "suggested_action": suggested_action
                     }
 
         # Still running
@@ -522,8 +664,30 @@ class SSHSessionManager:
             return output
 
         except Exception as e:
+            error_str = str(e)
+
+            # Detect socket closure and cleanup stale session (v0.1.6)
+            if "Socket is closed" in error_str or "Socket error" in error_str:
+                logger.error(f"Stale session detected for {node_name}, cleaning up")
+
+                # Mark job as failed
+                job.status = "failed"
+                job.error = "SSH connection closed - session was stale"
+                job.completed_at = datetime.now(timezone.utc)
+                job.execution_time = (job.completed_at - job.started_at).total_seconds()
+
+                # Cleanup stale session
+                await self.disconnect_session(node_name)
+
+                # Raise informative error
+                raise RuntimeError(
+                    f"SSH session closed for {node_name}. "
+                    "Session removed. Please reconnect with ssh_configure()."
+                )
+
+            # Other errors - just mark job as failed
             job.status = "failed"
-            job.error = str(e)
+            job.error = error_str
             job.completed_at = datetime.now(timezone.utc)
             job.execution_time = (job.completed_at - job.started_at).total_seconds()
             logger.error(f"Config commands failed: {node_name}: {e}")
@@ -575,6 +739,9 @@ class SSHSessionManager:
             raise ValueError(f"No session for {node_name}")
 
         session = self.sessions[node_name]
+
+        # Update activity timestamp (v0.1.6)
+        self._update_activity(node_name)
 
         # Get output based on mode
         if mode == "diff":

@@ -287,6 +287,7 @@ class TemplateInfo(BaseModel):
     compute_id: Optional[str] = "local"
     builtin: bool = False
     symbol: Optional[str] = None
+    usage: Optional[str] = None  # Template usage notes (credentials, setup instructions)
 
     class Config:
         json_schema_extra = {
@@ -295,7 +296,8 @@ class TemplateInfo(BaseModel):
                 "name": "Ethernet switch",
                 "category": "switch",
                 "node_type": "ethernet_switch",
-                "builtin": True
+                "builtin": True,
+                "usage": "Default credentials: admin/admin"
             }
         }
 

@@ -130,6 +130,57 @@ curl -X POST http://localhost:8022/ssh/send_command \
 curl http://localhost:8022/ssh/history/R1?limit=10
 ```
 
+## Session Management (v0.1.6)
+
+### 30-Minute Session TTL
+
+Sessions automatically expire after 30 minutes of inactivity to prevent stale connections:
+
+- **Activity Tracking**: `last_activity` timestamp updated on every operation
+  - SSH command execution (`send_command`, `send_config_set`)
+  - Buffer reads (`read_buffer`)
+  - Session configuration (`configure_ssh` with reuse)
+
+- **Automatic Expiry**: Sessions exceeding 30-minute TTL are detected and removed
+  - Happens during next `configure_ssh()` call
+  - New connection automatically created
+  - No manual intervention required
+
+- **Manual Override**: Use `force_recreate: true` to force new session creation
+  ```json
+  {
+    "node_name": "R1",
+    "device": {...},
+    "force_recreate": true  // Forces new session even if one exists
+  }
+  ```
+
+### Session Health Checks
+
+Before reusing existing sessions, health checks detect stale/closed connections:
+
+1. **TTL Check**: Verify session not expired (30min)
+2. **Connection Check**: Test if SSH socket still alive
+   - Uses Netmiko `is_alive()` if available (Netmiko 4.0+)
+   - Falls back to lightweight empty command test
+3. **Auto-Recreation**: Stale sessions automatically replaced with fresh connections
+
+### Stale Session Recovery
+
+If commands fail with "Socket is closed" errors:
+
+1. **Auto-Cleanup**: Stale session immediately removed from manager
+2. **Error Response**: Clear error message with suggested action
+   ```json
+   {
+     "completed": false,
+     "error": "SSH session closed...",
+     "error_code": "SSH_DISCONNECTED",
+     "suggested_action": "Session was stale. Reconnect with ssh_configure()..."
+   }
+   ```
+3. **Reconnect**: Simply call `configure_ssh()` again to create fresh session
+
 ## Error Handling
 
 SSH connection failures provide detailed error classification:
@@ -187,11 +238,16 @@ See [DEPLOYMENT.md](../DEPLOYMENT.md) for complete deployment instructions for G
 
 ## Version
 
-Current version: **0.1.1** (Bugfix - Output Capture & Execution Time)
+Current version: **0.1.6** (Feature - Session Management & Stale Session Recovery)
 
-**v0.1.1 Changes:**
-- Fixed: `execution_time` always null (race condition in adaptive async)
-- Fixed: Empty output from commands (added delay_factor=2 for reliable capture)
-- Added: Output size logging for debugging
+**v0.1.6 Changes:**
+- **NEW**: 30-minute session TTL with automatic expiry detection
+- **NEW**: Session health checks detect stale/closed connections before reuse
+- **NEW**: Auto-cleanup on "Socket is closed" errors
+- **NEW**: Structured error responses with `error_code` and `suggested_action` fields
+- **ENHANCED**: `last_activity` timestamp updated on all operations
+- **ENHANCED**: Better error messages for timeout and socket closure errors
+
+**Previous:** v0.1.5 - Added `/version` endpoint for API monitoring
 
 See [CLAUDE.md](../CLAUDE.md) for full version history and changelog.

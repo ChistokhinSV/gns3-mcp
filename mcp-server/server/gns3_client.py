@@ -410,6 +410,60 @@ class GNS3Client:
         response.raise_for_status()
         return response.content
 
+    # Project Files API
+
+    async def get_project_readme(self, project_id: str) -> str:
+        """Get project README/notes
+
+        GET /v3/projects/{project_id}/files/README.txt
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            README content as string, empty string if doesn't exist
+        """
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/v3/projects/{project_id}/files/README.txt",
+                headers=self._headers()
+            )
+            if response.status_code == 404:
+                return ""  # README doesn't exist yet
+            response.raise_for_status()
+            return response.text
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return ""
+            logger.error(f"Failed to get README: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error reading README: {e}")
+            raise
+
+    async def update_project_readme(self, project_id: str, content: str) -> bool:
+        """Update project README/notes
+
+        POST /v3/projects/{project_id}/files/README.txt
+
+        Args:
+            project_id: Project ID
+            content: README content to save
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            response = await self.client.post(
+                f"{self.base_url}/v3/projects/{project_id}/files/README.txt",
+                headers=self._headers(),
+                content=content.encode('utf-8')
+            )
+            return response.status_code == 204
+        except Exception as e:
+            logger.error(f"Failed to update README: {e}")
+            return False
+
     async def close(self):
         """Close the HTTP client"""
         await self.client.aclose()

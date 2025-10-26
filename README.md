@@ -144,9 +144,103 @@ See [CLAUDE.md - Label Rendering Implementation](CLAUDE.md#label-rendering-imple
   - `pydantic>=2.0.0` - Type-safe data models (v0.3.0)
   - `python-dotenv>=1.1.1` - Environment variable management
 
+## Transport Modes
+
+The MCP server supports three transport modes for different deployment scenarios:
+
+### Transport Mode Comparison
+
+| Transport | Use Case | Communication | Installation |
+|-----------|----------|---------------|--------------|
+| **stdio** | Claude Desktop, Claude Code | Process-based (stdin/stdout) | Default, packaged in .mcpb |
+| **HTTP** | Network access, remote clients | Streamable HTTP (recommended) | Manual server deployment |
+| **SSE** | Legacy compatibility | Server-Sent Events (deprecated) | Use HTTP instead |
+
+### When to Use Each Transport
+
+**stdio (Default)**:
+- ✅ Claude Desktop with .mcpb extension
+- ✅ Claude Code with project/global installation
+- ✅ Local development and testing
+- ✅ Simple single-user scenarios
+- ❌ Not suitable for network access
+
+**HTTP (Streamable)**:
+- ✅ Multiple clients connecting over network
+- ✅ Remote deployment (cloud servers, containers)
+- ✅ Web service integrations
+- ✅ Load balancing and scaling
+- ✅ Modern bidirectional communication
+- **Recommended** for production network deployments
+
+**SSE (Deprecated)**:
+- ⚠️ Legacy backward compatibility only
+- ❌ Do NOT use for new projects
+- ❌ Limited to server-to-client streaming
+- Use HTTP transport instead
+
+### Starting the Server
+
+**stdio Mode (Default)**:
+```bash
+# Used by Claude Desktop/Code - automatically started
+python mcp-server/server/main.py --host localhost --port 80 \
+  --username admin --password YOUR_PASSWORD
+```
+
+**HTTP Mode (Streamable)**:
+```bash
+# Network-accessible server at http://localhost:8000/mcp/
+python mcp-server/server/main.py --host localhost --port 80 \
+  --username admin --password YOUR_PASSWORD \
+  --transport http --http-host 0.0.0.0 --http-port 8000
+```
+
+**SSE Mode (Legacy)**:
+```bash
+# Only use for backward compatibility with old clients
+python mcp-server/server/main.py --host localhost --port 80 \
+  --username admin --password YOUR_PASSWORD \
+  --transport sse --http-host 0.0.0.0 --http-port 8000
+```
+
+### HTTP Transport Endpoints
+
+When running in HTTP mode, the server exposes:
+
+- **Main endpoint**: `http://{http-host}:{http-port}/mcp/`
+- **Protocol**: MCP Streamable HTTP
+- **Methods**: POST (bidirectional communication)
+- **Authentication**: GNS3 credentials in startup args
+
+**Example HTTP Configuration**:
+```bash
+# Local network access
+--transport http --http-host 192.168.1.100 --http-port 8000
+
+# Docker container
+--transport http --http-host 0.0.0.0 --http-port 8000
+
+# Custom port
+--transport http --http-host 127.0.0.1 --http-port 3000
+```
+
+### Security Considerations
+
+**stdio Mode**:
+- ✅ Process-level isolation
+- ✅ No network exposure
+- ✅ Credentials passed as command arguments
+
+**HTTP Mode**:
+- ⚠️ Network-exposed endpoints
+- ⚠️ No built-in authentication on MCP endpoint (relies on GNS3 auth)
+- ⚠️ Use firewall rules to restrict access
+- ⚠️ Consider reverse proxy with TLS for production
+
 ## Installation
 
-### Claude Desktop
+### Claude Desktop (stdio mode)
 
 1. **Package the extension**:
    ```bash
