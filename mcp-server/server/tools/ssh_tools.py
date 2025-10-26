@@ -27,6 +27,78 @@ SSH_PROXY_URL = os.getenv("SSH_PROXY_URL", f"http://{_gns3_host}:8022")
 
 
 # ============================================================================
+# Proxy URL Resolution
+# ============================================================================
+
+def _get_proxy_url_for_node(app: "AppContext", node_name: str) -> str:
+    """
+    Get proxy URL for a node from stored mapping
+
+    Args:
+        app: Application context
+        node_name: Node identifier
+
+    Returns:
+        Proxy URL for this node (defaults to SSH_PROXY_URL if not mapped)
+    """
+    return app.ssh_proxy_mapping.get(node_name, SSH_PROXY_URL)
+
+
+async def _resolve_proxy_url(proxy: str) -> str:
+    """
+    Resolve proxy parameter to proxy URL
+
+    Args:
+        proxy: Either "host" or a proxy_id from registry
+
+    Returns:
+        Proxy URL (e.g., "http://192.168.1.20:8022" or "http://localhost:5004")
+
+    Raises:
+        ValueError: If proxy_id not found in registry
+    """
+    # Host proxy is default
+    if proxy == "host":
+        return SSH_PROXY_URL
+
+    # Look up lab proxy from registry
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.get(f"{SSH_PROXY_URL}/proxy/registry")
+
+            if response.status_code == 200:
+                data = response.json()
+                proxies = data.get("proxies", [])
+
+                # Find proxy by proxy_id
+                for p in proxies:
+                    if p.get("proxy_id") == proxy:
+                        proxy_url = p.get("url")
+
+                        # Fix localhost URLs - replace with GNS3 host IP
+                        # Registry returns "http://localhost:5004" but from MCP server perspective
+                        # we need "http://192.168.1.20:5004" (GNS3 host IP)
+                        if proxy_url.startswith("http://localhost:"):
+                            port = proxy_url.split(":")[-1]
+                            proxy_url = f"http://{_gns3_host}:{port}"
+
+                        return proxy_url
+
+                # Proxy not found
+                available_ids = [p.get("proxy_id") for p in proxies]
+                raise ValueError(
+                    f"Proxy '{proxy}' not found in registry. "
+                    f"Available proxies: {available_ids}. "
+                    f"Use gns3://proxy/registry resource to list all proxies."
+                )
+            else:
+                raise ValueError(f"Failed to fetch proxy registry: HTTP {response.status_code}")
+
+        except httpx.RequestError as e:
+            raise ValueError(f"Failed to connect to proxy registry: {e}")
+
+
+# ============================================================================
 # Session Management
 # ============================================================================
 
@@ -35,10 +107,17 @@ async def configure_ssh_impl(
     node_name: str,
     device_dict: Dict,
     persist: bool = True,
-    force: bool = False
+    force: bool = False,
+    proxy: str = "host"
 ) -> str:
     """
     Configure SSH session for network device
+
+    Multi-Proxy Support (v0.26.0):
+    - Proxy routing: Use 'proxy' parameter to route through specific proxy
+    - Default: proxy="host" routes through main proxy on GNS3 host:8022
+    - Lab proxy: proxy="<proxy_id>" routes through discovered lab proxy
+    - Discovery: Use gns3://proxy/registry resource to list available proxies
 
     IMPORTANT: Use console tools to enable SSH first!
 
@@ -60,19 +139,42 @@ async def configure_ssh_impl(
            'password': 'cisco123'
        })
 
+    3. For isolated networks, use lab proxy:
+       # First, discover lab proxies
+       proxies = get_proxy_registry()  # gns3://proxy/registry
+
+       # Then configure SSH through lab proxy
+       configure_ssh('A-CLIENT', {
+           'device_type': 'linux',
+           'host': '10.199.0.20',
+           'username': 'alpine',
+           'password': 'alpine'
+       }, proxy='3f3a56de-19d3-40c3-9806-76bee4fe96d4')  # A-PROXY proxy_id
+
     Args:
         node_name: Node identifier
         device_dict: Netmiko device configuration dict
         persist: Store credentials for reconnection
         force: Force recreation even if session exists (v0.1.6)
+        proxy: Proxy to route through - "host" (default) or proxy_id from registry (v0.26.0)
 
     Returns:
-        JSON with session_id, connected, device_type
+        JSON with session_id, connected, device_type, proxy_url
     """
+    # Resolve proxy URL from proxy parameter
+    try:
+        proxy_url = await _resolve_proxy_url(proxy)
+    except ValueError as e:
+        return json.dumps({
+            "error": "Proxy resolution failed",
+            "details": str(e),
+            "suggestion": "Check gns3://proxy/registry for available proxies"
+        }, indent=2)
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(
-                f"{SSH_PROXY_URL}/ssh/configure",
+                f"{proxy_url}/ssh/configure",
                 json={
                     "node_name": node_name,
                     "device": device_dict,
@@ -83,7 +185,15 @@ async def configure_ssh_impl(
 
             # Success - SSH connection established
             if response.status_code == 200:
-                return json.dumps(response.json(), indent=2)
+                # Store proxy URL mapping for ssh_command routing (v0.26.0)
+                app.ssh_proxy_mapping[node_name] = proxy_url
+
+                # Add proxy info to response
+                result = response.json()
+                result["proxy_url"] = proxy_url
+                result["proxy"] = proxy
+
+                return json.dumps(result, indent=2)
 
             # SSH connection error (400) or server error (500)
             try:
@@ -148,6 +258,10 @@ async def ssh_send_command_impl(
     Creates Job immediately, polls for wait_timeout seconds.
     Returns output if completes, else returns job_id for polling.
 
+    Multi-Proxy Support (v0.26.0):
+    - Routes command to the proxy used during ssh_configure()
+    - Automatically uses correct proxy for isolated networks
+
     For long-running commands (e.g., 15-minute installations):
     - Set read_timeout=900 (or higher)
     - Set wait_timeout=0 to return job_id immediately
@@ -167,10 +281,13 @@ async def ssh_send_command_impl(
     Returns:
         JSON with completed, job_id, output, execution_time
     """
+    # Get proxy URL for this node (v0.26.0)
+    proxy_url = _get_proxy_url_for_node(app, node_name)
+
     async with httpx.AsyncClient(timeout=read_timeout + wait_timeout + 10) as client:
         try:
             response = await client.post(
-                f"{SSH_PROXY_URL}/ssh/send_command",
+                f"{proxy_url}/ssh/send_command",
                 json={
                     "node_name": node_name,
                     "command": command,
@@ -209,6 +326,10 @@ async def ssh_send_config_set_impl(
 
     Creates Job immediately, uses adaptive async pattern.
 
+    Multi-Proxy Support (v0.26.0):
+    - Routes command to the proxy used during ssh_configure()
+    - Automatically uses correct proxy for isolated networks
+
     Args:
         node_name: Node identifier
         config_commands: List of configuration commands
@@ -224,10 +345,13 @@ async def ssh_send_config_set_impl(
             'no shutdown'
         ])
     """
+    # Get proxy URL for this node (v0.26.0)
+    proxy_url = _get_proxy_url_for_node(app, node_name)
+
     async with httpx.AsyncClient(timeout=wait_timeout + 60) as client:
         try:
             response = await client.post(
-                f"{SSH_PROXY_URL}/ssh/send_config_set",
+                f"{proxy_url}/ssh/send_config_set",
                 json={
                     "node_name": node_name,
                     "config_commands": config_commands,
@@ -279,10 +403,13 @@ async def ssh_read_buffer_impl(
     Returns:
         JSON with output and buffer_size
     """
+    # Get proxy URL for this node (v0.26.0)
+    proxy_url = _get_proxy_url_for_node(app, node_name)
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.get(
-                f"{SSH_PROXY_URL}/ssh/buffer/{node_name}",
+                f"{proxy_url}/ssh/buffer/{node_name}",
                 params={"mode": mode, "pages": pages}
             )
 
@@ -332,6 +459,9 @@ async def ssh_get_history_impl(
         # Search for interface commands
         ssh_get_history('R1', search='interface')
     """
+    # Get proxy URL for this node (v0.26.0)
+    proxy_url = _get_proxy_url_for_node(app, node_name)
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             params = {"limit": limit}
@@ -339,7 +469,7 @@ async def ssh_get_history_impl(
                 params["search"] = search
 
             response = await client.get(
-                f"{SSH_PROXY_URL}/ssh/history/{node_name}",
+                f"{proxy_url}/ssh/history/{node_name}",
                 params=params
             )
 
@@ -385,10 +515,13 @@ async def ssh_get_command_output_impl(
         # 3. Get full output
         ssh_get_command_output('R1', 'abc123-def456...')
     """
+    # Get proxy URL for this node (v0.26.0)
+    proxy_url = _get_proxy_url_for_node(app, node_name)
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.get(
-                f"{SSH_PROXY_URL}/ssh/history/{node_name}/{job_id}"
+                f"{proxy_url}/ssh/history/{node_name}/{job_id}"
             )
 
             if response.status_code == 200:
@@ -421,10 +554,13 @@ async def ssh_get_status_impl(
     Returns:
         JSON with connected, session_id, device_type, buffer_size, total_commands
     """
+    # Get proxy URL for this node (v0.26.0)
+    proxy_url = _get_proxy_url_for_node(app, node_name)
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.get(
-                f"{SSH_PROXY_URL}/ssh/status/{node_name}"
+                f"{proxy_url}/ssh/status/{node_name}"
             )
 
             if response.status_code == 200:
@@ -464,20 +600,29 @@ async def ssh_disconnect_impl(
     Example:
         ssh_disconnect('R1')
     """
+    # Get proxy URL for this node (v0.26.0)
+    proxy_url = _get_proxy_url_for_node(app, node_name)
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             # Use cleanup endpoint to disconnect specific node
             # Keep all nodes EXCEPT the one we want to disconnect
             response = await client.delete(
-                f"{SSH_PROXY_URL}/ssh/session/{node_name}"
+                f"{proxy_url}/ssh/session/{node_name}"
             )
 
             if response.status_code == 200:
+                # Clean up proxy mapping (v0.26.0)
+                app.ssh_proxy_mapping.pop(node_name, None)
+
                 return json.dumps({
                     "status": "success",
                     "message": f"Disconnected SSH session for {node_name}"
                 }, indent=2)
             elif response.status_code == 404:
+                # Clean up proxy mapping even if session not found (v0.26.0)
+                app.ssh_proxy_mapping.pop(node_name, None)
+
                 return json.dumps({
                     "status": "success",
                     "message": f"No active SSH session for {node_name}"

@@ -368,6 +368,8 @@ class AppContext:
     resource_manager: Optional[ResourceManager] = None
     current_project_id: str | None = None
     cleanup_task: Optional[asyncio.Task] = field(default=None)
+    # v0.26.0: Multi-proxy SSH support - maps node_name to proxy_url for routing
+    ssh_proxy_mapping: Dict[str, str] = field(default_factory=dict)
 
 
 # Global app context for static resources (set during lifespan)
@@ -1801,11 +1803,18 @@ async def ssh_configure(
     node_name: str,
     device_dict: dict,
     persist: bool = True,
-    force: bool = False
+    force: bool = False,
+    proxy: str = "host"
 ) -> str:
     """Configure SSH session for network device
 
     IMPORTANT: Enable SSH on device first using console tools.
+
+    Multi-Proxy Support (v0.26.0):
+    - Use 'proxy' parameter to route through specific proxy
+    - proxy="host" (default): Use main proxy on GNS3 host
+    - proxy="<proxy_id>": Use discovered lab proxy for isolated networks
+    - Discovery: Check gns3://proxy/registry resource for available proxies
 
     Session Management (v0.1.6) - AUTOMATIC RECOVERY:
     - Reuses existing healthy sessions automatically
@@ -1825,14 +1834,27 @@ async def ssh_configure(
         persist: Store credentials for reconnection (default: True)
         force: Force recreation even if healthy session exists (default: False)
                Only needed for: manual credential refresh, troubleshooting
+        proxy: Proxy to route through - "host" (default) or proxy_id from registry (v0.26.0)
 
     Returns:
-        JSON with session_id, connected, device_type
+        JSON with session_id, connected, device_type, proxy_url, proxy
 
     Examples:
         # Normal usage - creates session or reuses healthy one
         ssh_configure("R1", {"device_type": "cisco_ios", "host": "10.1.0.1",
                              "username": "admin", "password": "cisco123"})
+
+        # Isolated network - use lab proxy
+        # Step 1: Discover lab proxies
+        proxies = get_proxy_registry()  # gns3://proxy/registry
+
+        # Step 2: Configure SSH through lab proxy
+        ssh_configure("A-CLIENT", {
+            "device_type": "linux",
+            "host": "10.199.0.20",
+            "username": "alpine",
+            "password": "alpine"
+        }, proxy="3f3a56de-19d3-40c3-9806-76bee4fe96d4")  # A-PROXY proxy_id
 
         # After "Socket is closed" error - just retry (auto-recovery)
         # NO force parameter needed - stale session already cleaned up
@@ -1842,7 +1864,7 @@ async def ssh_configure(
         ssh_configure("R1", device_dict, force=True)
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await configure_ssh_impl(app, node_name, device_dict, persist, force)
+    return await configure_ssh_impl(app, node_name, device_dict, persist, force, proxy)
 
 
 @mcp.tool()

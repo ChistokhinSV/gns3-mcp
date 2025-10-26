@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.25.0",
-  "description": "GNS3 lab automation - 27 tools + 19 resources (3 static + 16 templates) + 5 prompts with Docker node file operations",
-  "long_description": "COMPLETE MCP SERVER: 27 tools + 19 browsable resources + 5 workflow prompts + Docker node configuration.\n\nKEY FEATURES:\n• Docker Node File Operations: Read/write files in Docker containers, configure network interfaces\n  - Tools: get_node_file(), write_node_file(), configure_node_network()\n  - Supports: Network config (static/DHCP), multi-interface setup, automatic node restart\n  - Use Cases: SSH proxy setup, custom container config, network troubleshooting\n• Project Notes/Memory: Store IPs, credentials, and architecture in per-project README\n  - Tools: get_project_readme(), update_project_readme()\n  - Resource: gns3://projects/{id}/readme\n• Template Usage Notes: Access device-specific default credentials and setup instructions\n  - Resource: gns3://projects/{id}/nodes/{id}/template\n• 27 Action Tools: Create nodes, configure devices, manage connections, Docker file ops\n• 19 MCP Resources: Browse projects, nodes, sessions (3 static + 16 templates)\n• 5 Workflow Prompts: Guided setup for SSH, topology discovery, troubleshooting\n\nVersion 0.25.0: Added Docker node file operations and network configuration. For complete docs see SKILL.md. Supports GNS3 v3 API.",
+  "version": "0.26.0",
+  "description": "GNS3 lab automation - 27 tools + 19 resources (3 static + 16 templates) + 5 prompts with multi-proxy SSH support",
+  "long_description": "COMPLETE MCP SERVER: 27 tools + 19 browsable resources + 5 workflow prompts + Multi-proxy SSH routing.\n\nKEY FEATURES:\n• Multi-Proxy SSH Support: Route SSH connections through discovered lab proxies for isolated networks\n  - ssh_configure(proxy='host') - Use main proxy on GNS3 host (default)\n  - ssh_configure(proxy=proxy_id) - Use lab proxy for isolated networks\n  - Resource: gns3://proxy/registry - Discover lab proxies via Docker API\n  - Automatic routing: ssh_command() routes to correct proxy per session\n• Docker Node File Operations: Read/write files in Docker containers, configure network interfaces\n  - Tools: get_node_file(), write_node_file(), configure_node_network()\n  - Supports: Network config (static/DHCP), multi-interface setup, automatic node restart\n  - Use Cases: SSH proxy setup, custom container config, network troubleshooting\n• Project Notes/Memory: Store IPs, credentials, and architecture in per-project README\n  - Tools: get_project_readme(), update_project_readme()\n  - Resource: gns3://projects/{id}/readme\n• Template Usage Notes: Access device-specific default credentials and setup instructions\n  - Resource: gns3://projects/{id}/nodes/{id}/template\n• 27 Action Tools: Create nodes, configure devices, manage connections, Docker file ops\n• 19 MCP Resources: Browse projects, nodes, sessions (3 static + 16 templates)\n• 5 Workflow Prompts: Guided setup for SSH, topology discovery, troubleshooting\n\nVersion 0.26.0: Added multi-proxy SSH support for isolated network access. For complete docs see SKILL.md. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -139,7 +139,7 @@
     },
     {
       "name": "ssh_configure",
-      "description": "Configure SSH session with auto-recovery (30min TTL, health checks, auto-recreates stale sessions). After 'Socket is closed' error: just retry same call - no force needed. Requires SSH enabled on device first."
+      "description": "Configure SSH session with multi-proxy support and auto-recovery. Use proxy='host' (default) for main proxy, or proxy=proxy_id for lab proxies (discovered via gns3://proxy/registry). Auto-recovery: 30min TTL, health checks, auto-recreates stale sessions. After 'Socket is closed' error: just retry - no force needed. Requires SSH enabled on device first."
     },
     {
       "name": "ssh_command",
