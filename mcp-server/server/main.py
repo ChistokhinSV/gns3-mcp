@@ -622,6 +622,11 @@ async def resource_proxy_status() -> str:
     """Get SSH proxy service status"""
     return await _app.resource_manager.get_proxy_status()
 
+@mcp.resource("gns3://proxy/registry")
+async def resource_proxy_registry() -> str:
+    """Get proxy registry (discovered lab proxies via Docker API)"""
+    return await _app.resource_manager.get_proxy_registry()
+
 
 # ============================================================================
 # MCP Prompts - Guided Workflows

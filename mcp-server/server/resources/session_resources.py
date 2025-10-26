@@ -294,6 +294,43 @@ async def get_proxy_status_impl(app: "AppContext") -> str:
             }, indent=2)
 
 
+async def get_proxy_registry_impl(app: "AppContext") -> str:
+    """
+    Get proxy registry (discovered lab proxies via Docker API)
+
+    Resource URI: gns3://proxy/registry
+
+    Returns:
+        JSON object with discovered proxy information including:
+        - available: Whether discovery is enabled (Docker socket mounted)
+        - proxies: Array of discovered lab proxies with details
+        - count: Number of proxies found
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.get(f"{SSH_PROXY_URL}/proxy/registry")
+
+            if response.status_code == 200:
+                data = response.json()
+                return json.dumps(data, indent=2)
+            else:
+                return json.dumps({
+                    "available": False,
+                    "proxies": [],
+                    "count": 0,
+                    "error": f"HTTP {response.status_code} from proxy registry endpoint"
+                }, indent=2)
+
+        except Exception as e:
+            return json.dumps({
+                "available": False,
+                "proxies": [],
+                "count": 0,
+                "error": str(e),
+                "suggestion": "Ensure SSH proxy service is running with Docker socket mounted"
+            }, indent=2)
+
+
 async def list_proxy_sessions_impl(app: "AppContext") -> str:
     """
     List all SSH proxy sessions (same as list_ssh_sessions)

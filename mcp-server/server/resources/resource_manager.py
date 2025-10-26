@@ -47,6 +47,7 @@ class ResourceManager:
 
         # SSH proxy resources
         r'^gns3://proxy/status$': 'get_proxy_status',
+        r'^gns3://proxy/registry$': 'get_proxy_registry',
         r'^gns3://proxy/sessions$': 'list_proxy_sessions',
     }
 
@@ -320,6 +321,11 @@ class ResourceManager:
         """Get SSH proxy service status"""
         from .session_resources import get_proxy_status_impl
         return await get_proxy_status_impl(self.app)
+
+    async def get_proxy_registry(self) -> str:
+        """Get proxy registry (discovered lab proxies)"""
+        from .session_resources import get_proxy_registry_impl
+        return await get_proxy_registry_impl(self.app)
 
     async def list_proxy_sessions(self) -> str:
         """List all SSH proxy sessions"""
