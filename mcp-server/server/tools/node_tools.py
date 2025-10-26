@@ -4,7 +4,7 @@ Provides tools for listing, creating, modifying, and deleting GNS3 nodes.
 """
 import asyncio
 import json
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Dict, Any
 
 from models import NodeInfo, NodeSummary, ErrorResponse, ErrorCode
 from error_utils import (
@@ -339,7 +339,8 @@ async def set_node_impl(app: "AppContext",
 
 
 async def create_node_impl(app: "AppContext", template_name: str, x: int, y: int,
-                           node_name: Optional[str] = None, compute_id: str = "local") -> str:
+                           node_name: Optional[str] = None, compute_id: str = "local",
+                           properties: Optional[Dict[str, Any]] = None) -> str:
     """Create a new node from a template
 
     Args:
@@ -348,6 +349,7 @@ async def create_node_impl(app: "AppContext", template_name: str, x: int, y: int
         y: Y coordinate position (top-left corner of node icon)
         node_name: Optional custom name for the node
         compute_id: Compute ID (default: "local")
+        properties: Optional dict to override template properties
 
     Note: Coordinates represent the top-left corner of the node icon.
     Icon sizes are PNG: 78×78, SVG/internal: 58×58.
@@ -369,6 +371,8 @@ async def create_node_impl(app: "AppContext", template_name: str, x: int, y: int
         payload = {"x": x, "y": y, "compute_id": compute_id}
         if node_name:
             payload["name"] = node_name
+        if properties:
+            payload["properties"] = properties
 
         result = await app.gns3.create_node_from_template(
             app.current_project_id, template['template_id'], payload

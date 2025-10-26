@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.24.2",
+  "version": "0.24.3",
   "description": "GNS3 lab automation - 24 tools + 19 resources (3 static + 16 templates) + 5 prompts with project notes/memory",
-  "long_description": "COMPLETE MCP SERVER: 24 tools + 19 browsable resources (3 static lists + 16 project-scoped templates) + 5 workflow prompts. Version 0.24.2: Fixed templates resource - now global static resource (gns3://templates) instead of project-scoped. Templates are global and independent of projects. Static resources: projects, proxy/status, templates. For complete version history see CHANGELOG.md. Supports GNS3 v3 API.",
+  "long_description": "COMPLETE MCP SERVER: 24 tools + 19 browsable resources (3 static lists + 16 project-scoped templates) + 5 workflow prompts. Version 0.24.3: Fixed create_node tool - added missing properties parameter that caused signature mismatch error. Tool now fully functional. For complete version history see CHANGELOG.md. Supports GNS3 v3 API.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
