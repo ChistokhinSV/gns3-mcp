@@ -9,6 +9,8 @@ import os
 from typing import TYPE_CHECKING
 
 import httpx
+from error_utils import create_error_response
+from models import ErrorCode
 
 if TYPE_CHECKING:
     from main import AppContext
@@ -394,16 +396,25 @@ async def get_proxy_impl(app: "AppContext", proxy_id: str) -> str:
                         return json.dumps(proxy, indent=2)
 
                 # Proxy not found
-                return json.dumps({
-                    "error": f"Proxy not found: {proxy_id}",
-                    "available_proxies": [p.get("proxy_id") for p in proxies]
-                }, indent=2)
+                return create_error_response(
+                    error=f"Proxy not found: {proxy_id}",
+                    error_code=ErrorCode.PROXY_NOT_FOUND,
+                    details="The specified proxy_id does not exist in the registry",
+                    suggested_action="Check available proxies with gns3://proxies resource",
+                    context={"proxy_id": proxy_id, "available_proxies": [p.get("proxy_id") for p in proxies]}
+                )
             else:
-                return json.dumps({
-                    "error": "Failed to fetch proxy registry"
-                }, indent=2)
+                return create_error_response(
+                    error="Failed to fetch proxy registry",
+                    error_code=ErrorCode.PROXY_SERVICE_UNREACHABLE,
+                    details=f"HTTP {response.status_code} from proxy registry endpoint",
+                    suggested_action="Ensure SSH proxy service is running on port 8022"
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": str(e)
-            }, indent=2)
+            return create_error_response(
+                error="Failed to communicate with proxy service",
+                error_code=ErrorCode.PROXY_SERVICE_UNREACHABLE,
+                details=str(e),
+                suggested_action="Ensure SSH proxy service is running with Docker socket mounted"
+            )
