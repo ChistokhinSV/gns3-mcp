@@ -5,6 +5,7 @@ telnetlib3>=2.0.4
 pydantic>=2.0.0
 python-dotenv>=1.1.1
 cairosvg>=2.7.0
+docker>=7.1.0
 
 # Development/Testing dependencies
 pytest>=8.4.2

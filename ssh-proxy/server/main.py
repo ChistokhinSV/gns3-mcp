@@ -33,6 +33,7 @@ from .models import (
     SSHConnectionError
 )
 from .session_manager import SSHSessionManager
+from .docker_discovery import DockerProxyDiscovery
 
 # ============================================================================
 # Logging Configuration
@@ -50,15 +51,30 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 session_manager: Optional[SSHSessionManager] = None
+proxy_discovery: Optional[DockerProxyDiscovery] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize and cleanup resources"""
-    global session_manager
+    global session_manager, proxy_discovery
 
     logger.info("SSH Proxy Service starting...")
     session_manager = SSHSessionManager()
+
+    # Initialize proxy discovery (requires Docker socket and GNS3 credentials)
+    gns3_host = os.getenv("GNS3_HOST", "localhost")
+    gns3_port = int(os.getenv("GNS3_PORT", "80"))
+    gns3_user = os.getenv("GNS3_USERNAME", "admin")
+    gns3_pass = os.getenv("GNS3_PASSWORD", "")
+
+    proxy_discovery = DockerProxyDiscovery(
+        gns3_host=gns3_host,
+        gns3_port=gns3_port,
+        gns3_username=gns3_user,
+        gns3_password=gns3_pass
+    )
+
     logger.info(f"SSH Proxy Service ready on port {os.getenv('API_PORT', 8022)}")
 
     yield
@@ -68,6 +84,8 @@ async def lifespan(app: FastAPI):
     if session_manager:
         # Close all sessions
         await session_manager.cleanup_sessions(keep_nodes=[], clean_all=True)
+    if proxy_discovery:
+        proxy_discovery.close()
     logger.info("SSH Proxy Service stopped")
 
 
@@ -77,8 +95,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="GNS3 SSH Proxy",
-    description="SSH automation proxy for GNS3 network labs with Netmiko",
-    version="0.1.6",
+    description="SSH automation proxy for GNS3 network labs with Netmiko and proxy discovery",
+    version="0.2.0",
     lifespan=lifespan
 )
 
@@ -97,7 +115,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "gns3-ssh-proxy",
-        "version": "0.1.6"
+        "version": "0.2.0"
     }
 
 
@@ -113,8 +131,9 @@ async def get_version():
         Version information (version string and service name)
     """
     return {
-        "version": "0.1.6",
-        "service": "gns3-ssh-proxy"
+        "version": "0.2.0",
+        "service": "gns3-ssh-proxy",
+        "features": ["ssh_automation", "proxy_discovery"]
     }
 
 
@@ -510,6 +529,71 @@ async def cleanup_sessions(request: CleanupRequest):
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(error="Cleanup failed", details=str(e)).model_dump()
+        )
+
+
+# ============================================================================
+# Proxy Discovery Endpoints
+# ============================================================================
+
+@app.get("/proxy/registry")
+async def get_proxy_registry():
+    """
+    Get registry of all discovered lab proxies
+
+    Discovers lab proxies via Docker API (only works on main proxy with
+    /var/run/docker.sock mounted).
+
+    Returns:
+        JSON object with:
+        - available: bool - Docker API availability
+        - proxies: list - Discovered lab proxies
+        - count: int - Number of proxies found
+
+    Example response:
+        {
+            "available": true,
+            "proxies": [
+                {
+                    "proxy_id": "7217fd86-302f-460b-b764-5b96c9310f67",
+                    "hostname": "A-PROXY",
+                    "project_id": "2de2a4cc-0418-4280-880b-e283051f7d9d",
+                    "url": "http://192.168.1.20:5005",
+                    "console_port": 5005,
+                    "image": "chistokhinsv/gns3-ssh-proxy:latest",
+                    "discovered_via": "docker_api"
+                }
+            ],
+            "count": 1
+        }
+
+    Notes:
+        - Only works on main proxy (with Docker socket mounted)
+        - Lab proxies will return {"available": false, "proxies": [], "count": 0}
+        - Proxy IDs are persistent GNS3 node UUIDs (survive container recreation)
+    """
+    if not proxy_discovery or not proxy_discovery.docker_available:
+        return {
+            "available": False,
+            "proxies": [],
+            "count": 0,
+            "message": "Docker API not available. Mount /var/run/docker.sock to enable discovery."
+        }
+
+    try:
+        proxies = await proxy_discovery.discover_proxies()
+
+        return {
+            "available": True,
+            "proxies": [p.to_dict() for p in proxies],
+            "count": len(proxies)
+        }
+
+    except Exception as e:
+        logger.error(f"Error discovering proxies: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(error="Proxy discovery failed", details=str(e)).model_dump()
         )
 
 

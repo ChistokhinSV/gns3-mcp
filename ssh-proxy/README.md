@@ -1,12 +1,16 @@
 # GNS3 SSH Proxy Service
 
-FastAPI service for SSH automation using Netmiko with dual storage architecture.
+FastAPI service for SSH automation using Netmiko with dual storage architecture and proxy discovery.
 
 ## Features
 
 - **Dual Storage System**:
   - Continuous buffer (real-time stream of all output)
   - Command history (per-command audit trail with searchable jobs)
+- **Proxy Discovery** (v0.2.0+):
+  - Automatic discovery of lab proxies via Docker API
+  - Main proxy can discover all lab proxies in GNS3 projects
+  - Requires `/var/run/docker.sock` mount on main proxy
 - **Adaptive Async Execution**: Commands return immediately or poll based on execution time
 - **Netmiko Integration**: Full support for 200+ network device types
 - **Interactive Prompts**: Handle Y/N confirmations, password prompts, etc.
@@ -37,17 +41,32 @@ Storage:
 
 ```bash
 cd ssh-proxy
-docker build -t chistokhinsv/gns3-ssh-proxy:v0.1.1 .
+docker build -t chistokhinsv/gns3-ssh-proxy:v0.2.0 .
 ```
 
 ### 2. Run Container
 
+#### Lab Proxy (Inside GNS3):
 ```bash
 docker run -d \
   --name gns3-ssh-proxy \
   --network host \
   --restart unless-stopped \
-  chistokhinsv/gns3-ssh-proxy:v0.1.1
+  chistokhinsv/gns3-ssh-proxy:v0.2.0
+```
+
+#### Main Proxy (On GNS3 Host, with Discovery):
+```bash
+docker run -d \
+  --name gns3-ssh-proxy \
+  --network host \
+  --restart unless-stopped \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -e GNS3_HOST=localhost \
+  -e GNS3_PORT=80 \
+  -e GNS3_USERNAME=admin \
+  -e GNS3_PASSWORD=yourpassword \
+  chistokhinsv/gns3-ssh-proxy:v0.2.0
 ```
 
 ### 3. Verify
@@ -72,6 +91,11 @@ curl http://localhost:8022/health
 - **GET /ssh/history/{node_name}** - List command history
 - **GET /ssh/history/{node_name}/{job_id}** - Get specific command output
 - **GET /ssh/job/{job_id}** - Poll job status (async commands)
+
+### Proxy Discovery (v0.2.0+)
+- **GET /proxy/registry** - Get registry of all discovered lab proxies
+  - Only works on main proxy (with Docker socket mounted)
+  - Returns empty list on lab proxies
 
 ## Usage Example
 
