@@ -10,6 +10,8 @@ services:
     volumes:
       # Mount Docker socket (read-only) for lab proxy discovery
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount directory for sharing scripts/configs with host
+      - /opt/gns3-ssh-proxy:/opt/gns3-ssh-proxy
     environment:
       # API port (default: 8022)
       - API_PORT=8022
@@ -41,6 +43,9 @@ services:
   #   network_mode: host
   #   restart: unless-stopped
   #   # NO Docker socket mount - lab proxies don't need discovery
+  #   volumes:
+  #     # Mount directory for sharing scripts/configs with host
+  #     - /opt/gns3-ssh-proxy:/opt/gns3-ssh-proxy
   #   environment:
   #     - API_PORT=8022
   #     - LOG_LEVEL=INFO

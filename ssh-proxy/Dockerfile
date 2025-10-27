@@ -2,7 +2,20 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# Install dependencies
+# Install system packages for network diagnostics
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    iputils-ping \
+    traceroute \
+    iproute2 \
+    net-tools \
+    dnsutils \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directory for host file exchange
+RUN mkdir -p /opt/gns3-ssh-proxy && chmod 755 /opt/gns3-ssh-proxy
+
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

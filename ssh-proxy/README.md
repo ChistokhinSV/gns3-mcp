@@ -11,6 +11,12 @@ FastAPI service for SSH automation using Netmiko with dual storage architecture 
   - Automatic discovery of lab proxies via Docker API
   - Main proxy can discover all lab proxies in GNS3 projects
   - Requires `/var/run/docker.sock` mount on main proxy
+- **Diagnostic Tools** (v0.2.1+):
+  - Network diagnostics: ping, traceroute, ip, ss, netstat
+  - DNS tools: dig, nslookup
+  - HTTP client: curl
+  - Automation: ansible-core, python3, bash
+  - Shared directory: `/opt/gns3-ssh-proxy/` for scripts/playbooks exchange
 - **Adaptive Async Execution**: Commands return immediately or poll based on execution time
 - **Netmiko Integration**: Full support for 200+ network device types
 - **Interactive Prompts**: Handle Y/N confirmations, password prompts, etc.
@@ -41,7 +47,7 @@ Storage:
 
 ```bash
 cd ssh-proxy
-docker build -t chistokhinsv/gns3-ssh-proxy:v0.2.0 .
+docker build -t chistokhinsv/gns3-ssh-proxy:v0.2.1 .
 ```
 
 ### 2. Deploy with Docker Compose (Recommended)
@@ -64,7 +70,8 @@ docker run -d \
   --name gns3-ssh-proxy \
   --network host \
   --restart unless-stopped \
-  chistokhinsv/gns3-ssh-proxy:v0.2.0
+  -v /opt/gns3-ssh-proxy:/opt/gns3-ssh-proxy \
+  chistokhinsv/gns3-ssh-proxy:v0.2.1
 ```
 
 **Main Proxy (On GNS3 Host, with Discovery):**
@@ -74,11 +81,12 @@ docker run -d \
   --network host \
   --restart unless-stopped \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -v /opt/gns3-ssh-proxy:/opt/gns3-ssh-proxy \
   -e GNS3_HOST=localhost \
   -e GNS3_PORT=80 \
   -e GNS3_USERNAME=admin \
   -e GNS3_PASSWORD=yourpassword \
-  chistokhinsv/gns3-ssh-proxy:v0.2.0
+  chistokhinsv/gns3-ssh-proxy:v0.2.1
 ```
 
 ### 3. Verify
@@ -253,6 +261,59 @@ See `.env.example` for configuration options:
 - `TRIM_BUFFER_SIZE`: Buffer trim size (default: 5MB)
 - `MAX_HISTORY_JOBS`: Max jobs per session (default: 1000)
 
+## Diagnostic Tools (v0.2.1+)
+
+The SSH proxy container includes diagnostic tools for network troubleshooting and automation:
+
+### Network Diagnostics
+- `ping` - Test network connectivity
+- `traceroute` - Trace network path to destination
+- `ip` - Advanced IP routing and interface management
+- `ss` - Socket statistics
+- `netstat` - Network statistics
+
+### DNS Tools
+- `dig` - DNS lookup utility
+- `nslookup` - Query DNS servers
+
+### HTTP Client
+- `curl` - Transfer data with URLs (also used for healthchecks)
+
+### Automation
+- `ansible-core` - Network automation engine
+- `python3` (3.13) - Python interpreter
+- `bash` - Shell scripting
+
+### Shared Directory
+
+The `/opt/gns3-ssh-proxy/` directory is mounted from the host, allowing you to:
+- Share ansible playbooks between host and container
+- Exchange scripts and configuration files
+- Store troubleshooting data persistently
+
+**Example - Run ansible playbook from container:**
+```bash
+# On GNS3 host: place playbook in /opt/gns3-ssh-proxy/
+sudo cp my-playbook.yml /opt/gns3-ssh-proxy/
+
+# Inside container: run playbook
+docker exec -it gns3-ssh-proxy-main bash
+cd /opt/gns3-ssh-proxy
+ansible-playbook my-playbook.yml -i inventory.ini
+```
+
+**Example - Network diagnostics:**
+```bash
+# Ping from container
+docker exec gns3-ssh-proxy-main ping -c 3 10.10.10.1
+
+# DNS lookup
+docker exec gns3-ssh-proxy-main dig example.com
+
+# Check interface configuration
+docker exec gns3-ssh-proxy-main ip addr show
+```
+
 ## Development
 
 ### Local Testing
@@ -278,16 +339,26 @@ See [DEPLOYMENT.md](../DEPLOYMENT.md) for complete deployment instructions for G
 
 ## Version
 
-Current version: **0.1.6** (Feature - Session Management & Stale Session Recovery)
+Current version: **0.2.1** (Feature - Diagnostic Tools & Shared Directory)
+
+**v0.2.1 Changes:**
+- **NEW**: Network diagnostic tools (ping, traceroute, ip, ss, netstat)
+- **NEW**: DNS tools (dig, nslookup)
+- **NEW**: HTTP client (curl) - fixes healthcheck functionality
+- **NEW**: ansible-core for network automation playbooks
+- **NEW**: Shared directory `/opt/gns3-ssh-proxy/` for exchanging scripts/configs with host
+- **ENHANCED**: Docker image now suitable for interactive troubleshooting and automation
+- **SIZE**: Image increased by ~100-150MB to ~500-550MB total
+
+**v0.2.0 Changes:**
+- **NEW**: Proxy Discovery - Automatic discovery of lab proxies via Docker API
+- **NEW**: Main proxy can discover all lab proxies in GNS3 projects
+- **REQUIRES**: `/var/run/docker.sock` mount on main proxy for discovery
 
 **v0.1.6 Changes:**
 - **NEW**: 30-minute session TTL with automatic expiry detection
 - **NEW**: Session health checks detect stale/closed connections before reuse
 - **NEW**: Auto-cleanup on "Socket is closed" errors
 - **NEW**: Structured error responses with `error_code` and `suggested_action` fields
-- **ENHANCED**: `last_activity` timestamp updated on all operations
-- **ENHANCED**: Better error messages for timeout and socket closure errors
-
-**Previous:** v0.1.5 - Added `/version` endpoint for API monitoring
 
 See [CLAUDE.md](../CLAUDE.md) for full version history and changelog.
