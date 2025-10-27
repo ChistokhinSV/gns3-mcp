@@ -12,6 +12,59 @@ _(No active issues)_
 
 ## Resolved Issues
 
+### [RESOLVED] Auto-Connect to Opened Projects (v0.28.1)
+**Discovered**: 2025-10-27
+**Affects**: MCP Server v0.1.0+
+**Severity**: Medium - UX issue, commands fail unnecessarily
+**Resolved**: 2025-10-27
+
+#### Problem
+Commands fail with "No project opened" even when a project is open in GNS3, because:
+- MCP server only detects opened projects at **startup**
+- If project is opened in GNS3 GUI **after** MCP starts, tools don't auto-connect
+- Users must manually call `open_project()` even though project is already opened
+
+#### Symptoms
+```json
+{
+  "error": "No project opened",
+  "details": "Use open_project() to open a project first",
+  "suggested_action": "Call list_projects() to see available projects, then open_project(project_name)"
+}
+```
+
+#### Root Cause
+Disconnect between two states:
+- **GNS3 "opened" status**: Project is open in GNS3 server (visible in GUI)
+- **MCP "connected" state**: MCP session has stored `current_project_id`
+
+The `validate_current_project()` function only checked `app.current_project_id` and failed if None, without attempting to auto-detect opened projects.
+
+#### Resolution
+Enhanced `validate_current_project()` to auto-connect:
+1. If `current_project_id` is None, query GNS3 for opened projects
+2. If project(s) found with status="opened", auto-connect to first one
+3. Log auto-connection with project name and ID
+4. Warn if multiple projects are opened
+5. Updated error messages to distinguish "no projects in GNS3" vs "multiple opened"
+
+**Benefits:**
+- ✅ Seamless UX - works with projects opened in GUI
+- ✅ No breaking changes - existing code continues to work
+- ✅ Clear error messages if no projects are opened
+- ✅ Matches user expectations
+
+#### Files Changed
+- `mcp-server/server/main.py`: Modified `validate_current_project()` function (lines 463-526)
+
+#### Testing Scenarios
+1. ✅ Start MCP with no opened projects → tools fail with clear error
+2. ✅ Open project in GNS3 GUI → tools auto-connect and work
+3. ✅ Open project via `open_project()` → continues to work as before
+4. ✅ Close project in GNS3 → tools detect and give clear error
+
+---
+
 ### [RESOLVED] configure_node_network Tool: ErrorCode.INVALID_OPERATION + Wrong Node Type (v0.27.0)
 **Discovered**: 2025-10-26
 **Affects**: MCP Server v0.27.0

@@ -461,7 +461,10 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 # Helper Functions
 
 async def validate_current_project(app: AppContext) -> Optional[str]:
-    """Validate that current project is still open
+    """Validate that current project is still open, with auto-connect to opened projects
+
+    If no project is connected but one is opened in GNS3, automatically connects to it.
+    This provides seamless UX when projects are opened via GNS3 GUI.
 
     Args:
         app: Application context
@@ -469,17 +472,31 @@ async def validate_current_project(app: AppContext) -> Optional[str]:
     Returns:
         Error message if invalid, None if valid
     """
-    if not app.current_project_id:
-        return json.dumps(ErrorResponse(
-            error="No project opened",
-            details="Use open_project() to open a project first",
-            suggested_action="Call list_projects() to see available projects, then open_project(project_name)"
-        ).model_dump(), indent=2)
-
     try:
         # Get project list directly from API
         projects = await app.gns3.get_projects()
 
+        # If no project connected, try to auto-connect to opened project
+        if not app.current_project_id:
+            opened = [p for p in projects if p.get("status") == "opened"]
+
+            if not opened:
+                return json.dumps(ErrorResponse(
+                    error="No project opened in GNS3",
+                    details="No projects are currently opened. Open a project in GNS3 or use open_project()",
+                    suggested_action="Open a project in GNS3 GUI, or call list_projects() then open_project(project_name)"
+                ).model_dump(), indent=2)
+
+            # Auto-connect to the first opened project
+            app.current_project_id = opened[0]["project_id"]
+            logger.info(f"Auto-connected to opened project: {opened[0]['name']} ({opened[0]['project_id']})")
+
+            if len(opened) > 1:
+                logger.warning(f"Multiple projects opened ({len(opened)}), connected to: {opened[0]['name']}")
+
+            return None  # Successfully auto-connected
+
+        # Validate that connected project still exists and is opened
         project = next((p for p in projects
                        if p['project_id'] == app.current_project_id), None)
 
