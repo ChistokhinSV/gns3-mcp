@@ -1,8 +1,11 @@
 FROM python:3.13-slim
 
+# Build argument to control ansible installation
+ARG INSTALL_ANSIBLE=false
+
 WORKDIR /app
 
-# Install system packages for network diagnostics
+# Install system packages and create directory in one layer
 RUN apt-get update && apt-get install -y --no-install-recommends \
     iputils-ping \
     traceroute \
@@ -10,16 +13,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     net-tools \
     dnsutils \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /opt/gns3-ssh-proxy && chmod 755 /opt/gns3-ssh-proxy
 
-# Create directory for host file exchange
-RUN mkdir -p /opt/gns3-ssh-proxy && chmod 755 /opt/gns3-ssh-proxy
-
-# Install Python dependencies
+# Copy and install base Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
+# Copy application code (most frequently changing layer)
 COPY server/ ./server/
 
 # Expose SSH proxy port
