@@ -406,24 +406,31 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         password=args.password
     )
 
-    # Authenticate with retry (every 30 seconds, infinite retries)
-    await gns3.authenticate(retry=True, retry_interval=30)
-
-    # Initialize console manager
+    # Initialize console manager first (no dependencies)
     console = ConsoleManager()
 
     # Start periodic cleanup task
     cleanup_task = asyncio.create_task(periodic_console_cleanup(console))
 
-    # Auto-detect opened project
-    projects = await gns3.get_projects()
-    opened = [p for p in projects if p.get("status") == "opened"]
-    current_project_id = opened[0]["project_id"] if opened else None
+    # Try initial authentication (max 3 attempts)
+    # If fails, continue initialization - auth will retry in background on first API call
+    try:
+        await gns3.authenticate(retry=True, retry_interval=5, max_retries=3)
+        logger.info("Successfully authenticated with GNS3 server")
 
-    if current_project_id:
-        logger.info(f"Auto-detected opened project: {opened[0]['name']}")
-    else:
-        logger.warning("No opened project found - some tools require opening a project first")
+        # Auto-detect opened project
+        projects = await gns3.get_projects()
+        opened = [p for p in projects if p.get("status") == "opened"]
+        current_project_id = opened[0]["project_id"] if opened else None
+
+        if current_project_id:
+            logger.info(f"Auto-detected opened project: {opened[0]['name']}")
+        else:
+            logger.warning("No opened project found - some tools require opening a project first")
+    except Exception as e:
+        logger.warning(f"Initial authentication failed: {e}")
+        logger.warning("MCP server will continue starting - tools will retry authentication as needed")
+        current_project_id = None
 
     # Create context (resource_manager needs context, so create first then update)
     context = AppContext(

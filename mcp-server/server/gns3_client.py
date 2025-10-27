@@ -72,6 +72,14 @@ class GNS3Client:
 
                 await asyncio.sleep(retry_interval)
 
+    async def _ensure_authenticated(self) -> None:
+        """Ensure we have a valid token, authenticate if needed"""
+        if not self.token:
+            logger.info("No auth token - attempting authentication...")
+            success = await self.authenticate(retry=True, retry_interval=5, max_retries=3)
+            if not success:
+                raise RuntimeError("Failed to authenticate with GNS3 server after multiple attempts")
+
     def _headers(self) -> Dict[str, str]:
         """Get headers with Bearer token"""
         if not self.token:
@@ -102,6 +110,7 @@ class GNS3Client:
 
     async def get_projects(self) -> List[Dict[str, Any]]:
         """GET /v3/projects - list all projects"""
+        await self._ensure_authenticated()
         response = await self.client.get(
             f"{self.base_url}/v3/projects",
             headers=self._headers()

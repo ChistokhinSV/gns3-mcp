@@ -44,6 +44,74 @@ Use MCP resources and tools instead of local file operations:
 
 ## Resolved Issues
 
+### [RESOLVED] MCP Server Hangs on Startup (Resource Not Found) (v0.28.3)
+**Discovered**: 2025-10-27
+**Affects**: MCP Server v0.27.1+
+**Severity**: Critical - Server becomes unusable on agent restart if GNS3 unavailable
+**Resolved**: 2025-10-27
+
+#### Problem
+MCP server hangs during initialization when GNS3 server is temporarily unavailable, causing "resource not found" errors even though resources are registered.
+
+**Symptoms**:
+- Resources fail with "MCP server resource not found"
+- Happens on AI agent 3rd+ restart
+- Server appears running but doesn't respond
+- All resource URIs fail (e.g., `gns3://projects/{id}`)
+
+#### Root Cause
+**Blocking authentication during startup** (main.py:410):
+```python
+await gns3.authenticate(retry=True, retry_interval=30)  # BLOCKS FOREVER
+```
+
+**Sequence**:
+1. AI agent restarts → triggers MCP server restart
+2. MCP starts initialization
+3. Tries to authenticate with GNS3 (retry=True, no max_retries)
+4. If GNS3 slow/unavailable → **blocks forever** in retry loop
+5. Lifespan never completes → resources never become available
+6. Tools fail with "resource not found"
+
+#### Resolution
+**1. Non-blocking startup** (main.py:415-433):
+```python
+try:
+    # Max 3 attempts during startup, then continue
+    await gns3.authenticate(retry=True, retry_interval=5, max_retries=3)
+    logger.info("Successfully authenticated")
+    # Auto-detect project...
+except Exception as e:
+    logger.warning(f"Initial auth failed: {e}")
+    logger.warning("Server will continue - tools retry auth as needed")
+    current_project_id = None
+```
+
+**2. Lazy authentication** (gns3_client.py:75-81):
+```python
+async def _ensure_authenticated(self) -> None:
+    """Ensure we have valid token, authenticate if needed"""
+    if not self.token:
+        success = await self.authenticate(retry=True, retry_interval=5, max_retries=3)
+        if not success:
+            raise RuntimeError("Failed to authenticate after multiple attempts")
+```
+
+Added to `get_projects()` and other API calls - tools auto-retry auth even if startup failed.
+
+#### Benefits
+- ✅ Server starts quickly even if GNS3 unavailable
+- ✅ Resources always available
+- ✅ Tools auto-retry authentication as needed
+- ✅ No indefinite hangs
+- ✅ Clear error messages when GNS3 is down
+
+#### Files Changed
+- `mcp-server/server/main.py`: Non-blocking startup with try/except (lines 409-433)
+- `mcp-server/server/gns3_client.py`: Added `_ensure_authenticated()` (lines 75-81), used in `get_projects()` (line 113)
+
+---
+
 ### [RESOLVED] Export Topology: Float Infinity Error on Empty Projects (v0.28.2)
 **Discovered**: 2025-10-27
 **Affects**: MCP Server v0.9.1+
