@@ -5,6 +5,87 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.0] - Local Execution on SSH Proxy Container (FEATURE)
+
+### Added
+- **NEW**: Local execution support for ssh_command() and ssh_batch() tools
+  - Use `node_name="@"` to execute commands directly on SSH proxy container
+  - No ssh_configure() needed for local execution
+  - Available tools in container: ping, traceroute, dig, curl, ansible-core, python3, bash
+  - Working directory: `/opt/gns3-ssh-proxy/` (ansible playbooks mount)
+  - Mix local and remote operations in ssh_batch()
+
+- **SSH Proxy Service**: New `/local/execute` endpoint (v0.2.2)
+  - Execute shell commands on SSH proxy container via REST API
+  - Supports single command (string) or bash script (list of commands)
+  - Returns: success, output, exit_code, execution_time
+  - Timeout configurable (default: 30 seconds)
+  - Commands execute in /opt/gns3-ssh-proxy directory
+
+- **MCP Server**: Local execution detection in SSH tools
+  - `ssh_send_command_impl()`: Detects node_name="@" and routes to local execution
+  - `ssh_send_config_set_impl()`: Treats config_commands as bash script for local execution
+  - `execute_local_command()`: Helper function to call SSH proxy /local/execute endpoint
+
+### Changed
+- **MCP Server**: Updated tool docstrings with local execution examples
+  - `ssh_configure()`: Documents node_name="@" special case
+  - `ssh_command()`: Added 3 local execution examples
+  - `ssh_batch()`: Added connectivity testing example
+- **SKILL.md**: New section "Local Execution on SSH Proxy Container"
+  - Why use local execution
+  - Available tools
+  - File sharing with host
+  - Usage examples
+- **SSH Proxy**: Version 0.2.1→0.2.2 (bugfix - adds feature)
+- **MCP Server**: Version 0.27.1→0.28.0 (feature)
+- **manifest.json**: Updated description and long_description with local execution info
+
+### Use Cases
+- **Connectivity Testing**: Ping/traceroute from container before accessing devices
+- **Ansible Automation**: Run playbooks from /opt/gns3-ssh-proxy mount
+- **DNS Queries**: Verify name resolution for lab devices
+- **Custom Scripts**: Execute Python/bash scripts for multi-device orchestration
+- **Batch Diagnostics**: Test multiple IPs before configuring devices
+
+### Technical Details
+- **NO BREAKING CHANGES**: Additive feature, all existing functionality unchanged
+- **FILES CHANGED**:
+  - SSH Proxy Service:
+    - `ssh-proxy/server/models.py`: Added LocalExecuteRequest/Response models (+32 LOC)
+    - `ssh-proxy/server/main.py`: Added /local/execute endpoint (+95 LOC), version 0.2.1→0.2.2
+  - MCP Server:
+    - `mcp-server/server/tools/ssh_tools.py`: Added execute_local_command(), detection in ssh_send_* (+80 LOC)
+    - `mcp-server/server/main.py`: Updated docstrings for 3 tools (+60 LOC)
+    - `mcp-server/manifest.json`: Version 0.27.1→0.28.0, description updates
+  - Documentation:
+    - `skill/SKILL.md`: New section with examples (+57 LOC)
+- **RATIONALE**: Enables diagnostic tools and ansible orchestration from single execution point,
+  reduces need for separate automation host, leverages existing SSH proxy container infrastructure
+
+### Examples
+
+```python
+# Test connectivity
+ssh_command("@", "ping -c 3 10.10.10.1")
+
+# Run ansible playbook
+ssh_command("@", "ansible-playbook /opt/gns3-ssh-proxy/backup.yml")
+
+# Bash script
+ssh_command("@", [
+    "cd /opt/gns3-ssh-proxy",
+    "python3 backup_configs.py",
+    "ls -la backups/"
+])
+
+# Batch - test then configure
+ssh_batch([
+    {"type": "send_command", "node_name": "@", "command": "ping -c 2 10.1.1.1"},
+    {"type": "send_command", "node_name": "R1", "command": "show ip int brief"}
+])
+```
+
 ## [0.27.1] - GNS3 Server Auto-Reconnect (BUGFIX)
 
 ### Added

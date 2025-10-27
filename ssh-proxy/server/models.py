@@ -330,6 +330,33 @@ class ErrorResponse(BaseModel):
 
 
 # ============================================================================
+# Local Execution (v0.2.2)
+# ============================================================================
+
+class LocalExecuteRequest(BaseModel):
+    """Request to execute command locally on SSH proxy container"""
+    command: str | List[str] = Field(..., description="Command or list of commands to execute")
+    timeout: int = Field(default=30, description="Execution timeout in seconds")
+    working_dir: str = Field(
+        default="/opt/gns3-ssh-proxy",
+        description="Working directory for command execution"
+    )
+    shell: bool = Field(
+        default=True,
+        description="Execute through shell (allows pipes, redirects)"
+    )
+
+
+class LocalExecuteResponse(BaseModel):
+    """Response from local command execution"""
+    success: bool = Field(description="Whether command executed successfully")
+    output: str = Field(default="", description="Combined stdout and stderr")
+    exit_code: int = Field(description="Command exit code")
+    execution_time: float = Field(description="Execution time in seconds")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ============================================================================
 # Internal Session State
 # ============================================================================
 

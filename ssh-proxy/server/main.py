@@ -10,6 +10,8 @@ Port: 8022 (SSH-like mnemonic)
 
 import logging
 import os
+import subprocess
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -26,6 +28,8 @@ from .models import (
     ErrorResponse,
     HistoryResponse,
     Job,
+    LocalExecuteRequest,
+    LocalExecuteResponse,
     ReadBufferRequest,
     SendCommandRequest,
     SendConfigSetRequest,
@@ -96,7 +100,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GNS3 SSH Proxy",
     description="SSH automation proxy for GNS3 network labs with Netmiko and proxy discovery",
-    version="0.2.1",
+    version="0.2.2",
     lifespan=lifespan
 )
 
@@ -595,6 +599,102 @@ async def get_proxy_registry():
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(error="Proxy discovery failed", details=str(e)).model_dump()
+        )
+
+
+# ============================================================================
+# Local Execution (v0.2.2)
+# ============================================================================
+
+@app.post("/local/execute", response_model=LocalExecuteResponse)
+async def local_execute(request: LocalExecuteRequest):
+    """
+    Execute command(s) locally on SSH proxy container
+
+    Use for:
+    - Ansible playbooks from /opt/gns3-ssh-proxy mount
+    - Network diagnostics (ping, traceroute, dig)
+    - Custom scripts and automation
+
+    Commands execute in /opt/gns3-ssh-proxy by default.
+
+    Args:
+        request: LocalExecuteRequest with command, timeout, working_dir
+
+    Returns:
+        LocalExecuteResponse with success, output, exit_code, execution_time
+
+    Examples:
+        # Single command
+        POST /local/execute {"command": "ping -c 3 8.8.8.8"}
+
+        # Multiple commands (list = shell script)
+        POST /local/execute {"command": ["cd /opt/gns3-ssh-proxy", "ls -la"]}
+
+        # Ansible playbook
+        POST /local/execute {"command": "ansible-playbook /opt/gns3-ssh-proxy/backup.yml"}
+    """
+    start_time = time.time()
+
+    try:
+        # Handle list of commands - join with && for sequential execution
+        if isinstance(request.command, list):
+            command_str = " && ".join(request.command)
+        else:
+            command_str = request.command
+
+        logger.info(f"[LOCAL] Executing: {command_str[:100]}...")
+
+        # Execute command with subprocess
+        result = subprocess.run(
+            command_str,
+            shell=request.shell,
+            cwd=request.working_dir,
+            capture_output=True,
+            text=True,
+            timeout=request.timeout
+        )
+
+        execution_time = time.time() - start_time
+
+        # Combine stdout and stderr
+        output = result.stdout
+        if result.stderr:
+            output += "\n" + result.stderr
+
+        success = (result.returncode == 0)
+        error_msg = None if success else f"Command exited with code {result.returncode}"
+
+        logger.info(f"[LOCAL] Completed in {execution_time:.2f}s, exit_code={result.returncode}")
+
+        return LocalExecuteResponse(
+            success=success,
+            output=output.strip() if output else "",
+            exit_code=result.returncode,
+            execution_time=round(execution_time, 3),
+            error=error_msg
+        )
+
+    except subprocess.TimeoutExpired:
+        execution_time = time.time() - start_time
+        logger.error(f"[LOCAL] Command timed out after {request.timeout}s")
+        return LocalExecuteResponse(
+            success=False,
+            output="",
+            exit_code=-1,
+            execution_time=round(execution_time, 3),
+            error=f"Command timed out after {request.timeout} seconds"
+        )
+
+    except Exception as e:
+        execution_time = time.time() - start_time
+        logger.error(f"[LOCAL] Command failed: {e}")
+        return LocalExecuteResponse(
+            success=False,
+            output="",
+            exit_code=-1,
+            execution_time=round(execution_time, 3),
+            error=f"Command execution failed: {str(e)}"
         )
 
 

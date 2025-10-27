@@ -193,6 +193,64 @@ usage = read_resource("gns3://projects/{id}/nodes/{node_id}/template")
 3. Switch to SSH tools for all automation
 4. Return to console only if SSH fails
 
+### Local Execution on SSH Proxy Container (v0.28.0)
+
+**Use node_name="@" to execute commands directly on the SSH proxy container.**
+
+**Why Use Local Execution:**
+- Test connectivity before accessing devices (ping, traceroute)
+- Run ansible playbooks from /opt/gns3-ssh-proxy mount
+- Execute diagnostic tools not available on network devices
+- Orchestrate multi-device operations with custom scripts
+
+**Available Tools:**
+- **Network diagnostics**: ping, traceroute, ip, ss, netstat
+- **DNS queries**: dig, nslookup
+- **HTTP client**: curl
+- **Automation**: ansible-core, python3, bash
+- **Working directory**: /opt/gns3-ssh-proxy (shared with host)
+
+**Key Advantages:**
+- No ssh_configure() needed
+- Direct access to diagnostic tools
+- Ansible playbooks can orchestrate multiple devices
+- Mix local and remote commands in ssh_batch()
+
+**Examples:**
+
+```python
+# Test connectivity before device access
+ssh_command("@", "ping -c 3 10.10.10.1")
+
+# Run ansible playbook (mounted from host)
+ssh_command("@", "ansible-playbook /opt/gns3-ssh-proxy/backup.yml -i inventory")
+
+# DNS lookup for lab devices
+ssh_command("@", "dig router1.lab.local")
+
+# Bash script (list of commands)
+ssh_command("@", [
+    "cd /opt/gns3-ssh-proxy",
+    "python3 backup_configs.py",
+    "ls -la backups/"
+])
+
+# Batch operations - test connectivity then configure devices
+ssh_batch([
+    {"type": "send_command", "node_name": "@", "command": "ping -c 2 10.1.1.1"},
+    {"type": "send_command", "node_name": "@", "command": "ping -c 2 10.1.1.2"},
+    {"type": "send_command", "node_name": "R1", "command": "show ip int brief"},
+    {"type": "send_command", "node_name": "R2", "command": "show ip int brief"}
+])
+```
+
+**File Sharing with Host:**
+1. Place files in `/opt/gns3-ssh-proxy/` on GNS3 host
+2. Access same path in container
+3. Useful for: ansible playbooks, Python scripts, configuration templates
+
+**Note:** Local execution returns `{success, output, exit_code}` instead of SSH job format.
+
 ### Error Responses
 
 **All tools return standardized error responses** (v0.20.0) with machine-readable error codes and actionable guidance.

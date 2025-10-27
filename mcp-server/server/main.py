@@ -1902,6 +1902,11 @@ async def ssh_configure(
 
     IMPORTANT: Enable SSH on device first using console tools.
 
+    Special Node Names (v0.28.0):
+    - node_name="@": Local execution (no SSH session needed)
+      Execute commands directly on SSH proxy container with diagnostic tools
+      (ping, traceroute, dig, curl, ansible). Working dir: /opt/gns3-ssh-proxy
+
     Multi-Proxy Support (v0.26.0):
     - Use 'proxy' parameter to route through specific proxy
     - proxy="host" (default): Use main proxy on GNS3 host
@@ -1921,7 +1926,7 @@ async def ssh_configure(
     4. Retry your ssh_command() - it will work
 
     Args:
-        node_name: Node identifier
+        node_name: Node identifier (or "@" for local execution)
         device_dict: Netmiko config dict (device_type, host, username, password, port, secret)
         persist: Store credentials for reconnection (default: True)
         force: Force recreation even if healthy session exists (default: False)
@@ -1971,22 +1976,28 @@ async def ssh_command(
 ) -> str:
     """Execute command(s) via SSH with auto-detection (show vs config)
 
+    Local Execution (v0.28.0):
+    - Use node_name="@" to execute commands on SSH proxy container
+    - No ssh_configure() needed for local execution
+    - Access to: ping, traceroute, dig, curl, ansible, python3, bash
+    - Working directory: /opt/gns3-ssh-proxy (ansible playbooks mount)
+
     Auto-detects command type:
     - String: Single show command (uses ssh_send_command)
-    - List: Configuration commands (uses ssh_send_config_set)
+    - List: Configuration commands or bash script (uses ssh_send_config_set)
 
     Long commands: Set read_timeout high, wait_timeout=0 for job_id,
     poll with resource gns3://sessions/ssh/{node}/jobs/{id}
 
     Args:
-        node_name: Node identifier
-        command: Command(s) - string for show, list for config
+        node_name: Node identifier (or "@" for local execution)
+        command: Command(s) - string for show/single command, list for config/bash script
         expect_string: Regex pattern to wait for (overrides prompt detection, optional)
         read_timeout: Max seconds to wait for output (default: 30)
         wait_timeout: Seconds to poll before returning job_id (default: 30)
 
     Returns:
-        JSON with completed, job_id, output, execution_time
+        JSON with completed, job_id, output, execution_time (or success, output, exit_code for local)
 
     Examples:
         # Show command (string)
@@ -1997,6 +2008,19 @@ async def ssh_command(
             "interface GigabitEthernet0/0",
             "ip address 192.168.1.1 255.255.255.0",
             "no shutdown"
+        ])
+
+        # Local execution - single command
+        ssh_command("@", "ping -c 3 10.10.10.1")
+
+        # Local execution - ansible playbook
+        ssh_command("@", "ansible-playbook /opt/gns3-ssh-proxy/backup.yml")
+
+        # Local execution - bash script (list)
+        ssh_command("@", [
+            "cd /opt/gns3-ssh-proxy",
+            "python3 backup_configs.py",
+            "ls -la backups/"
         ])
     """
     app: AppContext = ctx.request_context.lifespan_context
@@ -2030,19 +2054,24 @@ async def ssh_disconnect(ctx: Context, node_name: str) -> str:
 async def ssh_batch(ctx: Context, operations: list[dict]) -> str:
     """Execute multiple SSH operations in batch with validation
 
+    Local Execution Support (v0.28.0):
+    - Use node_name="@" in any operation for local execution on SSH proxy container
+    - Mix local and remote operations in same batch
+    - Useful for: connectivity tests before device access, ansible playbooks
+
     Two-phase execution prevents partial failures:
     1. VALIDATE ALL operations (check required params, valid types)
     2. EXECUTE ALL operations (only if all valid, sequential execution)
 
     Supported operation types:
-    - "send_command": Execute show command
-    - "send_config_set": Send configuration commands
+    - "send_command": Execute show command (or local command with node_name="@")
+    - "send_config_set": Send configuration commands (or bash script with node_name="@")
     - "read_buffer": Read SSH buffer with optional grep
 
     Args:
         operations: List of operation dicts, each with:
             - type (str): Operation type (required)
-            - node_name (str): Node name (required)
+            - node_name (str): Node name (or "@" for local execution) (required)
             - Additional params specific to operation type
 
     Returns:
@@ -2071,6 +2100,14 @@ async def ssh_batch(ctx: Context, operations: list[dict]) -> str:
                 "no shutdown"
             ]
         }])
+
+        # Local execution - test connectivity before device access:
+        ssh_batch([
+            {"type": "send_command", "node_name": "@", "command": "ping -c 2 10.1.1.1"},
+            {"type": "send_command", "node_name": "@", "command": "ping -c 2 10.1.1.2"},
+            {"type": "send_command", "node_name": "R1", "command": "show ip int brief"},
+            {"type": "send_command", "node_name": "R2", "command": "show ip int brief"}
+        ])
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await ssh_batch_impl(app, operations)

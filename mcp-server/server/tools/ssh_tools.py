@@ -102,6 +102,55 @@ async def _resolve_proxy_url(proxy: str) -> str:
 
 
 # ============================================================================
+# Local Execution (v0.28.0)
+# ============================================================================
+
+async def execute_local_command(
+    proxy_url: str,
+    command: str | List[str],
+    timeout: float = 30.0
+) -> str:
+    """
+    Execute command(s) locally on SSH proxy container
+
+    Args:
+        proxy_url: SSH proxy URL
+        command: Command string or list of commands
+        timeout: Execution timeout in seconds
+
+    Returns:
+        JSON with success, output, exit_code, execution_time
+    """
+    async with httpx.AsyncClient(timeout=timeout + 10) as client:
+        try:
+            response = await client.post(
+                f"{proxy_url}/local/execute",
+                json={
+                    "command": command,
+                    "timeout": int(timeout),
+                    "working_dir": "/opt/gns3-ssh-proxy",
+                    "shell": True
+                }
+            )
+
+            if response.status_code == 200:
+                return json.dumps(response.json(), indent=2)
+            else:
+                error_data = response.json()
+                return json.dumps({
+                    "error": "Local execution failed",
+                    "details": error_data.get("detail", str(error_data))
+                }, indent=2)
+
+        except Exception as e:
+            return json.dumps({
+                "error": "Local execution failed",
+                "details": str(e),
+                "suggestion": "Ensure SSH proxy service supports local execution (v0.2.2+)"
+            }, indent=2)
+
+
+# ============================================================================
 # Session Management
 # ============================================================================
 
@@ -266,6 +315,12 @@ async def ssh_send_command_impl(
     """
     Execute show command via SSH with adaptive async
 
+    Local Execution (v0.28.0):
+    - Use node_name="@" to execute command on SSH proxy container
+    - No ssh_configure() needed for local execution
+    - Access to diagnostic tools: ping, traceroute, dig, curl, ansible
+    - Working directory: /opt/gns3-ssh-proxy
+
     Creates Job immediately, polls for wait_timeout seconds.
     Returns output if completes, else returns job_id for polling.
 
@@ -283,7 +338,7 @@ async def ssh_send_command_impl(
     - Example: expect_string=r"Delete filename.*?"
 
     Args:
-        node_name: Node identifier
+        node_name: Node identifier (or "@" for local execution)
         command: Command to execute
         expect_string: Regex pattern to wait for (overrides prompt detection)
         read_timeout: Max time to wait for output (seconds)
@@ -292,6 +347,10 @@ async def ssh_send_command_impl(
     Returns:
         JSON with completed, job_id, output, execution_time
     """
+    # Local execution mode (v0.28.0)
+    if node_name == "@":
+        return await execute_local_command(SSH_PROXY_URL, command, read_timeout)
+
     # Get proxy URL for this node (v0.26.0)
     proxy_url = _get_proxy_url_for_node(app, node_name)
 
@@ -335,6 +394,11 @@ async def ssh_send_config_set_impl(
     """
     Send configuration commands via SSH
 
+    Local Execution (v0.28.0):
+    - Use node_name="@" to execute commands as bash script on SSH proxy container
+    - Commands joined with "&&" for sequential execution
+    - Working directory: /opt/gns3-ssh-proxy
+
     Creates Job immediately, uses adaptive async pattern.
 
     Multi-Proxy Support (v0.26.0):
@@ -342,8 +406,8 @@ async def ssh_send_config_set_impl(
     - Automatically uses correct proxy for isolated networks
 
     Args:
-        node_name: Node identifier
-        config_commands: List of configuration commands
+        node_name: Node identifier (or "@" for local execution)
+        config_commands: List of configuration commands (or bash commands for local)
         wait_timeout: Time to poll before returning job_id (seconds)
 
     Returns:
@@ -355,7 +419,18 @@ async def ssh_send_config_set_impl(
             'ip address 192.168.1.1 255.255.255.0',
             'no shutdown'
         ])
+
+        # Local execution example
+        ssh_send_config_set('@', [
+            'cd /opt/gns3-ssh-proxy',
+            'python3 backup_configs.py',
+            'ls -la backups/'
+        ])
     """
+    # Local execution mode (v0.28.0)
+    if node_name == "@":
+        return await execute_local_command(SSH_PROXY_URL, config_commands, wait_timeout)
+
     # Get proxy URL for this node (v0.26.0)
     proxy_url = _get_proxy_url_for_node(app, node_name)
 
