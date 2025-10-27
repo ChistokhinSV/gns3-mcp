@@ -8,6 +8,38 @@ _(No active issues)_
 
 ---
 
+## Not Bugs (Expected Behavior)
+
+### [NOT A BUG] Grep Error on Project Paths (Windows + Linux GNS3 Server)
+**Reported**: 2025-10-27
+**Affects**: Windows clients with GNS3 server on Linux
+**Severity**: Low - Not an MCP server issue
+
+#### Problem
+When using Claude Code on Windows with GNS3 server on Linux, grep operations fail with:
+```
+Grep error: The directory name is invalid. (os error 267)
+```
+
+#### Root Cause
+This is **expected behavior** when Claude Code tries to use local Grep tool on Linux paths:
+- GNS3 server returns Linux paths: `/opt/gns3/projects/{id}`
+- Windows cannot access Linux paths directly
+- Error occurs when Claude tries to `Grep` the project directory
+
+#### Not an MCP Server Bug
+- MCP server correctly returns project paths from GNS3 API
+- Project paths are meant for GNS3 server, not client filesystem access
+- MCP tools use HTTP API (not filesystem) - they work correctly
+- Issue is Claude Code trying to use Grep on server paths
+
+#### Workaround
+Use MCP resources and tools instead of local file operations:
+- ✅ Read README: `gns3://projects/{id}/readme` resource
+- ✅ Get nodes: `gns3://projects/{id}/nodes` resource
+- ✅ File operations: Use Docker node tools (get_node_file, write_node_file)
+- ❌ Don't use local Grep/Read on GNS3 project paths from Windows
+
 ---
 
 ## Resolved Issues
