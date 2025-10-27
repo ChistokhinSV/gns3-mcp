@@ -200,6 +200,14 @@ async def export_topology_diagram(ctx: Context, output_path: str,
 
         # Calculate bounds
         if crop_x is None or crop_y is None or crop_width is None or crop_height is None:
+            # Check if project is empty
+            if not nodes and not drawings:
+                return json.dumps(ErrorResponse(
+                    error="Cannot export empty project",
+                    details="Project has no nodes or drawings to export. Add some nodes first.",
+                    suggested_action="Create nodes in your project using create_node() or the GNS3 GUI before exporting"
+                ).model_dump(), indent=2)
+
             # Auto-calculate bounds
             min_x = min_y = float('inf')
             max_x = max_y = float('-inf')

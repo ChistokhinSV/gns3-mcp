@@ -12,6 +12,50 @@ _(No active issues)_
 
 ## Resolved Issues
 
+### [RESOLVED] Export Topology: Float Infinity Error on Empty Projects (v0.28.2)
+**Discovered**: 2025-10-27
+**Affects**: MCP Server v0.9.1+
+**Severity**: Medium - Breaks export functionality for empty projects
+**Resolved**: 2025-10-27
+
+#### Problem
+`export_topology_diagram()` fails with "cannot convert float infinity to integer" when called on empty projects (no nodes, no drawings).
+
+#### Error Message
+```json
+{
+  "error": "Failed to export topology diagram",
+  "details": "cannot convert float infinity to integer"
+}
+```
+
+#### Root Cause
+Bounds calculation initializes with `float('inf')` and `float('-inf')`:
+```python
+min_x = min_y = float('inf')
+max_x = max_y = float('-inf')
+```
+
+When project is empty, these values remain infinity. Later conversion to int fails:
+```python
+crop_x = int(min_x - padding)  # Crashes if min_x is infinity
+```
+
+#### Resolution
+Added empty project check before bounds calculation:
+```python
+if not nodes and not drawings:
+    return error("Cannot export empty project",
+                 "Add nodes first before exporting")
+```
+
+Clear error message guides user to create content first.
+
+#### Files Changed
+- `mcp-server/server/export_tools.py`: Added empty project check (lines 203-209)
+
+---
+
 ### [RESOLVED] Auto-Connect to Opened Projects (v0.28.1)
 **Discovered**: 2025-10-27
 **Affects**: MCP Server v0.1.0+
