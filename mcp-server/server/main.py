@@ -1922,9 +1922,17 @@ async def ssh_configure(
     proxy: str = "host",
     session_timeout: int = 14400
 ) -> str:
-    """Configure SSH session for network device
+    """Configure SSH session to a network device in GNS3 lab
 
-    IMPORTANT: Enable SSH on device first using console tools.
+    IMPORTANT: This configures SSH to the NETWORK DEVICE (router/switch/host),
+    NOT to the proxy. Enable SSH on the target device first using console tools.
+
+    PARAMETERS EXPLAINED:
+    - node_name: The GNS3 node name (e.g., "Router1", "Switch-Core")
+    - device_dict['host']: IP address of the NETWORK DEVICE you want to SSH to
+    - device_dict['username']: Login username for the NETWORK DEVICE
+    - device_dict['password']: Login password for the NETWORK DEVICE
+    - proxy parameter: Which proxy to route SSH through (NOT the target)
 
     Special Node Names (v0.28.0):
     - node_name="@": Local execution (no SSH session needed)
@@ -1950,21 +1958,27 @@ async def ssh_configure(
     4. Retry your ssh_command() - it will work
 
     Args:
-        node_name: Node identifier (or "@" for local execution)
-        device_dict: Netmiko config dict (device_type, host, username, password, port, secret)
+        node_name: GNS3 node name of target device (e.g., "Router1") OR "@" for local execution
+        device_dict: Netmiko config for TARGET DEVICE (not proxy):
+                     - device_type: "cisco_ios", "linux", "mikrotik_routeros", etc.
+                     - host: IP address of the TARGET DEVICE (e.g., "10.1.0.1")
+                     - username: Login username for TARGET DEVICE
+                     - password: Login password for TARGET DEVICE
+                     - port: SSH port (optional, default 22)
+                     - secret: Enable password for Cisco (optional)
         persist: Store credentials for reconnection (default: True)
         force: Force recreation even if healthy session exists (default: False)
                Only needed for: manual credential refresh, troubleshooting
-        proxy: Proxy to route through - "host" (default) or proxy_id from registry (v0.26.0)
+        proxy: Which proxy to route through - "host" (default) or proxy_id from registry
         session_timeout: Session timeout in seconds (default: 4 hours = 14400s) (v0.27.0)
 
     Returns:
         JSON with session_id, connected, device_type, proxy_url, proxy
 
     Examples:
-        # Normal usage - creates session or reuses healthy one
-        ssh_configure("R1", {"device_type": "cisco_ios", "host": "10.1.0.1",
-                             "username": "admin", "password": "cisco123"})
+        # Connect to Router1 at 10.1.0.1 (use default proxy on GNS3 host)
+        ssh_configure("Router1", {"device_type": "cisco_ios", "host": "10.1.0.1",
+                                  "username": "admin", "password": "cisco123"})
 
         # Isolated network - use lab proxy
         # Step 1: Discover lab proxies

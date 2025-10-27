@@ -44,6 +44,34 @@ Use MCP resources and tools instead of local file operations:
 
 ## Resolved Issues
 
+### [RESOLVED] SSH Configure Documentation - Parameter Confusion (v0.28.4)
+**Discovered**: 2025-10-27
+**Affects**: MCP Server v0.1.0+
+**Severity**: Medium - UX issue, AI agents confused about parameters
+**Resolved**: 2025-10-27
+
+#### Problem
+AI agents were unclear that `ssh_configure()` configures SSH **to the network device**, not to the proxy. Specifically:
+- `node_name` parameter is the GNS3 node name (e.g., "Router1")
+- `device_dict['host']` is the IP address of the **target device** you want to SSH to
+- `proxy` parameter is which proxy to **route through**, not the target
+
+#### Symptoms
+AI agents would try to configure SSH sessions with proxy IPs instead of device IPs, or get confused about what credentials to provide.
+
+#### Resolution
+Enhanced `ssh_configure()` docstring in main.py to clearly explain:
+1. Added prominent note: "This configures SSH to the NETWORK DEVICE (router/switch/host), NOT to the proxy"
+2. Added "PARAMETERS EXPLAINED" section showing what each parameter actually means
+3. Clarified in Args documentation that device_dict is for TARGET DEVICE, not proxy
+4. Added clear example showing Router1 at IP 10.1.0.1
+
+#### Files Changed
+- `mcp-server/server/main.py`: Enhanced ssh_configure docstring (lines 1925-1981)
+- `mcp-server/manifest.json`: Updated to v0.28.4
+
+---
+
 ### [RESOLVED] MCP Server Hangs on Startup (Resource Not Found) (v0.28.3)
 **Discovered**: 2025-10-27
 **Affects**: MCP Server v0.27.1+
