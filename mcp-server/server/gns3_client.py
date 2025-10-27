@@ -8,6 +8,8 @@ import httpx
 from typing import Optional, Dict, List, Any
 import logging
 import json
+import asyncio
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -23,26 +25,52 @@ class GNS3Client:
         self.token: Optional[str] = None
         self.client = httpx.AsyncClient(timeout=30.0)
 
-    async def authenticate(self) -> bool:
+    async def authenticate(self, retry: bool = False, retry_interval: int = 30,
+                          max_retries: Optional[int] = None) -> bool:
         """Authenticate and obtain JWT token
 
         POST /v3/access/users/authenticate
         Body: {"username": "admin", "password": "password"}
         Response: {"access_token": "JWT", "token_type": "bearer"}
+
+        Args:
+            retry: If True, retry on failure (default: False)
+            retry_interval: Seconds to wait between retries (default: 30)
+            max_retries: Maximum number of retry attempts, None = infinite (default: None)
+
+        Returns:
+            True if authentication succeeded, False if failed without retry
         """
-        try:
-            response = await self.client.post(
-                f"{self.base_url}/v3/access/users/authenticate",
-                json={"username": self.username, "password": self.password}
-            )
-            response.raise_for_status()
-            data = response.json()
-            self.token = data["access_token"]
-            logger.info(f"Authenticated to GNS3 server at {self.base_url}")
-            return True
-        except Exception as e:
-            logger.error(f"Authentication failed: {e}")
-            return False
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                response = await self.client.post(
+                    f"{self.base_url}/v3/access/users/authenticate",
+                    json={"username": self.username, "password": self.password}
+                )
+                response.raise_for_status()
+                data = response.json()
+                self.token = data["access_token"]
+                if attempt > 1:
+                    logger.info(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication succeeded on attempt {attempt}")
+                else:
+                    logger.info(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authenticated to GNS3 server at {self.base_url}")
+                return True
+            except Exception as e:
+                if not retry or (max_retries is not None and attempt > max_retries):
+                    logger.error(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication failed: {e}")
+                    return False
+
+                # Log retry attempt
+                retry_msg = f"attempt {attempt}"
+                if max_retries is not None:
+                    retry_msg = f"attempt {attempt}/{max_retries}"
+
+                logger.warning(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication failed ({retry_msg}): {e}")
+                logger.info(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Retrying in {retry_interval} seconds...")
+
+                await asyncio.sleep(retry_interval)
 
     def _headers(self) -> Dict[str, str]:
         """Get headers with Bearer token"""

@@ -406,10 +406,8 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         password=args.password
     )
 
-    # Authenticate
-    authenticated = await gns3.authenticate()
-    if not authenticated:
-        raise RuntimeError("Failed to authenticate to GNS3 server")
+    # Authenticate with retry (every 30 seconds, infinite retries)
+    await gns3.authenticate(retry=True, retry_interval=30)
 
     # Initialize console manager
     console = ConsoleManager()

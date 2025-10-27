@@ -5,6 +5,31 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.1] - GNS3 Server Auto-Reconnect (BUGFIX)
+
+### Added
+- **Automatic retry logic** for GNS3 server connection at startup
+  - Server now automatically retries connection every 30 seconds if GNS3 server is unavailable
+  - Infinite retry attempts by default - server will keep trying until connection succeeds
+  - Enhanced logging with timestamp format `[HH:MM:SS dd.mm.yyyy]` for retry attempts
+  - Prevents MCP server from failing permanently if GNS3 server is temporarily down or starts after MCP
+
+### Changed
+- **GNS3Client.authenticate()**: Added optional retry parameters
+  - `retry: bool = False` - Enable automatic retry on failure
+  - `retry_interval: int = 30` - Seconds to wait between retry attempts
+  - `max_retries: Optional[int] = None` - Maximum retry attempts (None = infinite)
+- **main.py**: Updated to enable retry by default with 30-second interval
+- **manifest.json**: Version 0.27.0→0.27.1, updated description to mention auto-reconnect
+
+### Technical Details
+- **NO BREAKING CHANGES**: authenticate() maintains backward compatibility (retry=False by default)
+- **FILES CHANGED**:
+  - `mcp-server/server/gns3_client.py`: Added retry loop to authenticate() (+35 LOC)
+  - `mcp-server/server/main.py`: Updated authenticate() call to enable retry (-3 LOC)
+  - `mcp-server/manifest.json`: Version bump and description update
+- **USE CASE**: MCP server can now be started before GNS3 server or survive GNS3 server restarts
+
 ## [0.25.0] - Docker Node File Operations (FEATURE)
 
 ### Added
