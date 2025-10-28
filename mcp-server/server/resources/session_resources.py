@@ -21,27 +21,34 @@ _gns3_host = os.getenv("GNS3_HOST", "localhost")
 SSH_PROXY_URL = os.getenv("SSH_PROXY_URL", f"http://{_gns3_host}:8022")
 
 
-async def list_console_sessions_impl(app: "AppContext", project_id: str) -> str:
+async def list_console_sessions_impl(app: "AppContext", project_id: Optional[str] = None) -> str:
     """
-    List all active console sessions for nodes in a project
+    List all active console sessions (optionally filtered by project)
 
-    Resource URI: projects://{project_id}/sessions/console
+    Resource URIs:
+    - projects://{project_id}/sessions/console/ (filtered by project)
+    - sessions://console/?project_id={id} (filtered by project)
+    - sessions://console/ (all sessions)
 
     Args:
-        project_id: Project ID to filter sessions by
+        project_id: Optional project ID to filter sessions by. If None, returns all sessions.
 
     Returns:
-        JSON array of console session information for project nodes
+        JSON array of console session information for project nodes (or all if no filter)
     """
     try:
-        # Get nodes in the project to filter sessions
-        nodes_data = await app.gns3.get_nodes(project_id)
-        project_node_names = {node["name"] for node in nodes_data}
+        # If project_id provided, get nodes in the project to filter sessions
+        if project_id:
+            nodes_data = await app.gns3.get_nodes(project_id)
+            project_node_names = {node["name"] for node in nodes_data}
+        else:
+            project_node_names = None  # No filtering
 
-        # Filter sessions to only include nodes in this project
+        # Build sessions list (filtered or all)
         sessions = []
         for node_name, session_info in app.console.sessions.items():
-            if node_name in project_node_names:
+            # Include session if: no filter OR node is in project
+            if project_node_names is None or node_name in project_node_names:
                 sessions.append({
                     "node_name": node_name,
                     "connected": session_info.connected,
@@ -103,39 +110,45 @@ async def get_console_session_impl(app: "AppContext", node_name: str) -> str:
         }, indent=2)
 
 
-async def list_ssh_sessions_impl(app: "AppContext", project_id: str) -> str:
+async def list_ssh_sessions_impl(app: "AppContext", project_id: Optional[str] = None) -> str:
     """
-    List all active SSH sessions for nodes in a project (Multi-Proxy Aggregation v0.26.0)
+    List all active SSH sessions (optionally filtered by project) (Multi-Proxy Aggregation v0.26.0)
 
     Queries all proxies (host + discovered lab proxies) and aggregates sessions.
 
-    Resource URI: projects://{project_id}/sessions/ssh
+    Resource URIs:
+    - projects://{project_id}/sessions/ssh/ (filtered by project)
+    - sessions://ssh/?project_id={id} (filtered by project)
+    - sessions://ssh/ (all sessions)
 
     Args:
-        project_id: Project ID to filter sessions by
+        project_id: Optional project ID to filter sessions by. If None, returns all sessions.
 
     Returns:
         JSON array of SSH session information with proxy details for each session
     """
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            # Get nodes in the project
-            nodes_data = await app.gns3.get_nodes(project_id)
-            project_node_names = {node["name"] for node in nodes_data}
+            # If project_id provided, get nodes in the project to filter sessions
+            if project_id:
+                nodes_data = await app.gns3.get_nodes(project_id)
+                project_node_names = {node["name"] for node in nodes_data}
+            else:
+                project_node_names = None  # No filtering
 
             # Collect proxy URLs to query: host + lab proxies
             proxy_urls = [{"url": SSH_PROXY_URL, "proxy_id": "host", "hostname": "Host"}]
 
-            # Discover lab proxies for this project
+            # Discover lab proxies (optionally filter to project)
             try:
                 registry_response = await client.get(f"{SSH_PROXY_URL}/proxy/registry")
                 if registry_response.status_code == 200:
                     registry_data = registry_response.json()
                     lab_proxies = registry_data.get("proxies", [])
 
-                    # Filter to this project
+                    # Include lab proxies (filter to project if specified)
                     for proxy in lab_proxies:
-                        if proxy.get("project_id") == project_id:
+                        if project_id is None or proxy.get("project_id") == project_id:
                             # Fix localhost URLs
                             proxy_url = proxy.get("url")
                             if proxy_url.startswith("http://localhost:"):
@@ -164,9 +177,10 @@ async def list_ssh_sessions_impl(app: "AppContext", project_id: str) -> str:
                     if response.status_code == 200:
                         proxy_sessions = response.json()
 
-                        # Filter to project nodes and add proxy info
+                        # Filter to project nodes (if filter specified) and add proxy info
                         for session in proxy_sessions:
-                            if session.get("node_name") in project_node_names:
+                            # Include session if: no filter OR node is in project
+                            if project_node_names is None or session.get("node_name") in project_node_names:
                                 session["proxy_id"] = proxy_id
                                 session["proxy_url"] = proxy_url
                                 session["proxy_hostname"] = proxy_hostname

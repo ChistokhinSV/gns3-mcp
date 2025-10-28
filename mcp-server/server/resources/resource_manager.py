@@ -37,6 +37,10 @@ class ResourceManager:
         r'^templates://$': 'list_templates',
         r'^templates://(?P<template_id>[^/]+)$': 'get_template',
 
+        # Session list resources (support query param: ?project_id=xxx)
+        r'^sessions://console/$': 'list_console_sessions',  # All or filtered by ?project_id
+        r'^sessions://ssh/$': 'list_ssh_sessions',  # All or filtered by ?project_id
+
         # Node-specific session resources (by node name, not project-scoped)
         r'^sessions://console/(?P<node_name>[^/]+)$': 'get_console_session',
         r'^sessions://ssh/(?P<node_name>[^/]+)$': 'get_ssh_session',
@@ -58,16 +62,35 @@ class ResourceManager:
         """
         Parse resource URI and extract handler name and parameters
 
+        Supports both path parameters and query parameters.
+
         Args:
-            uri: Resource URI (e.g., projects://abc123/nodes/)
+            uri: Resource URI (e.g., projects://abc123/nodes/ or sessions://console/?project_id=abc)
 
         Returns:
             Tuple of (handler_name, parameters_dict) or (None, None) if no match
         """
+        # Split URI into base and query string
+        if '?' in uri:
+            base_uri, query_string = uri.split('?', 1)
+            # Parse query parameters
+            query_params = {}
+            for param in query_string.split('&'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    query_params[key] = value
+        else:
+            base_uri = uri
+            query_params = {}
+
+        # Match base URI against patterns
         for pattern, handler in self.URI_PATTERNS.items():
-            match = re.match(pattern, uri)
+            match = re.match(pattern, base_uri)
             if match:
-                return handler, match.groupdict()
+                # Combine path parameters and query parameters
+                params = match.groupdict()
+                params.update(query_params)
+                return handler, params
 
         return None, None
 
@@ -288,8 +311,8 @@ class ResourceManager:
     # Session Resource Handlers
     # ========================================================================
 
-    async def list_console_sessions(self, project_id: str) -> str:
-        """List all active console sessions for a project"""
+    async def list_console_sessions(self, project_id: Optional[str] = None) -> str:
+        """List all active console sessions (optionally filtered by project_id)"""
         from .session_resources import list_console_sessions_impl
         return await list_console_sessions_impl(self.app, project_id)
 
@@ -298,8 +321,8 @@ class ResourceManager:
         from .session_resources import get_console_session_impl
         return await get_console_session_impl(self.app, node_name)
 
-    async def list_ssh_sessions(self, project_id: str) -> str:
-        """List all active SSH sessions for a project"""
+    async def list_ssh_sessions(self, project_id: Optional[str] = None) -> str:
+        """List all active SSH sessions (optionally filtered by project_id)"""
         from .session_resources import list_ssh_sessions_impl
         return await list_ssh_sessions_impl(self.app, project_id)
 

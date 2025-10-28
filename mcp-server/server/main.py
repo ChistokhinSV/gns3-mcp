@@ -394,6 +394,25 @@ async def resource_node_template(ctx: Context, project_id: str, node_id: str) ->
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_node_template_usage(project_id, node_id)
 
+# Session list resources (support query param: ?project_id=xxx)
+@mcp.resource("sessions://console/",
+    name="Console sessions",
+    title="All console sessions",
+    description="List all console sessions (optionally filtered by ?project_id=xxx query parameter)",
+    mime_type="application/json"
+)
+async def resource_console_sessions_all() -> str:
+    return await _app.resource_manager.list_console_sessions()
+
+@mcp.resource("sessions://ssh/",
+    name="SSH sessions",
+    title="All SSH sessions",
+    description="List all SSH sessions (optionally filtered by ?project_id=xxx query parameter)",
+    mime_type="application/json"
+)
+async def resource_ssh_sessions_all() -> str:
+    return await _app.resource_manager.list_ssh_sessions()
+
 # Console session resources (node-specific templates only)
 @mcp.resource("sessions://console/{node_name}",
     name="Console session",

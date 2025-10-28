@@ -5,6 +5,25 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.1] - 2025-10-28 - Dual Access Patterns for Session Resources
+
+### Added
+- **Dual Session Access**: Support for both path-based and query-parameter-based session resource access
+  - Path-based (existing): `projects://{id}/sessions/console/` and `projects://{id}/sessions/ssh/`
+  - Query-param-based (new): `sessions://console/?project_id={id}` and `sessions://ssh/?project_id={id}`
+  - All sessions (new): `sessions://console/` and `sessions://ssh/` (no filtering)
+- Query parameter parsing in ResourceManager.parse_uri()
+- New resource decorators for `sessions://console/` and `sessions://ssh/`
+
+### Changed
+- Made `project_id` optional in session list handlers (list_console_sessions, list_ssh_sessions)
+- Updated session implementation functions to handle optional project filtering
+- Updated docstrings to document all three access patterns
+
+### Fixed
+- Session resources now support flexible access patterns for different use cases
+- Query parameters properly parsed and passed to handlers
+
 ## [0.29.0] - 2025-10-28 - Resource URI Standardization & Code Quality Infrastructure
 
 ### Changed

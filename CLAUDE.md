@@ -10,12 +10,13 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.29.0
+## Current Version: v0.29.1
 
-**Latest Release:** v0.29.0 - Resource URI Standardization & Code Quality Infrastructure (BREAKING CHANGES)
+**Latest Release:** v0.29.1 - Dual Access Patterns for Session Resources
 
-### Recent Changes (v0.25.0 - v0.29.0)
+### Recent Changes (v0.25.0 - v0.29.1)
 
+**v0.29.1** - Dual access patterns for sessions (path-based + query-param)
 **v0.29.0** - **BREAKING**: Resource URI scheme changes, complete metadata, linting infrastructure
 **v0.28.0** - Local execution on SSH proxy container (ssh_command with node_name="@")
 **v0.27.0** - Configurable SSH session timeouts
@@ -528,6 +529,78 @@ Key endpoints:
 - Extracted from node data: `node["console"]`
 - Console type: `node["console_type"]` (telnet, vnc, spice+agent, none)
 - Only telnet consoles supported currently
+
+## Resource URI Patterns
+
+MCP resources use semantic URI schemes for different resource types:
+
+### URI Scheme Categories
+
+**Project-centric resources:**
+- `projects://` - List all projects
+- `projects://{id}` - Project details
+- `projects://{id}/readme` - Project README/notes
+- `projects://{id}/sessions/console/` - Console sessions in project
+- `projects://{id}/sessions/ssh/` - SSH sessions in project
+
+**Object-centric resources:**
+- `nodes://{project_id}/` - Nodes in project
+- `nodes://{project_id}/{node_id}` - Node details
+- `nodes://{project_id}/{node_id}/template` - Node template usage
+- `links://{project_id}/` - Links in project
+- `drawings://{project_id}/` - Drawings in project
+
+**Template resources (static, not project-scoped):**
+- `templates://` - List all templates
+- `templates://{template_id}` - Template details
+
+**Session resources (dual access patterns):**
+- `sessions://console/` - All console sessions
+- `sessions://console/?project_id={id}` - Console sessions filtered by project (query param)
+- `sessions://console/{node_name}` - Console session for specific node
+- `sessions://ssh/` - All SSH sessions
+- `sessions://ssh/?project_id={id}` - SSH sessions filtered by project (query param)
+- `sessions://ssh/{node_name}` - SSH session for specific node
+- `sessions://ssh/{node_name}/history` - SSH command history
+- `sessions://ssh/{node_name}/buffer` - SSH continuous buffer
+
+**Proxy resources:**
+- `proxies:///status` - Main proxy status (THREE slashes)
+- `proxies://` - Proxy registry
+- `proxies://sessions` - All proxy sessions
+- `proxies://project/{project_id}` - Proxies for specific project
+- `proxies://{proxy_id}` - Specific proxy details
+
+### Dual Access Patterns for Sessions
+
+Session resources support both path-based and query-parameter-based access:
+
+**Path-based (project-centric):**
+```
+projects://{project_id}/sessions/console/
+projects://{project_id}/sessions/ssh/
+```
+Returns sessions for nodes in the specified project.
+
+**Query-parameter-based (filtered):**
+```
+sessions://console/?project_id={id}
+sessions://ssh/?project_id={id}
+```
+Returns same results as path-based, but using query parameter filtering.
+
+**Unfiltered access:**
+```
+sessions://console/
+sessions://ssh/
+```
+Returns all sessions across all projects.
+
+**Implementation notes:**
+- ResourceManager.parse_uri() handles query parameter extraction
+- Session handlers accept optional `project_id` parameter
+- Implementation filters by project when parameter provided
+- All three access methods return same data structure
 
 ## Resources
 
