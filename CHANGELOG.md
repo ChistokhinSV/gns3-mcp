@@ -5,6 +5,14 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.2] - 2025-10-28 - Improve Resource Naming
+
+### Changed
+- **Resource Name**: Renamed "Project nodes" → "Project nodes list"
+  - Resource URI: `nodes://{project_id}/`
+  - More descriptive name for better user experience
+  - No functional changes, only display name update
+
 ## [0.33.1] - 2025-10-28 - Fix Auto-Rename in create_node
 
 ### Fixed

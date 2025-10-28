@@ -286,7 +286,7 @@ async def resource_project(ctx: Context, project_id: str) -> str:
     return await app.resource_manager.get_project(project_id)
 
 @mcp.resource("nodes://{project_id}/",
-    name="Project nodes",
+    name="Project nodes list",
     title="GNS3 project nodes list",
     description="List all nodes (devices) in a specific GNS3 project with status and basic info",
     mime_type="text/plain"
