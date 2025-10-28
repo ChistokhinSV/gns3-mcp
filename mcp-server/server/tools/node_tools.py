@@ -396,16 +396,48 @@ async def create_node_impl(app: "AppContext", template_name: str, x: int, y: int
 
             if actual_name != requested_name:
                 # Node was created with wrong name, rename it
-                # Stateless devices (switches, hubs, etc.) can be renamed without stopping
-                rename_result = await set_node_impl(
-                    app=app,
-                    node_name=actual_name,  # Current (wrong) name
-                    name=requested_name      # Desired name
+                node_id = result['node_id']
+                node_status = result.get('status', 'stopped')
+                node_type = result.get('node_type', '')
+
+                # Stateless devices can be renamed without stopping
+                STATELESS_DEVICES = {
+                    'ethernet_switch', 'ethernet_hub', 'atm_switch',
+                    'frame_relay_switch', 'cloud', 'nat'
+                }
+
+                # Check if we need to stop the node first
+                needs_stop = (node_type not in STATELESS_DEVICES and node_status != 'stopped')
+
+                if needs_stop:
+                    # Stop node before renaming
+                    await app.gns3.stop_node(app.current_project_id, node_id)
+
+                    # Wait for node to stop
+                    for _ in range(5):
+                        await asyncio.sleep(1)
+                        nodes = await app.gns3.get_nodes(app.current_project_id)
+                        current_node = next((n for n in nodes if n['node_id'] == node_id), None)
+                        if current_node and current_node['status'] == 'stopped':
+                            break
+
+                # Now rename the node
+                await app.gns3.update_node(
+                    app.current_project_id,
+                    node_id,
+                    {'name': requested_name}
                 )
+
+                # Restart if we stopped it
+                if needs_stop:
+                    await app.gns3.start_node(app.current_project_id, node_id)
+                    node_status = 'started'  # Update status in result
 
                 # Update result with corrected name
                 result['name'] = requested_name
-                result['label']['text'] = requested_name
+                result['status'] = node_status
+                if 'label' in result:
+                    result['label']['text'] = requested_name
 
         return json.dumps({"message": "Node created successfully", "node": result}, indent=2)
 

@@ -5,6 +5,28 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.1] - 2025-10-28 - Fix Auto-Rename in create_node
+
+### Fixed
+- **create_node Tool**: Fixed auto-rename logic that was ignoring errors
+  - **Bug**: When GNS3 API ignored custom node name, auto-rename attempted but never checked for errors
+  - **Symptom**: Node created with wrong name, function returned success claiming correct name
+  - **Root Cause**:
+    - Auto-rename called `set_node_impl()` but never checked the result
+    - If node was running (auto-started by template), rename silently failed for QEMU nodes
+    - Function returned success with incorrect name in response
+  - **Fix**:
+    - Directly call GNS3 API for rename instead of using `set_node_impl()`
+    - For running nodes (not stateless devices): stop → wait for stop → rename → restart
+    - Stateless devices (switches, hubs, etc.): rename without stopping
+    - Update result with actual final state (name + status)
+  - **Impact**: Node names now correctly applied even for auto-starting templates
+
+### Technical Details
+- **Files Changed**: `mcp-server/server/tools/node_tools.py` (lines 392-441)
+- **Testing**: Syntax validation passed
+- **Compatibility**: No breaking changes, improved reliability
+
 ## [0.33.0] - 2025-10-28 - Prompt Refactoring, Diagram Resource, Activity Diagrams
 
 ### Fixed
