@@ -554,60 +554,29 @@ async def resource_proxy(ctx: Context, proxy_id: str) -> str:
     mime_type="image/svg+xml"
 )
 async def resource_topology_diagram(ctx: Context, project_id: str) -> str:
-    """Generate topology diagram as SVG/PNG image (agent-friendly access)
+    """Generate topology diagram as SVG image (agent-friendly access)
 
-    Returns visual topology diagram without saving to disk. Agents can access
-    diagrams directly if they can process visual information (SVG/PNG formats).
+    Returns visual topology diagram as SVG without saving to disk. Agents can
+    access diagrams directly if they can process visual information.
 
-    Query parameters:
-    - format: "svg" (default) or "png" - output format
-    - dpi: DPI for PNG rendering (default: 150, range: 72-300)
-
-    SVG format is preferred for agents (scalable, smaller, faster).
-    PNG format is rasterized at specified DPI.
+    SVG format is preferred for agents (scalable, smaller, text-based).
 
     ⚠️ Visual Resource Warning:
     This resource returns image data. Only access if you can process visual
     information and need node physical locations. Text-based resources
     (nodes, links, drawings) provide same data in structured format.
 
-    Example URIs:
-    - diagrams://abc123/topology - SVG diagram (default)
-    - diagrams://abc123/topology?format=png&dpi=300 - High-res PNG
-
-    For humans: Use export_topology_diagram() tool to save files to disk.
+    For humans: Use export_topology_diagram() tool to save SVG/PNG files to disk.
     """
     from export_tools import generate_topology_diagram_content
 
     app: AppContext = ctx.request_context.lifespan_context
 
-    # Parse query parameters from URI
-    uri = ctx.meta.get("uri", "")
-    format_param = "svg"  # default
-    dpi = 150  # default
-
-    if "?" in uri:
-        query_str = uri.split("?")[1]
-        for param in query_str.split("&"):
-            if "=" in param:
-                key, value = param.split("=", 1)
-                if key == "format":
-                    format_param = value.lower()
-                elif key == "dpi":
-                    try:
-                        dpi = int(value)
-                        dpi = max(72, min(300, dpi))  # Clamp to 72-300
-                    except ValueError:
-                        pass
-
     try:
-        # Generate diagram content (SVG string or PNG bytes)
+        # Always return SVG format (most useful for agents)
         content, mime_type = await generate_topology_diagram_content(
-            app, project_id, format_param, dpi
+            app, project_id, format="svg", dpi=150
         )
-
-        # Return content with appropriate MIME type
-        # Note: MCP resource returns string, so PNG will be base64-encoded
         return content
 
     except Exception as e:

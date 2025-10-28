@@ -150,12 +150,8 @@ Export the topology as a visual diagram:
 
 **Agent-Friendly Access (No File I/O):**
 ```
-# Use diagram resource - returns image data directly
+# Use diagram resource - returns SVG image data directly
 Resource: diagrams://{{project_id}}/topology
-
-# With format/quality options
-Resource: diagrams://{{project_id}}/topology?format=svg
-Resource: diagrams://{{project_id}}/topology?format=png&dpi=300
 ```
 
 **Human-Friendly Access (File Export):**

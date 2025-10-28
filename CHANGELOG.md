@@ -5,6 +5,26 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.5] - 2025-10-28 - Fix Diagram Resource (ctx.meta Error)
+
+### Fixed
+- **Diagram Resource**: Fixed AttributeError: 'Context' object has no attribute 'meta'
+  - **Error**: `diagrams://{project_id}/topology` was trying to access `ctx.meta` which doesn't exist in FastMCP
+  - **Cause**: Query parameter parsing code expected `ctx.meta.get("uri")` to extract format/dpi parameters
+  - **Fix**: Removed query parameter support, always return SVG format
+  - **Impact**: Resource now works correctly, returns SVG diagrams
+  - **Note**: Query parameters not natively supported in FastMCP resources
+
+### Changed
+- **Diagram Resource**: Simplified to always return SVG format
+  - **Before**: Attempted to parse ?format=svg/png&dpi=X query parameters (didn't work)
+  - **After**: Always returns SVG (most useful format for agents)
+  - **Rationale**: SVG is scalable, smaller, text-based, better for AI agents
+  - For PNG export, use `export_topology_diagram` tool instead
+
+### Documentation
+- Updated `topology_discovery` prompt to remove query parameter examples
+
 ## [0.33.4] - 2025-10-28 - Remove Confusing Proxy Status Column
 
 ### Changed

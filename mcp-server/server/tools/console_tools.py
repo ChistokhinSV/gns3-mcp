@@ -120,6 +120,16 @@ async def send_console_impl(app: "AppContext", node_name: str, data: str, raw: b
     if error:
         return error
 
+    # Check if terminal has been accessed (read) before sending
+    if not app.console.has_accessed_terminal_by_node(node_name):
+        return create_error_response(
+            error=f"Cannot send to console for node '{node_name}' - terminal not accessed yet",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending commands",
+            suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
+            context={"node_name": node_name, "reason": "terminal_not_accessed"}
+        )
+
     # Process escape sequences unless raw mode
     if not raw:
         # First handle escape sequences (backslash-escaped strings)
@@ -508,6 +518,16 @@ async def send_and_wait_console_impl(
             "timeout_occurred": False
         }, indent=2)
 
+    # Check if terminal has been accessed (read) before sending
+    if not app.console.has_accessed_terminal_by_node(node_name):
+        return create_error_response(
+            error=f"Cannot send to console for node '{node_name}' - terminal not accessed yet",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending commands",
+            suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
+            context={"node_name": node_name, "reason": "terminal_not_accessed"}
+        )
+
     # Process escape sequences unless raw mode
     if not raw:
         # First handle escape sequences (backslash-escaped strings)
@@ -624,6 +644,16 @@ async def send_keystroke_impl(app: "AppContext", node_name: str, key: str) -> st
     error = await _auto_connect_console(app, node_name)
     if error:
         return error
+
+    # Check if terminal has been accessed (read) before sending
+    if not app.console.has_accessed_terminal_by_node(node_name):
+        return create_error_response(
+            error=f"Cannot send keystroke to console for node '{node_name}' - terminal not accessed yet",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending keystrokes",
+            suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
+            context={"node_name": node_name, "reason": "terminal_not_accessed"}
+        )
 
     # Map key names to escape sequences
     SPECIAL_KEYS = {

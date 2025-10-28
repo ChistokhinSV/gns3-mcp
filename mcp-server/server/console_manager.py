@@ -47,6 +47,7 @@ class ConsoleSession:
     writer: Optional[asyncio.StreamWriter] = None
     buffer: str = ""
     read_position: int = 0
+    accessed_terminal: bool = False  # Track if terminal has been read at least once
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -197,6 +198,7 @@ class ConsoleManager:
         session = self.sessions.get(session_id)
         if session:
             session.update_activity()
+            session.accessed_terminal = True  # Mark terminal as accessed
             return strip_ansi(session.buffer)
         return None
 
@@ -216,7 +218,34 @@ class ConsoleManager:
         new_data = session.buffer[session.read_position:]
         session.read_position = len(session.buffer)
         session.update_activity()
+        session.accessed_terminal = True  # Mark terminal as accessed
         return strip_ansi(new_data)
+
+    def has_accessed_terminal(self, session_id: str) -> bool:
+        """Check if terminal has been accessed (read) at least once
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            True if terminal has been read, False otherwise or if session not found
+        """
+        session = self.sessions.get(session_id)
+        return session.accessed_terminal if session else False
+
+    def has_accessed_terminal_by_node(self, node_name: str) -> bool:
+        """Check if terminal has been accessed (read) at least once by node name
+
+        Args:
+            node_name: Name of the node
+
+        Returns:
+            True if terminal has been read, False otherwise or if session not found
+        """
+        session_id = self._node_sessions.get(node_name)
+        if not session_id:
+            return False
+        return self.has_accessed_terminal(session_id)
 
     async def disconnect(self, session_id: str) -> bool:
         """Disconnect console session
