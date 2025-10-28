@@ -5,6 +5,29 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.3] - 2025-10-28 - Clean create_node Output
+
+### Changed
+- **create_node Tool**: Now returns NodeSummary instead of full GNS3 API response
+  - **Before**: Returned entire GNS3 API response (~20+ fields including label, compute_id, coordinates, etc.)
+  - **After**: Returns clean NodeSummary with essential fields:
+    - name, node_type, status, console_type, console, uri
+  - **Benefit**: Cleaner output, easier to parse, consistent with list_nodes
+  - **Example**:
+    ```json
+    {
+      "message": "Node created successfully",
+      "node": {
+        "name": "Router1",
+        "node_type": "qemu",
+        "status": "started",
+        "console_type": "telnet",
+        "console": 5000,
+        "uri": "nodes://project-id/node-id"
+      }
+    }
+    ```
+
 ## [0.33.2] - 2025-10-28 - Improve Resource Naming
 
 ### Changed

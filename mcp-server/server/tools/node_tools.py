@@ -439,7 +439,21 @@ async def create_node_impl(app: "AppContext", template_name: str, x: int, y: int
                 if 'label' in result:
                     result['label']['text'] = requested_name
 
-        return json.dumps({"message": "Node created successfully", "node": result}, indent=2)
+        # Convert to NodeSummary for clean output
+        node_summary = NodeSummary(
+            project_id=app.current_project_id,
+            node_id=result['node_id'],
+            name=result['name'],
+            node_type=result['node_type'],
+            status=result.get('status', 'stopped'),
+            console_type=result.get('console_type'),
+            console=result.get('console')
+        )
+
+        return json.dumps({
+            "message": "Node created successfully",
+            "node": node_summary.model_dump()
+        }, indent=2)
 
     except Exception as e:
         return create_error_response(
