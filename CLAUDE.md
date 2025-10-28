@@ -64,7 +64,8 @@ Automatically run on every commit (configured in `.pre-commit-config.yaml`):
 2. **Ruff formatter** - formats code consistently
 3. **Black formatter** - additional formatting
 4. **Mypy type checker** - static type analysis
-5. **Build extension** - rebuilds .mcpb if server code changed
+5. **Update lib dependencies** - cleans and reinstalls lib/ when requirements.txt changes
+6. **Build extension** - rebuilds .mcpb if server code, manifest.json, or requirements.txt changed
 
 Install hooks:
 ```bash
