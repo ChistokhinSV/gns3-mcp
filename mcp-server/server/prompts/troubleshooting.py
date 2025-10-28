@@ -4,6 +4,7 @@ Guides users through systematic troubleshooting of network issues in GNS3 labs.
 """
 
 
+
 async def render_troubleshooting_prompt(
     node_name: str = None,
     issue_type: str = None
@@ -44,6 +45,23 @@ Follow the OSI model bottom-up approach:
 4. **Layer 4+ (Transport/Application)**: Services, protocols, applications
 
 ## Step 1: Verify Lab State
+
+**Check Project README First:**
+
+Before diving into diagnostics, review the project README for documented information:
+```
+# View project documentation
+Resource: projects://{{project_id}}/readme
+```
+
+**Look for:**
+- Node IP addresses and credentials
+- Known issues or troubleshooting notes
+- Network topology design (subnets, VLANs, routing)
+- Configuration dependencies
+- Recent changes or maintenance notes
+
+Having this baseline information helps identify configuration mismatches and expected behavior.
 
 **Check Node Status:**
 ```
@@ -87,7 +105,7 @@ set_connection(operations=[
 **Check Console Sessions:**
 ```
 # View active console sessions
-Resource: gns3://sessions/console/{{node_name}}
+Resource: sessions://console/{{node_name}}
 ```
 
 **Test Console Access:**
@@ -380,7 +398,7 @@ console_read("R1", mode="last_page")
 
 **Check SSH Session Status:**
 ```
-Resource: gns3://sessions/ssh/{{node_name}}
+Resource: sessions://ssh/{{node_name}}
 ```
 
 **Common SSH Issues:**
@@ -436,10 +454,10 @@ ssh_command("Host1", "dmesg | tail -50")
 **Check Console History:**
 ```
 # View command history
-Resource: gns3://sessions/ssh/{{node_name}}/history
+Resource: sessions://ssh/{{node_name}}/history
 
 # View SSH buffer
-Resource: gns3://sessions/ssh/{{node_name}}/buffer
+Resource: sessions://ssh/{{node_name}}/buffer
 ```
 
 **Save Configurations:**
@@ -496,8 +514,8 @@ Issue Detected
 **Resources (viewing state):**
 - `projects://{id}/nodes/` - Node status
 - `projects://{id}/links/` - Link status
-- `gns3://sessions/console/{node}` - Console session state
-- `gns3://sessions/ssh/{node}` - SSH session state
+- `sessions://console/{node_name}` - Console session state
+- `sessions://ssh/{node_name}` - SSH session state
 
 **Tools (actions):**
 - `set_node(...)` - Start/stop/reload nodes

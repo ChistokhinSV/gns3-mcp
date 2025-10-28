@@ -1,0 +1,259 @@
+@startuml node_setup_workflow
+title Complete Node Setup Workflow (From Creation to SSH)
+skinparam backgroundColor #FFFFFF
+skinparam activity {
+  BackgroundColor<<Tool>> #E3F2FD
+  BackgroundColor<<Resource>> #FFF3E0
+  BackgroundColor<<Check>> #F3E5F5
+  BorderColor #1976D2
+}
+
+start
+
+:Receive node parameters;
+note right
+  - node_name
+  - template_name
+  - ip_address
+  - subnet_mask
+  - device_type
+  - username/password
+end note
+
+partition "Prerequisites Check" #F3E5F5 {
+  :Verify project opened;
+  note right
+    **«resource»**
+    projects://
+  end note
+
+  :Verify template exists;
+  note right
+    **«resource»**
+    templates://
+  end note
+}
+
+partition "Step 1: Create Node" {
+  :Create node from template;
+  note right
+    **«tool»** create_node()
+    template_name, x, y, node_name
+
+    Returns node_id
+  end note
+
+  :Record node_id;
+}
+
+partition "Step 2: Start Node" {
+  :Start the node;
+  note right
+    **«tool»** set_node()
+    node_name, action="start"
+  end note
+
+  :Wait for boot;
+  note right
+    Cisco: 30-60 seconds
+    Linux: 10-20 seconds
+    MikroTik: 15-30 seconds
+  end note
+
+  :Monitor boot progress;
+  note right
+    **«tool»** console_read()
+    mode="all"
+  end note
+}
+
+partition "Step 3: Check Template Usage" {
+  :Review template usage guide;
+  note right
+    **«resource»**
+    nodes://{project_id}/{node_id}/template
+
+    Check 'usage' field for:
+    - Default credentials
+    - Configuration examples
+    - Device-specific quirks
+    - Console access notes
+  end note
+}
+
+partition "Step 4: Configure IP Address" {
+  :Access console;
+  note right
+    **«tool»** console_send()
+    Login to device
+  end note
+
+  if (Device type?) then (cisco_ios)
+    :Configure Cisco IOS;
+    note right
+      **«tool»** console_send()
+      - Enter config mode
+      - Configure interface
+      - Set IP address
+      - No shutdown
+      - Save config
+    end note
+  elseif (linux)
+    :Configure Linux;
+    note right
+      **«tool»** console_send()
+      - ip addr add
+      - ip link set up
+      - Persistent config
+    end note
+  else (other)
+    :Configure device;
+    note right
+      Device-specific commands
+    end note
+  endif
+
+  :Verify IP configuration;
+  note right
+    **«tool»** console_send()
+    show ip interface brief (Cisco)
+    ip addr show (Linux)
+  end note
+
+  :Read verification output;
+  note right
+    **«tool»** console_read()
+    mode="last_page"
+  end note
+}
+
+partition "Step 5: Enable SSH" {
+  if (Device type?) then (cisco_ios)
+    :Enable Cisco SSH;
+    note right
+      **«tool»** console_send()
+      - Create user
+      - Generate RSA keys
+      - Enable SSH v2
+      - Configure VTY lines
+    end note
+  elseif (linux)
+    :Enable Linux SSH;
+    note right
+      **«tool»** console_send()
+      - Install openssh (if needed)
+      - Start sshd service
+      - Enable on boot
+      - Create user
+    end note
+  else (other)
+    :Enable SSH on device;
+  endif
+}
+
+partition "Step 6: Document in README" {
+  :Get existing README;
+  note right
+    **«tool»** get_project_readme()
+  end note
+
+  :Update README with node info;
+  note right
+    **«tool»** update_project_readme()
+
+    Add section with:
+    - Node name and template
+    - IP address and subnet
+    - Username/password
+    - SSH access string
+    - Creation date
+    - Purpose/role
+    - Configuration notes
+    - Troubleshooting tips
+  end note
+}
+
+partition "Step 7: Establish SSH Session" {
+  if (Device on isolated network?) then (yes)
+    :Check lab proxy registry;
+    note right
+      **«resource»**
+      proxies://
+    end note
+
+    :Configure SSH via proxy;
+    note right
+      **«tool»** ssh_configure()
+      proxy="<proxy_id>"
+    end note
+  else (no)
+    :Configure direct SSH;
+    note right
+      **«tool»** ssh_configure()
+      device_type, host, username, password
+    end note
+  endif
+}
+
+partition "Step 8: Verify SSH Connection" {
+  :Execute test command;
+  note right
+    **«tool»** ssh_command()
+    show version (Cisco)
+    uname -a (Linux)
+  end note
+
+  if (SSH works?) then (yes)
+    :Check session status;
+    note right
+      **«resource»**
+      sessions://ssh/{node_name}
+    end note
+  else (no)
+    #FFCCCC:Troubleshoot SSH;
+    note right
+      - Verify SSH service running
+      - Check firewall rules
+      - Confirm IP reachable
+      - Verify credentials
+    end note
+    stop
+  endif
+}
+
+partition "Step 9: Connect to Network (Optional)" {
+  if (Connect to other nodes?) then (yes)
+    :Create network connections;
+    note right
+      **«tool»** set_connection()
+      action="connect"
+      node_a, node_b, ports
+    end note
+
+    :Update README with connections;
+    note right
+      **«tool»** update_project_readme()
+      Document link mappings
+    end note
+  endif
+}
+
+#90EE90:Node Setup Complete;
+note right
+  **Completion Checklist:**
+  ✅ Node created and started
+  ✅ IP address configured
+  ✅ SSH enabled and tested
+  ✅ README documented
+  ✅ Network connections made
+
+  **Next Steps:**
+  - Configure routing protocols
+  - Add to monitoring
+  - Create snapshot
+  - Update architecture notes
+end note
+
+stop
+
+@enduml

@@ -225,7 +225,7 @@ This guided workflow helps you enable SSH access on **{node_name}** ({device_typ
 ## Prerequisites
 
 - Node must be running (check with resource `projects://{{id}}/nodes/`)
-- Console access available (check with resource `gns3://sessions/console/{node_name}`)
+- Console access available (check with resource `sessions://console/{node_name}`)
 - Know the device's management IP address
 
 ## Step 1: Configure SSH on Device (via Console)
@@ -263,6 +263,51 @@ console_read("{node_name}", mode="last_page")
 
 Identify the management IP (e.g., 192.168.1.10).
 
+### Check Template Usage Field
+
+Before proceeding, check the node's template for device-specific guidance:
+```
+# View node template usage field
+Resource: nodes://{{project_id}}/{node_name}/template
+```
+
+The **usage** field may contain important information about:
+- Default credentials or special SSH setup requirements
+- Device-specific configuration quirks
+- Console access procedures
+- Management interface naming conventions
+
+### Document in Project README
+
+**IMPORTANT**: Document the management IP and credentials in the project README for future reference:
+
+```
+update_project_readme(f\"\"\"
+[existing README content]
+
+## {node_name} - SSH Access
+
+- **Management IP**: 192.168.1.10  # Replace with actual IP
+- **SSH Username**: {username}
+- **SSH Password**: {password}
+- **SSH Port**: 22
+- **Device Type**: {device_type}
+- **Console Type**: telnet (port {{console_port}})
+
+### SSH Access
+```bash
+ssh {username}@192.168.1.10
+```
+
+### Notes
+- Configured: {{current_date}}
+- SSH enabled via console commands
+- See template usage field for device-specific guidance
+\"\"\")
+```
+
+Keeping credentials documented in the README ensures team members can access devices and helps with troubleshooting connectivity issues.
+
 ## Step 4: Establish SSH Session
 
 ### Option A: Direct Connection (Default)
@@ -284,7 +329,7 @@ ssh_configure("{node_name}", {{
 
 1. Discover available lab proxies:
 ```
-# Check resource: gns3://proxy/registry
+# Check resource: proxies://
 ```
 
 2. Configure SSH through lab proxy:
@@ -300,7 +345,7 @@ ssh_configure("{node_name}", {{
 
 Example for isolated network 10.199.0.0/24:
 ```
-# 1. Find A-PROXY's proxy_id from gns3://proxy/registry
+# 1. Find A-PROXY's proxy_id from proxies://
 # Returns: proxy_id="3f3a56de-19d3-40c3-9806-76bee4fe96d4"
 
 # 2. Configure SSH through A-PROXY
@@ -328,7 +373,7 @@ ssh_command("{node_name}", "show version")  # Or appropriate command for device
 
 Check SSH session is active:
 ```
-# Use resource: gns3://sessions/ssh/{node_name}
+# Use resource: sessions://ssh/{node_name}
 ```
 
 ## Troubleshooting
@@ -356,7 +401,7 @@ Check SSH session is active:
 
 Once SSH is working:
 1. Use `ssh_command()` for all automation tasks
-2. Review command history with resource `gns3://sessions/ssh/{node_name}/history`
+2. Review command history with resource `sessions://ssh/{node_name}/history`
 3. Disconnect console session if no longer needed: `console_disconnect("{node_name}")`
 
 SSH provides better reliability and automatic prompt detection compared to console.

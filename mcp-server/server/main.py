@@ -11,15 +11,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from console_manager import ConsoleManager
 from export_tools import (
     export_topology_diagram,
 )
+from fastmcp import Context, FastMCP
 from gns3_client import GNS3Client
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.types import Completion
 from models import (
     ErrorResponse,
 )
@@ -257,8 +256,7 @@ async def validate_current_project(app: AppContext) -> Optional[str]:
 # Create MCP server
 mcp = FastMCP(
     "GNS3 Lab Controller",
-    lifespan=app_lifespan,
-    dependencies=["mcp>=1.2.1", "httpx>=0.28.1", "telnetlib3>=2.0.4", "pydantic>=2.0.0"]
+    lifespan=app_lifespan
 )
 
 
@@ -548,16 +546,93 @@ async def resource_proxy(ctx: Context, proxy_id: str) -> str:
     return await app.resource_manager.get_proxy(proxy_id)
 
 
+# Diagram resources
+@mcp.resource("diagrams://{project_id}/topology",
+    name="Topology diagram",
+    title="Visual topology diagram (SVG/PNG)",
+    description="Generated topology diagram as image - shows nodes, links, status indicators. Only access if agent can process visual information.",
+    mime_type="image/svg+xml"
+)
+async def resource_topology_diagram(ctx: Context, project_id: str) -> str:
+    """Generate topology diagram as SVG/PNG image (agent-friendly access)
+
+    Returns visual topology diagram without saving to disk. Agents can access
+    diagrams directly if they can process visual information (SVG/PNG formats).
+
+    Query parameters:
+    - format: "svg" (default) or "png" - output format
+    - dpi: DPI for PNG rendering (default: 150, range: 72-300)
+
+    SVG format is preferred for agents (scalable, smaller, faster).
+    PNG format is rasterized at specified DPI.
+
+    ⚠️ Visual Resource Warning:
+    This resource returns image data. Only access if you can process visual
+    information and need node physical locations. Text-based resources
+    (nodes, links, drawings) provide same data in structured format.
+
+    Example URIs:
+    - diagrams://abc123/topology - SVG diagram (default)
+    - diagrams://abc123/topology?format=png&dpi=300 - High-res PNG
+
+    For humans: Use export_topology_diagram() tool to save files to disk.
+    """
+    from export_tools import generate_topology_diagram_content
+
+    app: AppContext = ctx.request_context.lifespan_context
+
+    # Parse query parameters from URI
+    uri = ctx.meta.get("uri", "")
+    format_param = "svg"  # default
+    dpi = 150  # default
+
+    if "?" in uri:
+        query_str = uri.split("?")[1]
+        for param in query_str.split("&"):
+            if "=" in param:
+                key, value = param.split("=", 1)
+                if key == "format":
+                    format_param = value.lower()
+                elif key == "dpi":
+                    try:
+                        dpi = int(value)
+                        dpi = max(72, min(300, dpi))  # Clamp to 72-300
+                    except ValueError:
+                        pass
+
+    try:
+        # Generate diagram content (SVG string or PNG bytes)
+        content, mime_type = await generate_topology_diagram_content(
+            app, project_id, format_param, dpi
+        )
+
+        # Return content with appropriate MIME type
+        # Note: MCP resource returns string, so PNG will be base64-encoded
+        return content
+
+    except Exception as e:
+        error_response = ErrorResponse(
+            error="Failed to generate topology diagram",
+            details=str(e)
+        )
+        return json.dumps(error_response.model_dump(), indent=2)
+
+
 # ============================================================================
 # MCP Prompts - Guided Workflows
 # ============================================================================
 
-@mcp.prompt()
+@mcp.prompt(
+    name="SSH Setup Workflow",
+    title="Enable SSH on network devices",
+    description="Device-specific SSH configuration for 6 device types with multi-proxy support",
+    tags={"workflow", "ssh", "setup", "device-access", "guided"}
+)
 async def ssh_setup(
-    node_name: str,
-    device_type: str,
-    username: str = "admin",
-    password: str = "admin"
+    node_name: Annotated[str, "Target node name to configure"],
+    device_type: Annotated[str, "Device type (cisco_ios, cisco_nxos, mikrotik_routeros, juniper_junos, arista_eos, linux)"],
+    username: Annotated[str, "SSH username to create"] = "admin",
+    password: Annotated[str, "SSH password to set"] = "admin"
 ) -> str:
     """SSH Setup Workflow - Enable SSH access on network devices
 
@@ -565,33 +640,28 @@ async def ssh_setup(
     on network devices. Covers 6 device types: Cisco IOS, NX-OS, MikroTik
     RouterOS, Juniper Junos, Arista EOS, and Linux.
 
-    Args:
-        node_name: Target node name to configure
-        device_type: Device type (cisco_ios, cisco_nxos, mikrotik_routeros,
-                     juniper_junos, arista_eos, linux)
-        username: SSH username to create (default: "admin")
-        password: SSH password to set (default: "admin")
-
     Returns:
         Complete workflow with device-specific commands, verification steps,
-        and troubleshooting guidance
+        multi-proxy routing instructions, and troubleshooting guidance
     """
     return await render_ssh_setup_prompt(node_name, device_type, username, password)
 
 
-@mcp.prompt()
+@mcp.prompt(
+    name="Topology Discovery Workflow",
+    title="Discover and visualize network topology",
+    description="Discover nodes, links, templates, drawings using resources - includes visual diagram guidance for agents",
+    tags={"workflow", "discovery", "visualization", "read-only", "guided"}
+)
 async def topology_discovery(
-    project_name: str = None,
-    include_export: bool = True
+    project_name: Annotated[Optional[str], "Optional project name to focus on (default: guide user to select)"] = None,
+    include_export: Annotated[bool, "Include export/visualization steps (default: True)"] = True
 ) -> str:
     """Topology Discovery Workflow - Discover and visualize network topology
 
     Guides you through discovering nodes, links, and topology structure using
-    MCP resources and tools. Includes visualization and analysis guidance.
-
-    Args:
-        project_name: Optional project name to focus on (default: guide user to select)
-        include_export: Include export/visualization steps (default: True)
+    MCP resources and tools. Includes visualization guidance with warnings
+    about agent-appropriate access patterns.
 
     Returns:
         Complete workflow for topology discovery, visualization, and analysis
@@ -599,19 +669,21 @@ async def topology_discovery(
     return await render_topology_discovery_prompt(project_name, include_export)
 
 
-@mcp.prompt()
+@mcp.prompt(
+    name="Troubleshooting Workflow",
+    title="Systematic network troubleshooting",
+    description="OSI model-based troubleshooting with README checks, diagnostic tools, log collection",
+    tags={"workflow", "troubleshooting", "diagnostics", "guided"}
+)
 async def troubleshooting(
-    node_name: str = None,
-    issue_type: str = None
+    node_name: Annotated[Optional[str], "Optional node name to focus troubleshooting on"] = None,
+    issue_type: Annotated[Optional[str], "Optional issue category (connectivity, console, ssh, performance)"] = None
 ) -> str:
     """Network Troubleshooting Workflow - Systematic network issue diagnosis
 
     Provides OSI model-based troubleshooting methodology for network labs.
     Covers connectivity, console access, SSH, and performance issues.
-
-    Args:
-        node_name: Optional node name to focus troubleshooting on
-        issue_type: Optional issue category (connectivity, console, ssh, performance)
+    Includes README documentation checks for known configurations.
 
     Returns:
         Complete troubleshooting workflow with diagnostic steps, common issues,
@@ -620,27 +692,22 @@ async def troubleshooting(
     return await render_troubleshooting_prompt(node_name, issue_type)
 
 
-@mcp.prompt()
+@mcp.prompt(
+    name="Lab Setup Workflow",
+    title="Automated lab topology creation",
+    description="Create complete topologies (star/mesh/linear/ring/ospf/bgp) with nodes, links, IPs, and README documentation",
+    tags={"workflow", "topology", "automation", "creates-resource", "guided"}
+)
 async def lab_setup(
-    topology_type: str,
-    device_count: int,
-    template_name: str = "Alpine Linux",
-    project_name: str = "Lab Topology"
+    topology_type: Annotated[str, "Topology type (star, mesh, linear, ring, ospf, bgp)"],
+    device_count: Annotated[int, "Number of devices (spokes for star, areas for OSPF, AS for BGP)"],
+    template_name: Annotated[str, "GNS3 template to use"] = "Alpine Linux",
+    project_name: Annotated[str, "Name for the new project"] = "Lab Topology"
 ) -> str:
     """Lab Setup Workflow - Automated lab topology creation
 
     Generates complete lab topologies with automated node placement, link
-    configuration, and IP addressing schemes. Supports 6 topology types.
-
-    Args:
-        topology_type: Topology type (star, mesh, linear, ring, ospf, bgp)
-        device_count: Number of devices (spokes for star, areas for OSPF, AS for BGP)
-        template_name: GNS3 template to use (default: "Alpine Linux")
-        project_name: Name for the new project (default: "Lab Topology")
-
-    Returns:
-        Complete workflow with node creation, link setup, IP addressing,
-        and topology-specific configuration guidance
+    configuration, IP addressing schemes, and README documentation. Supports 6 topology types.
 
     Topology Types:
         - star: Hub-and-spoke with central hub
@@ -649,41 +716,38 @@ async def lab_setup(
         - ring: Circular connection of devices
         - ospf: Multi-area OSPF with backbone and areas
         - bgp: Multiple AS with iBGP and eBGP peering
+
+    Returns:
+        Complete workflow with node creation, link setup, IP addressing,
+        README documentation, and topology-specific configuration guidance
     """
     return render_lab_setup_prompt(topology_type, device_count, template_name, project_name)
 
 
-@mcp.prompt()
+@mcp.prompt(
+    name="Node Setup Workflow",
+    title="Complete node addition workflow",
+    description="End-to-end node setup: create, configure IP, document in README, establish SSH, connect to network",
+    tags={"workflow", "setup", "node", "automation", "guided"}
+)
 async def node_setup(
-    node_name: str,
-    template_name: str,
-    ip_address: str,
-    subnet_mask: str = "255.255.255.0",
-    device_type: str = "cisco_ios",
-    username: str = "admin",
-    password: str = "admin"
+    node_name: Annotated[str, "Name for the new node (e.g., 'Router1')"],
+    template_name: Annotated[str, "GNS3 template to use (e.g., 'Cisco IOSv', 'Alpine Linux')"],
+    ip_address: Annotated[str, "Management IP to assign (e.g., '192.168.1.10')"],
+    subnet_mask: Annotated[str, "Subnet mask"] = "255.255.255.0",
+    device_type: Annotated[str, "Device type for SSH"] = "cisco_ios",
+    username: Annotated[str, "SSH username to create"] = "admin",
+    password: Annotated[str, "SSH password to set"] = "admin"
 ) -> str:
-    """Node Setup Workflow - Complete workflow for adding a new node to a lab
+    """Node Setup Workflow - Complete node addition workflow
 
-    Guides through the entire process of:
-    1. Creating a new node from template
-    2. Starting the node and waiting for boot
-    3. Configuring IP address via console
-    4. Documenting IP/credentials in project README
-    5. Establishing SSH session for automation
-
-    Args:
-        node_name: Name for the new node (e.g., "Router1")
-        template_name: GNS3 template to use (e.g., "Cisco IOSv", "Alpine Linux")
-        ip_address: Management IP to assign (e.g., "192.168.1.10")
-        subnet_mask: Subnet mask (default: "255.255.255.0")
-        device_type: Device type for SSH (cisco_ios, linux, mikrotik_routeros)
-        username: SSH username to create (default: "admin")
-        password: SSH password to set (default: "admin")
+    Guides you through adding a new node: creation, IP configuration via console,
+    README documentation, SSH setup, and network connections. Includes template
+    usage field guidance for device-specific instructions.
 
     Returns:
-        Complete workflow with device-specific commands for IP configuration,
-        README documentation template, SSH session setup, and verification steps
+        Complete workflow covering node creation, boot, IP config, README documentation,
+        template usage checks, SSH setup, and network connection guidance
     """
     return render_node_setup_prompt(
         node_name=node_name,
@@ -700,35 +764,36 @@ async def node_setup(
 # MCP Tools - Actions That Modify State
 # ============================================================================
 
-@mcp.tool(annotations={
-    "idempotent": True
-})
-async def open_project(ctx: Context, project_name: str) -> str:
+@mcp.tool(
+    name="Open project",
+    tags={"project", "management", "idempotent"},
+    annotations={"idempotent": True}
+)
+async def open_project(
+    ctx: Context,
+    project_name: Annotated[str, "Name of the project to open"],
+) -> str:
     """Open a GNS3 project by name
 
-    Args:
-        project_name: Name of the project to open
-
-    Returns:
-        JSON with ProjectInfo for opened project
+    Returns: JSON with ProjectInfo for opened project
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await open_project_impl(app, project_name)
 
 
-@mcp.tool(annotations={
-    "idempotent": True,
-    "creates_resource": True
-})
-async def create_project(ctx: Context, name: str, path: Optional[str] = None) -> str:
+@mcp.tool(
+    name="Create project",
+    tags={"project", "management", "creates-resource", "idempotent"},
+    annotations={"idempotent": True, "creates_resource": True}
+)
+async def create_project(
+    ctx: Context,
+    name: Annotated[str, "Project name"],
+    path: Annotated[str | None, "Optional project directory path"] = None
+) -> str:
     """Create a new GNS3 project and auto-open it
 
-    Args:
-        name: Project name
-        path: Optional project directory path
-
-    Returns:
-        JSON with ProjectInfo for created project
+    Returns: JSON with ProjectInfo for created project
 
     Example:
         >>> create_project("My Lab")
@@ -738,14 +803,15 @@ async def create_project(ctx: Context, name: str, path: Optional[str] = None) ->
     return await create_project_impl(app, name, path)
 
 
-@mcp.tool(annotations={
-    "idempotent": True
-})
+@mcp.tool(
+    name="Close project",
+    tags={"project", "management", "idempotent"},
+    annotations={"idempotent": True}
+)
 async def close_project(ctx: Context) -> str:
     """Close the currently opened project
 
-    Returns:
-        JSON with success message
+    Returns: JSON with success message
 
     Example:
         >>> close_project()
@@ -754,23 +820,27 @@ async def close_project(ctx: Context) -> str:
     return await close_project_impl(app)
 
 
-@mcp.tool(annotations={
-    "idempotent": True
-})
-async def set_node(ctx: Context,
-                   node_name: str,
-                   action: Optional[str] = None,
-                   x: Optional[int] = None,
-                   y: Optional[int] = None,
-                   z: Optional[int] = None,
-                   locked: Optional[bool] = None,
-                   ports: Optional[int] = None,
-                   name: Optional[str] = None,
-                   ram: Optional[int] = None,
-                   cpus: Optional[int] = None,
-                   hdd_disk_image: Optional[str] = None,
-                   adapters: Optional[int] = None,
-                   console_type: Optional[str] = None) -> str:
+@mcp.tool(
+    name="Set node properties",
+    tags={"node", "topology", "modifies-state", "idempotent"},
+    annotations={"idempotent": True}
+)
+async def set_node(
+    ctx: Context,
+    node_name: Annotated[str, "Name of the node to modify"],
+    action: Annotated[str | None, "Action: start/stop/suspend/reload/restart"] = None,
+    x: Annotated[int | None, "X coordinate (top-left corner of node icon)"] = None,
+    y: Annotated[int | None, "Y coordinate (top-left corner of node icon)"] = None,
+    z: Annotated[int | None, "Z-order layer for overlapping nodes"] = None,
+    locked: Annotated[bool | None, "Lock position to prevent GUI moves"] = None,
+    ports: Annotated[int | None, "Number of ports (ethernet_switch nodes only)"] = None,
+    name: Annotated[str | None, "New name (REQUIRES node stopped)"] = None,
+    ram: Annotated[int | None, "RAM in MB (QEMU nodes only)"] = None,
+    cpus: Annotated[int | None, "Number of CPUs (QEMU nodes only)"] = None,
+    hdd_disk_image: Annotated[str | None, "HDD disk image path (QEMU nodes only)"] = None,
+    adapters: Annotated[int | None, "Network adapters count (QEMU nodes only)"] = None,
+    console_type: Annotated[str | None, "Console type: telnet/vnc/spice"] = None
+) -> str:
     """Configure node properties and/or control node state
 
     Validation Rules:
@@ -780,23 +850,7 @@ async def set_node(ctx: Context,
     - action values: start, stop, suspend, reload, restart
     - restart action: stops node (with retry logic), waits for confirmed stop, then starts
 
-    Args:
-        node_name: Name of the node to modify
-        action: Action to perform (start/stop/suspend/reload/restart)
-        x: X coordinate (top-left corner of node icon)
-        y: Y coordinate (top-left corner of node icon)
-        z: Z-order (layer) for overlapping nodes
-        locked: Lock node position (prevents accidental moves in GUI)
-        ports: Number of ports (ethernet_switch nodes only)
-        name: New name for the node (REQUIRES node to be stopped)
-        ram: RAM in MB (QEMU nodes only)
-        cpus: Number of CPUs (QEMU nodes only)
-        hdd_disk_image: Path to HDD disk image (QEMU nodes only)
-        adapters: Number of network adapters (QEMU nodes only)
-        console_type: Console type - telnet, vnc, spice, etc.
-
-    Returns:
-        Status message describing what was done
+    Returns: Status message describing what was done
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await set_node_impl(
@@ -805,8 +859,16 @@ async def set_node(ctx: Context,
     )
 
 
-@mcp.tool()
-async def console_send(ctx: Context, node_name: str, data: str, raw: bool = False) -> str:
+@mcp.tool(
+    name="Send console data",
+    tags={"console", "device-access", "modifies-state"}
+)
+async def console_send(
+    ctx: Context,
+    node_name: Annotated[str, "Name of the node (e.g., 'Router1')"],
+    data: Annotated[str, "Data to send - include newline for commands (e.g., 'enable\\n')"],
+    raw: Annotated[bool, "Send data without escape sequence processing"] = False
+) -> str:
     """Send data to console (auto-connects if needed)
 
     IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
@@ -835,14 +897,7 @@ async def console_send(ctx: Context, node_name: str, data: str, raw: bool = Fals
     - By default, processes common escape sequences (\n, \r, \t, \x1b)
     - Use raw=True to send data without processing (for binary data)
 
-    Args:
-        node_name: Name of the node (e.g., "Router1")
-        data: Data to send - include newline for commands (e.g., "enable\n")
-              Send just "\n" to wake console and check for prompts
-        raw: If True, send data without escape sequence processing (default: False)
-
-    Returns:
-        "Sent successfully" or error message
+    Returns: "Sent successfully" or error message
 
     Example - Wake console and check state:
         console_send("R1", "\n")
@@ -853,20 +908,22 @@ async def console_send(ctx: Context, node_name: str, data: str, raw: bool = Fals
     return await send_console_impl(app, node_name, data, raw)
 
 
-@mcp.tool(annotations={
-    "read_only": True
-})
+@mcp.tool(
+    name="Read console output",
+    tags={"console", "device-access", "read-only"},
+    annotations={"read_only": True}
+)
 async def console_read(
     ctx: Context,
-    node_name: str,
-    mode: str = "diff",
-    pages: int = 1,
-    pattern: str | None = None,
-    case_insensitive: bool = False,
-    invert: bool = False,
-    before: int = 0,
-    after: int = 0,
-    context: int = 0
+    node_name: Annotated[str, "Name of the node"],
+    mode: Annotated[str, "Output mode: diff/last_page/num_pages/all"] = "diff",
+    pages: Annotated[int, "Number of pages (only with mode='num_pages')"] = 1,
+    pattern: Annotated[str | None, "Regex pattern to filter output"] = None,
+    case_insensitive: Annotated[bool, "Case-insensitive matching (grep -i)"] = False,
+    invert: Annotated[bool, "Invert match (grep -v)"] = False,
+    before: Annotated[int, "Context lines before match (grep -B)"] = 0,
+    after: Annotated[int, "Context lines after match (grep -A)"] = 0,
+    context: Annotated[int, "Context lines around match (grep -C)"] = 0
 ) -> str:
     """Read console output with optional grep filtering (auto-connects if needed)
 
@@ -895,17 +952,7 @@ async def console_read(
     - invert: Return non-matching lines (grep -v)
     - before/after/context: Context lines around matches (grep -B/-A/-C)
 
-    Args:
-        node_name: Name of the node
-        mode: Output mode (default: "diff")
-        pages: Number of pages (only with mode="num_pages")
-        pattern: Regex to filter output
-        case_insensitive: Case-insensitive matching
-        invert: Invert match
-        before/after/context: Context lines
-
-    Returns:
-        Console output (filtered if pattern provided)
+    Returns: Console output (filtered if pattern provided)
 
     Example - Grep for errors:
         console_read("R1", mode="all", pattern="error", case_insensitive=True)
@@ -917,24 +964,32 @@ async def console_read(
     return await read_console_impl(app, node_name, mode, pages, pattern, case_insensitive, invert, before, after, context)
 
 
-@mcp.tool(annotations={
-    "idempotent": True
-})
-async def console_disconnect(ctx: Context, node_name: str) -> str:
+@mcp.tool(
+    name="Disconnect console",
+    tags={"console", "device-access", "idempotent"},
+    annotations={"idempotent": True}
+)
+async def console_disconnect(
+    ctx: Context,
+    node_name: Annotated[str, "Name of the node"]
+) -> str:
     """Disconnect console session
 
-    Args:
-        node_name: Name of the node
-
-    Returns:
-        JSON with status
+    Returns: JSON with status
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await disconnect_console_impl(app, node_name)
 
 
-@mcp.tool()
-async def console_keystroke(ctx: Context, node_name: str, key: str) -> str:
+@mcp.tool(
+    name="Send console keystroke",
+    tags={"console", "device-access", "modifies-state"}
+)
+async def console_keystroke(
+    ctx: Context,
+    node_name: Annotated[str, "Name of the node"],
+    key: Annotated[str, "Special key to send (e.g., 'up', 'enter', 'ctrl_c')"]
+) -> str:
     """Send special keystroke to console (auto-connects if needed)
 
     IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
@@ -951,12 +1006,7 @@ async def console_keystroke(ctx: Context, node_name: str, key: str) -> str:
     - Control: "ctrl_c", "ctrl_d", "ctrl_z", "ctrl_a", "ctrl_e"
     - Function: "f1" through "f12"
 
-    Args:
-        node_name: Name of the node
-        key: Special key to send (e.g., "up", "enter", "ctrl_c")
-
-    Returns:
-        "Sent successfully" or error message
+    Returns: "Sent successfully" or error message
 
     Example - Navigate menu:
         send_keystroke("R1", "down")
@@ -971,14 +1021,17 @@ async def console_keystroke(ctx: Context, node_name: str, key: str) -> str:
     return await send_keystroke_impl(app, node_name, key)
 
 
-@mcp.tool()
+@mcp.tool(
+    name="Send console command and wait",
+    tags={"console", "device-access", "automation"}
+)
 async def console_send_and_wait(
     ctx: Context,
-    node_name: str,
-    command: str,
-    wait_pattern: Optional[str] = None,
-    timeout: int = 30,
-    raw: bool = False
+    node_name: Annotated[str, "Name of the node"],
+    command: Annotated[str, "Command to send (include \\n for newline)"],
+    wait_pattern: Annotated[str | None, "Regex pattern to wait for (e.g., 'Router#')"] = None,
+    timeout: Annotated[int, "Maximum seconds to wait for pattern"] = 30,
+    raw: Annotated[bool, "Send command without escape sequence processing"] = False
 ) -> str:
     """Send command and wait for prompt pattern with timeout
 
@@ -996,23 +1049,8 @@ async def console_send_and_wait(
     3. Use that exact prompt pattern in wait_pattern parameter
     4. This ensures you wait for the right prompt and don't miss command output
 
-    Args:
-        node_name: Name of the node
-        command: Command to send (include \\n for newline)
-        wait_pattern: Optional regex pattern to wait for (e.g., "Router[>#]", "Login:")
-                      If None, waits 2 seconds and returns output
-                      TIP: Check prompt first with console_read() to get exact pattern
-        timeout: Maximum seconds to wait for pattern (default: 30)
-        raw: If True, send command without escape sequence processing (default: False)
-
     Returns:
-        JSON with:
-        {
-            "output": "console output",
-            "pattern_found": true/false,
-            "timeout_occurred": true/false,
-            "wait_time": 2.5  // seconds actually waited
-        }
+        JSON with output, pattern_found, timeout_occurred, wait_time
 
     Examples:
         # Step 1: Check the prompt first
@@ -1038,8 +1076,14 @@ async def console_send_and_wait(
     return await send_and_wait_console_impl(app, node_name, command, wait_pattern, timeout, raw)
 
 
-@mcp.tool()
-async def console_batch(ctx: Context, operations: List[Dict[str, Any]]) -> str:
+@mcp.tool(
+    name="Console batch operations",
+    tags={"console", "device-access", "bulk", "automation"}
+)
+async def console_batch(
+    ctx: Context,
+    operations: Annotated[List[Dict[str, Any]], "List of console operations (send/send_and_wait/read/keystroke)"]
+) -> str:
     """Execute multiple console operations in batch with validation
 
     IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
@@ -1141,10 +1185,15 @@ async def console_batch(ctx: Context, operations: List[Dict[str, Any]]) -> str:
     return await console_batch_impl(app, operations)
 
 
-@mcp.tool(annotations={
-    "modifies_topology": True
-})
-async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str:
+@mcp.tool(
+    name="Set network connections",
+    tags={"network", "topology", "bulk", "modifies-state"},
+    annotations={"modifies_topology": True}
+)
+async def set_connection(
+    ctx: Context,
+    connections: Annotated[List[Dict[str, Any]], "List of connection operations (connect/disconnect)"]
+) -> str:
     """Manage network connections (links) in batch with two-phase validation
 
     Two-phase execution prevents partial topology changes:
@@ -1156,25 +1205,11 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
         2. Identify link IDs to disconnect (if needed)
         3. Call set_connection() with disconnect + connect operations
 
-    Args:
-        connections: List of connection operations:
-            Connect: {
-                "action": "connect",
-                "node_a": "Router1",
-                "node_b": "Router2",
-                "port_a": 0,
-                "port_b": 1,
-                "adapter_a": "eth0",  # Port name OR adapter number (int)
-                "adapter_b": "GigabitEthernet0/0"  # Port name OR adapter number
-            }
-            Disconnect: {
-                "action": "disconnect",
-                "link_id": "abc123"
-            }
+    Connection Operations:
+        Connect: {action: "connect", node_a, node_b, port_a, port_b, adapter_a, adapter_b}
+        Disconnect: {action: "disconnect", link_id}
 
-    Returns:
-        JSON with OperationResult (completed and failed operations)
-        Includes both port names and adapter/port numbers in confirmation
+    Returns: JSON with OperationResult (completed and failed operations)
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -1185,34 +1220,26 @@ async def set_connection(ctx: Context, connections: List[Dict[str, Any]]) -> str
     return await set_connection_impl(app, connections)
 
 
-@mcp.tool(annotations={
-    "creates_resource": True,
-    "modifies_topology": True
-})
+@mcp.tool(
+    name="Create node",
+    tags={"node", "topology", "creates-resource"},
+    annotations={"creates_resource": True, "modifies_topology": True}
+)
 async def create_node(
     ctx: Context,
-    template_name: str,
-    x: int,
-    y: int,
-    node_name: Optional[str] = None,
-    compute_id: str = "local",
-    properties: Optional[Dict[str, Any]] = None
+    template_name: Annotated[str, "Template name (e.g., 'Alpine Linux', 'Cisco IOSv')"],
+    x: Annotated[int, "X coordinate (horizontal position, left edge of icon)"],
+    y: Annotated[int, "Y coordinate (vertical position, top edge of icon)"],
+    node_name: Annotated[str | None, "Custom name (defaults to template name with auto-number)"] = None,
+    compute_id: Annotated[str, "Compute server ID"] = "local",
+    properties: Annotated[Dict[str, Any] | None, "Override template properties (e.g., {'ram': 512})"] = None
 ) -> str:
     """Create a new node from template at specified coordinates
 
     Creates a node from a GNS3 template and places it at the given x/y position.
     Optional properties can override template defaults.
 
-    Args:
-        template_name: Name of the template to use (e.g., "Alpine Linux", "Cisco IOSv")
-        x: X coordinate (horizontal position, left edge of icon)
-        y: Y coordinate (vertical position, top edge of icon)
-        node_name: Optional custom name (defaults to template name with auto-number)
-        compute_id: Compute server ID (default: "local")
-        properties: Optional dict to override template properties (e.g., {"ram": 512, "cpus": 2})
-
-    Returns:
-        JSON with created NodeInfo
+    Returns: JSON with created NodeInfo
 
     Example:
         >>> create_node("Alpine Linux", 100, 200)
@@ -1228,19 +1255,20 @@ async def create_node(
     return await create_node_impl(app, template_name, x, y, node_name, compute_id, properties)
 
 
-@mcp.tool(annotations={
-    "destructive": True,
-    "idempotent": True,
-    "modifies_topology": True
-})
-async def delete_node(ctx: Context, node_name: str) -> str:
+@mcp.tool(
+    name="Delete node",
+    tags={"node", "topology", "destructive", "idempotent"},
+    annotations={"destructive": True, "idempotent": True, "modifies_topology": True}
+)
+async def delete_node(
+    ctx: Context,
+    node_name: Annotated[str, "Name of the node to delete"]
+) -> str:
     """Delete a node from the current project
 
-    Args:
-        node_name: Name of the node to delete
+    WARNING: This operation is destructive and cannot be undone.
 
-    Returns:
-        JSON confirmation message
+    Returns: JSON confirmation message
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -1251,19 +1279,21 @@ async def delete_node(ctx: Context, node_name: str) -> str:
     return await delete_node_impl(app, node_name)
 
 
-@mcp.tool()
-async def get_node_file(ctx: Context, node_name: str, file_path: str) -> str:
+@mcp.tool(
+    name="Get node file",
+    tags={"node", "read-only"}
+)
+async def get_node_file(
+    ctx: Context,
+    node_name: Annotated[str, "Name of the Docker node"],
+    file_path: Annotated[str, "Path relative to container root (e.g., 'etc/network/interfaces')"]
+) -> str:
     """Read file from Docker node filesystem
 
     Allows reading files from Docker node containers. Useful for inspecting
     configuration files, logs, or other data inside containers.
 
-    Args:
-        node_name: Name of the Docker node
-        file_path: Path relative to container root (e.g., 'etc/network/interfaces')
-
-    Returns:
-        JSON with file contents
+    Returns: JSON with file contents
 
     Example:
         get_node_file("A-PROXY", "etc/network/interfaces")
@@ -1277,8 +1307,16 @@ async def get_node_file(ctx: Context, node_name: str, file_path: str) -> str:
     return await get_node_file_impl(app, node_name, file_path)
 
 
-@mcp.tool()
-async def write_node_file(ctx: Context, node_name: str, file_path: str, content: str) -> str:
+@mcp.tool(
+    name="Write node file",
+    tags={"node", "modifies-state"}
+)
+async def write_node_file(
+    ctx: Context,
+    node_name: Annotated[str, "Name of the Docker node"],
+    file_path: Annotated[str, "Path relative to container root (e.g., 'etc/network/interfaces')"],
+    content: Annotated[str, "File contents to write"]
+) -> str:
     """Write file to Docker node filesystem
 
     Allows writing configuration files or other data to Docker node containers.
@@ -1286,13 +1324,7 @@ async def write_node_file(ctx: Context, node_name: str, file_path: str, content:
     IMPORTANT: File changes do NOT automatically restart the node or apply configuration.
     For network configuration, use configure_node_network() which handles the full workflow.
 
-    Args:
-        node_name: Name of the Docker node
-        file_path: Path relative to container root (e.g., 'etc/network/interfaces')
-        content: File contents to write
-
-    Returns:
-        JSON confirmation message
+    Returns: JSON confirmation message
 
     Example:
         write_node_file("A-PROXY", "etc/network/interfaces", "auto eth0\\niface eth0 inet dhcp")
@@ -1306,10 +1338,16 @@ async def write_node_file(ctx: Context, node_name: str, file_path: str, content:
     return await write_node_file_impl(app, node_name, file_path, content)
 
 
-@mcp.tool(annotations={
-    "modifies_topology": True
-})
-async def configure_node_network(ctx: Context, node_name: str, interfaces: list) -> str:
+@mcp.tool(
+    name="Configure node network",
+    tags={"network", "node", "modifies-state"},
+    annotations={"modifies_topology": True}
+)
+async def configure_node_network(
+    ctx: Context,
+    node_name: Annotated[str, "Name of the Docker node"],
+    interfaces: Annotated[list, "List of interface configs (static/DHCP)"]
+) -> str:
     """Configure network interfaces on Docker node
 
     Generates /etc/network/interfaces file and restarts the node to apply configuration.
@@ -1318,23 +1356,11 @@ async def configure_node_network(ctx: Context, node_name: str, interfaces: list)
     This is the recommended way to configure network settings on Docker nodes, as it handles
     the complete workflow: write config file → restart node → apply configuration.
 
-    Args:
-        node_name: Name of the Docker node
-        interfaces: List of interface configurations, each with:
-            Static mode:
-                - name: Interface name (eth0, eth1, etc.)
-                - mode: "static"
-                - address: IP address
-                - netmask: Network mask
-                - gateway: Default gateway (optional)
-                - dns: DNS server (optional, default: 8.8.8.8)
-            DHCP mode:
-                - name: Interface name (eth0, eth1, etc.)
-                - mode: "dhcp"
-                - dns: DNS server (optional, default: 8.8.8.8)
+    Interface Configuration:
+        Static mode: {name, mode: "static", address, netmask, gateway?, dns?}
+        DHCP mode: {name, mode: "dhcp", dns?}
 
-    Returns:
-        JSON confirmation with configured interfaces
+    Returns: JSON confirmation with configured interfaces
 
     Examples:
         # Static IP configuration
@@ -1375,8 +1401,14 @@ async def configure_node_network(ctx: Context, node_name: str, interfaces: list)
 
     return await configure_node_network_impl(app, node_name, interfaces)
 
-@mcp.tool()
-async def get_project_readme(ctx: Context, project_id: Optional[str] = None) -> str:
+@mcp.tool(
+    name="Get project README",
+    tags={"documentation", "project", "read-only"}
+)
+async def get_project_readme(
+    ctx: Context,
+    project_id: Annotated[str | None, "Project ID (uses current project if not specified)"] = None
+) -> str:
     """Get project README/notes
 
     Returns project documentation in markdown format including:
@@ -1386,11 +1418,7 @@ async def get_project_readme(ctx: Context, project_id: Optional[str] = None) -> 
     - Configuration snippets
     - Troubleshooting notes
 
-    Args:
-        project_id: Project ID (uses current project if not specified)
-
-    Returns:
-        JSON with project_id and markdown content
+    Returns: JSON with project_id and markdown content
 
     Example:
         >>> get_project_readme()
@@ -1419,8 +1447,15 @@ async def get_project_readme(ctx: Context, project_id: Optional[str] = None) -> 
         }, indent=2)
 
 
-@mcp.tool()
-async def update_project_readme(ctx: Context, content: str, project_id: Optional[str] = None) -> str:
+@mcp.tool(
+    name="Update project README",
+    tags={"documentation", "project", "modifies-state"}
+)
+async def update_project_readme(
+    ctx: Context,
+    content: Annotated[str, "Markdown content to save"],
+    project_id: Annotated[str | None, "Project ID (uses current project if not specified)"] = None
+) -> str:
     """Update project README/notes
 
     Saves project documentation in markdown format. Agent can store:
@@ -1477,40 +1512,43 @@ async def update_project_readme(ctx: Context, content: str, project_id: Optional
 
 # export_topology_diagram tool now registered from export_tools module
 # Register the imported tool with MCP
-mcp.tool(annotations={
-    "idempotent": True,
-    "read_only": True,
-    "creates_resource": True
-})(export_topology_diagram)
+mcp.tool(
+    name="Export topology diagram",
+    description="Export topology diagram to SVG/PNG files on disk. For agents: use diagrams://{project_id}/topology resource for direct access without saving files.",
+    tags={"topology", "visualization", "export", "file-io", "idempotent"},
+    annotations={"idempotent": True, "read_only": True, "creates_resource": True}
+)(export_topology_diagram)
 
 
 # ============================================================================
 # Drawing Tools
 # ============================================================================
 
-@mcp.tool(annotations={
-    "creates_resource": True
-})
+@mcp.tool(
+    name="Create drawing",
+    tags={"drawing", "topology", "visualization", "creates-resource"},
+    annotations={"creates_resource": True}
+)
 async def create_drawing(
     ctx: Context,
-    drawing_type: str,
-    x: int,
-    y: int,
-    z: int = 0,
-    width: Optional[int] = None,
-    height: Optional[int] = None,
-    rx: Optional[int] = None,
-    ry: Optional[int] = None,
-    fill_color: str = "#ffffff",
-    border_color: str = "#000000",
-    border_width: int = 2,
-    x2: Optional[int] = None,
-    y2: Optional[int] = None,
-    text: Optional[str] = None,
-    font_size: int = 10,
-    font_weight: str = "normal",
-    font_family: str = "TypeWriter",
-    color: str = "#000000"
+    drawing_type: Annotated[str, "Type: 'rectangle', 'ellipse', 'line', or 'text'"],
+    x: Annotated[int, "X coordinate (start point for line, top-left for others)"],
+    y: Annotated[int, "Y coordinate (start point for line, top-left for others)"],
+    z: Annotated[int, "Z-order/layer (default: 0 for shapes, 1 for text)"] = 0,
+    width: Annotated[int | None, "Width in pixels (rectangle/ellipse only)"] = None,
+    height: Annotated[int | None, "Height in pixels (rectangle/ellipse only)"] = None,
+    rx: Annotated[int | None, "Horizontal corner radius (rectangle only)"] = None,
+    ry: Annotated[int | None, "Vertical corner radius (rectangle only)"] = None,
+    fill_color: Annotated[str, "Fill color hex code"] = "#ffffff",
+    border_color: Annotated[str, "Border color hex code"] = "#000000",
+    border_width: Annotated[int, "Border width in pixels"] = 2,
+    x2: Annotated[int | None, "End X coordinate (line only)"] = None,
+    y2: Annotated[int | None, "End Y coordinate (line only)"] = None,
+    text: Annotated[str | None, "Text content (text only)"] = None,
+    font_size: Annotated[int, "Font size in points (text only)"] = 10,
+    font_weight: Annotated[str, "Font weight: 'normal' or 'bold' (text only)"] = "normal",
+    font_family: Annotated[str, "Font family name (text only)"] = "TypeWriter",
+    color: Annotated[str, "Text color hex code (text only)"] = "#000000"
 ) -> str:
     """Create a drawing object (rectangle, ellipse, line, or text)
 
@@ -1563,32 +1601,24 @@ async def create_drawing(
     )
 
 
-@mcp.tool(annotations={
-    "idempotent": True
-})
+@mcp.tool(
+    name="Update drawing",
+    tags={"drawing", "topology", "visualization", "modifies-state"},
+    annotations={"idempotent": True}
+)
 async def update_drawing(
     ctx: Context,
-    drawing_id: str,
-    x: Optional[int] = None,
-    y: Optional[int] = None,
-    z: Optional[int] = None,
-    rotation: Optional[int] = None,
-    svg: Optional[str] = None,
-    locked: Optional[bool] = None
+    drawing_id: Annotated[str, "ID of the drawing to update"],
+    x: Annotated[int | None, "New X coordinate"] = None,
+    y: Annotated[int | None, "New Y coordinate"] = None,
+    z: Annotated[int | None, "New Z-order/layer"] = None,
+    rotation: Annotated[int | None, "New rotation angle in degrees"] = None,
+    svg: Annotated[str | None, "New SVG content (for changing appearance)"] = None,
+    locked: Annotated[bool | None, "Lock/unlock drawing"] = None
 ) -> str:
     """Update properties of an existing drawing object
 
-    Args:
-        drawing_id: ID of the drawing to update
-        x: New X coordinate (optional)
-        y: New Y coordinate (optional)
-        z: New Z-order/layer (optional)
-        rotation: New rotation angle in degrees (optional)
-        svg: New SVG content (optional, for changing appearance)
-        locked: Lock/unlock drawing (optional)
-
-    Returns:
-        JSON with updated drawing info
+    Returns: JSON with updated drawing info
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -1599,18 +1629,20 @@ async def update_drawing(
     return await update_drawing_impl(app, drawing_id, x, y, z, rotation, svg, locked)
 
 
-@mcp.tool(annotations={
-    "destructive": True,
-    "idempotent": True
-})
-async def delete_drawing(ctx: Context, drawing_id: str) -> str:
+@mcp.tool(
+    name="Delete drawing",
+    tags={"drawing", "topology", "visualization", "destructive", "idempotent"},
+    annotations={"destructive": True, "idempotent": True}
+)
+async def delete_drawing(
+    ctx: Context,
+    drawing_id: Annotated[str, "ID of the drawing to delete"]
+) -> str:
     """Delete a drawing object from the current project
 
-    Args:
-        drawing_id: ID of the drawing to delete
+    WARNING: This operation is destructive and cannot be undone.
 
-    Returns:
-        JSON confirmation message
+    Returns: JSON confirmation message
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -1621,8 +1653,14 @@ async def delete_drawing(ctx: Context, drawing_id: str) -> str:
     return await delete_drawing_impl(app, drawing_id)
 
 
-@mcp.tool()
-async def create_drawings_batch(ctx: Context, drawings: list[dict]) -> str:
+@mcp.tool(
+    name="Create drawings batch",
+    tags={"drawing", "topology", "visualization", "bulk", "creates-resource"},
+)
+async def create_drawings_batch(
+    ctx: Context,
+    drawings: Annotated[list[dict], "List of drawing definitions to create"]
+) -> str:
     """Create multiple drawing objects in batch with validation
 
     Two-phase execution prevents partial failures:
@@ -1681,17 +1719,19 @@ from tools.ssh_tools import (
 )
 
 
-@mcp.tool(annotations={
-    "idempotent": True
-})
+@mcp.tool(
+    name="Configure SSH session",
+    tags={"ssh", "device-access", "automation", "idempotent"},
+    annotations={"idempotent": True}
+)
 async def ssh_configure(
     ctx: Context,
-    node_name: str,
-    device_dict: dict,
-    persist: bool = True,
-    force: bool = False,
-    proxy: str = "host",
-    session_timeout: int = 14400
+    node_name: Annotated[str, "GNS3 node name (e.g., 'Router1') OR '@' for local execution"],
+    device_dict: Annotated[dict, "Netmiko config: device_type, host, username, password"],
+    persist: Annotated[bool, "Store credentials for reconnection"] = True,
+    force: Annotated[bool, "Force recreation even if healthy session exists"] = False,
+    proxy: Annotated[str, "Proxy to route through: 'host' (default) or proxy_id"] = "host",
+    session_timeout: Annotated[int, "Session timeout in seconds (default: 4 hours)"] = 14400
 ) -> str:
     """Configure SSH session to a network device in GNS3 lab
 
@@ -1774,14 +1814,17 @@ async def ssh_configure(
     return await configure_ssh_impl(app, node_name, device_dict, persist, force, proxy, session_timeout)
 
 
-@mcp.tool()
+@mcp.tool(
+    name="Execute SSH command",
+    tags={"ssh", "device-access", "automation"}
+)
 async def ssh_command(
     ctx: Context,
-    node_name: str,
-    command: str | list,
-    expect_string: str = None,
-    read_timeout: float = 30.0,
-    wait_timeout: int = 30
+    node_name: Annotated[str, "Node identifier (or '@' for local execution)"],
+    command: Annotated[str | list, "Command(s) - string for show, list for config/bash script"],
+    expect_string: Annotated[str | None, "Regex pattern to wait for (overrides prompt detection)"] = None,
+    read_timeout: Annotated[float, "Max seconds to wait for output"] = 30.0,
+    wait_timeout: Annotated[int, "Max wait for long commands (0 for async job_id)"] = 30
 ) -> str:
     """Execute command(s) via SSH with auto-detection (show vs config)
 
@@ -1843,24 +1886,31 @@ async def ssh_command(
         return await ssh_send_command_impl(app, node_name, command, expect_string, read_timeout, wait_timeout)
 
 
-@mcp.tool(annotations={
-    "idempotent": True
-})
-async def ssh_disconnect(ctx: Context, node_name: str) -> str:
+@mcp.tool(
+    name="Disconnect SSH session",
+    tags={"ssh", "device-access", "idempotent"},
+    annotations={"idempotent": True}
+)
+async def ssh_disconnect(
+    ctx: Context,
+    node_name: Annotated[str, "Node identifier"]
+) -> str:
     """Disconnect SSH session
 
-    Args:
-        node_name: Node identifier
-
-    Returns:
-        JSON with status
+    Returns: JSON with status
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await ssh_disconnect_impl(app, node_name)
 
 
-@mcp.tool()
-async def ssh_batch(ctx: Context, operations: list[dict]) -> str:
+@mcp.tool(
+    name="SSH batch operations",
+    tags={"ssh", "device-access", "bulk", "automation"}
+)
+async def ssh_batch(
+    ctx: Context,
+    operations: Annotated[list[dict], "List of SSH operations (command/disconnect)"]
+) -> str:
     """Execute multiple SSH operations in batch with validation
 
     Local Execution Support (v0.28.0):
@@ -1930,150 +1980,150 @@ async def ssh_batch(ctx: Context, operations: list[dict]) -> str:
 # See: https://github.com/anthropics/fastmcp/issues
 
 # # Completion for node names
-# @mcp.completion("console_send", "node_name")
-# @mcp.completion("console_read", "node_name")
-# @mcp.completion("console_keystroke", "node_name")
-# @mcp.completion("console_disconnect", "node_name")
-# @mcp.completion("ssh_configure", "node_name")
-# @mcp.completion("ssh_command", "node_name")
-# @mcp.completion("ssh_disconnect", "node_name")
-# @mcp.completion("set_node", "node_name")
-# @mcp.completion("delete_node", "node_name")
-async def complete_node_names_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
-    """Autocomplete node names from current project"""
-    app: AppContext = ctx.request_context.lifespan_context
-
-    if not app.current_project_id:
-        return []
-
-    try:
-        nodes = await app.gns3.get_nodes(app.current_project_id)
-
-        # Filter by prefix
-        matching = [n for n in nodes if n["name"].lower().startswith(prefix.lower())]
-
-        # Return completions
-        return [
-            Completion(
-                value=node["name"],
-                label=node["name"],
-                description=f"{node['node_type']} ({node['status']})"
-            )
-            for node in matching[:10]  # Limit to 10 results
-        ]
-
-    except Exception as e:
-        logger.warning(f"Failed to fetch nodes for completion: {e}")
-        return []
-
-
-# # Completion for template names
-# @mcp.completion("create_node", "template_name")
-async def complete_template_names_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
-    """Autocomplete template names"""
-    app: AppContext = ctx.request_context.lifespan_context
-
-    try:
-        templates = await app.gns3.get_templates()
-
-        matching = [t for t in templates if t["name"].lower().startswith(prefix.lower())]
-
-        return [
-            Completion(
-                value=template["name"],
-                label=template["name"],
-                description=f"{template.get('category', 'Unknown')} - {template.get('node_type', '')}"
-            )
-            for template in matching[:10]
-        ]
-
-    except Exception as e:
-        logger.warning(f"Failed to fetch templates for completion: {e}")
-        return []
-
-
-# # Completion for node actions (enum)
-# @mcp.completion("set_node", "action")
-async def complete_node_actions_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
-    """Autocomplete node actions"""
-    actions = [
-        ("start", "Start the node"),
-        ("stop", "Stop the node"),
-        ("suspend", "Suspend the node"),
-        ("reload", "Reload the node"),
-        ("restart", "Restart the node (stop + start)")
-    ]
-
-    matching = [(a, desc) for a, desc in actions if a.startswith(prefix.lower())]
-
-    return [
-        Completion(value=action, label=action, description=desc)
-        for action, desc in matching
-    ]
-
-
-# # Completion for project names
-# @mcp.completion("open_project", "project_name")
-async def complete_project_names_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
-    """Autocomplete project names"""
-    app: AppContext = ctx.request_context.lifespan_context
-
-    try:
-        projects = await app.gns3.get_projects()
-
-        matching = [p for p in projects if p["name"].lower().startswith(prefix.lower())]
-
-        return [
-            Completion(
-                value=project["name"],
-                label=project["name"],
-                description=f"Status: {project['status']}"
-            )
-            for project in matching[:10]
-        ]
-
-    except Exception as e:
-        logger.warning(f"Failed to fetch projects for completion: {e}")
-        return []
-
-# # Completion for drawing types (enum)
-# @mcp.completion("create_drawing", "drawing_type")
-async def complete_drawing_types_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
-    """Autocomplete drawing types"""
-    drawing_types = [
-        ("rectangle", "Create a rectangle shape"),
-        ("ellipse", "Create an ellipse/circle shape"),
-        ("line", "Create a line"),
-        ("text", "Create a text label")
-    ]
-
-    matching = [(dt, desc) for dt, desc in drawing_types if dt.startswith(prefix.lower())]
-
-    return [
-        Completion(value=dtype, label=dtype, description=desc)
-        for dtype, desc in matching
-    ]
-
-
-# # Completion for topology types (enum)
-# @mcp.completion("lab_setup", "topology_type")
-async def complete_topology_types_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
-    """Autocomplete topology types"""
-    topology_types = [
-        ("star", "Hub-and-spoke topology (device_count = spokes)"),
-        ("mesh", "Full mesh topology (all routers interconnected)"),
-        ("linear", "Chain topology (routers in series)"),
-        ("ring", "Circular topology (closes the loop)"),
-        ("ospf", "Multi-area OSPF topology (device_count = areas)"),
-        ("bgp", "Multiple AS topology (device_count = AS, 2 routers per AS)")
-    ]
-
-    matching = [(tt, desc) for tt, desc in topology_types if tt.startswith(prefix.lower())]
-
-    return [
-        Completion(value=ttype, label=ttype, description=desc)
-        for ttype, desc in matching
-    ]
+# # @mcp.completion("console_send", "node_name")
+# # @mcp.completion("console_read", "node_name")
+# # @mcp.completion("console_keystroke", "node_name")
+# # @mcp.completion("console_disconnect", "node_name")
+# # @mcp.completion("ssh_configure", "node_name")
+# # @mcp.completion("ssh_command", "node_name")
+# # @mcp.completion("ssh_disconnect", "node_name")
+# # @mcp.completion("set_node", "node_name")
+# # @mcp.completion("delete_node", "node_name")
+# # async def complete_node_names_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
+# #     """Autocomplete node names from current project"""
+# #     app: AppContext = ctx.request_context.lifespan_context
+# #
+# #     if not app.current_project_id:
+# #         return []
+# #
+# #     try:
+# #         nodes = await app.gns3.get_nodes(app.current_project_id)
+# #
+# #         # Filter by prefix
+# #         matching = [n for n in nodes if n["name"].lower().startswith(prefix.lower())]
+# #
+# #         # Return completions
+# #         return [
+# #             Completion(
+# #                 value=node["name"],
+# #                 label=node["name"],
+# #                 description=f"{node['node_type']} ({node['status']})"
+# #             )
+# #             for node in matching[:10]  # Limit to 10 results
+# #         ]
+# #
+# #     except Exception as e:
+# #         logger.warning(f"Failed to fetch nodes for completion: {e}")
+# #         return []
+# #
+# #
+# # # Completion for template names
+# # @mcp.completion("create_node", "template_name")
+# # async def complete_template_names_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
+# #     """Autocomplete template names"""
+# #     app: AppContext = ctx.request_context.lifespan_context
+# #
+# #     try:
+# #         templates = await app.gns3.get_templates()
+# #
+# #         matching = [t for t in templates if t["name"].lower().startswith(prefix.lower())]
+# #
+# #         return [
+# #             Completion(
+# #                 value=template["name"],
+# #                 label=template["name"],
+# #                 description=f"{template.get('category', 'Unknown')} - {template.get('node_type', '')}"
+# #             )
+# #             for template in matching[:10]
+# #         ]
+# #
+# #     except Exception as e:
+# #         logger.warning(f"Failed to fetch templates for completion: {e}")
+# #         return []
+# #
+# #
+# # # Completion for node actions (enum)
+# # @mcp.completion("set_node", "action")
+# # async def complete_node_actions_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
+# #     """Autocomplete node actions"""
+# #     actions = [
+# #         ("start", "Start the node"),
+# #         ("stop", "Stop the node"),
+# #         ("suspend", "Suspend the node"),
+# #         ("reload", "Reload the node"),
+# #         ("restart", "Restart the node (stop + start)")
+# #     ]
+# #
+# #     matching = [(a, desc) for a, desc in actions if a.startswith(prefix.lower())]
+# #
+# #     return [
+# #         Completion(value=action, label=action, description=desc)
+# #         for action, desc in matching
+# #     ]
+# #
+# #
+# # # Completion for project names
+# # @mcp.completion("open_project", "project_name")
+# # async def complete_project_names_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
+# #     """Autocomplete project names"""
+# #     app: AppContext = ctx.request_context.lifespan_context
+# #
+# #     try:
+# #         projects = await app.gns3.get_projects()
+# #
+# #         matching = [p for p in projects if p["name"].lower().startswith(prefix.lower())]
+# #
+# #         return [
+# #             Completion(
+# #                 value=project["name"],
+# #                 label=project["name"],
+# #                 description=f"Status: {project['status']}"
+# #             )
+# #             for project in matching[:10]
+# #         ]
+# #
+# #     except Exception as e:
+# #         logger.warning(f"Failed to fetch projects for completion: {e}")
+# #         return []
+# #
+# # # Completion for drawing types (enum)
+# # @mcp.completion("create_drawing", "drawing_type")
+# # async def complete_drawing_types_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
+# #     """Autocomplete drawing types"""
+# #     drawing_types = [
+# #         ("rectangle", "Create a rectangle shape"),
+# #         ("ellipse", "Create an ellipse/circle shape"),
+# #         ("line", "Create a line"),
+# #         ("text", "Create a text label")
+# #     ]
+# #
+# #     matching = [(dt, desc) for dt, desc in drawing_types if dt.startswith(prefix.lower())]
+# #
+# #     return [
+# #         Completion(value=dtype, label=dtype, description=desc)
+# #         for dtype, desc in matching
+# #     ]
+# #
+# #
+# # # Completion for topology types (enum)
+# # @mcp.completion("lab_setup", "topology_type")
+# # async def complete_topology_types_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
+# #     """Autocomplete topology types"""
+# #     topology_types = [
+# #         ("star", "Hub-and-spoke topology (device_count = spokes)"),
+# #         ("mesh", "Full mesh topology (all routers interconnected)"),
+# #         ("linear", "Chain topology (routers in series)"),
+# #         ("ring", "Circular topology (closes the loop)"),
+# #         ("ospf", "Multi-area OSPF topology (device_count = areas)"),
+# #         ("bgp", "Multiple AS topology (device_count = AS, 2 routers per AS)")
+# #     ]
+# #
+# #     matching = [(tt, desc) for tt, desc in topology_types if tt.startswith(prefix.lower())]
+# #
+# #     return [
+# #         Completion(value=ttype, label=ttype, description=desc)
+# #         for ttype, desc in matching
+# #     ]
 
 
 if __name__ == "__main__":
@@ -2120,8 +2170,8 @@ if __name__ == "__main__":
         import uvicorn
         print(f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp/")
 
-        # Create ASGI app for Streamable HTTP transport
-        app = mcp.streamable_http_app()
+        # Create ASGI app for HTTP transport
+        app = mcp.http_app()
 
         # Run with uvicorn
         uvicorn.run(

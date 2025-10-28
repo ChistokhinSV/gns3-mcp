@@ -129,11 +129,12 @@ async def send_console_impl(app: "AppContext", node_name: str, data: str, raw: b
         data = data.replace('\\t', '\t')       # \t → tab
         data = data.replace('\\x1b', '\x1b')   # \x1b → ESC
 
-        # Then normalize all newlines to \r\n for console compatibility
+        # Then normalize all newlines to LF for Unix/Linux compatibility
         # This handles copy-pasted multi-line text
-        data = data.replace('\r\n', '\n')      # Normalize CRLF to LF first
+        data = data.replace('\r\n', '\n')      # Normalize CRLF to LF
         data = data.replace('\r', '\n')        # Normalize CR to LF
-        data = data.replace('\n', '\r\n')      # Convert all LF to CRLF
+        # Note: Don't convert to CRLF - Unix/Linux devices expect LF only
+        # Windows/Cisco devices handle LF correctly via telnet protocol
 
     success = await app.console.send_by_node(node_name, data)
     if success:

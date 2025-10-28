@@ -9,7 +9,7 @@ import logging
 import re
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 import telnetlib3
@@ -47,16 +47,16 @@ class ConsoleSession:
     writer: Optional[asyncio.StreamWriter] = None
     buffer: str = ""
     read_position: int = 0
-    created_at: datetime = field(default_factory=datetime.now)
-    last_activity: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def update_activity(self):
         """Update last activity timestamp"""
-        self.last_activity = datetime.now()
+        self.last_activity = datetime.now(timezone.utc)
 
     def is_expired(self) -> bool:
         """Check if session has expired"""
-        age = (datetime.now() - self.last_activity).total_seconds()
+        age = (datetime.now(timezone.utc) - self.last_activity).total_seconds()
         return age > SESSION_TIMEOUT
 
 

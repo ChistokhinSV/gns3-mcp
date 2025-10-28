@@ -1,0 +1,196 @@
+@startuml lab_setup_workflow
+title Automated Lab Topology Setup Workflow
+skinparam backgroundColor #FFFFFF
+skinparam activity {
+  BackgroundColor<<Tool>> #E3F2FD
+  BackgroundColor<<Resource>> #FFF3E0
+  BackgroundColor<<Calculation>> #F3E5F5
+  BorderColor #1976D2
+}
+
+start
+
+:Receive topology parameters;
+note right
+  - topology_type (star/mesh/linear/ring/ospf/bgp)
+  - device_count
+  - template_name
+  - project_name
+end note
+
+partition "Step 1: Create Project" {
+  :Create new project;
+  note right
+    **«tool»** create_project()
+    name=project_name
+
+    Auto-opens project
+  end note
+}
+
+partition "Step 2: Calculate Layout" #F3E5F5 {
+  if (Topology type?) then (star)
+    :calculate_star_layout();
+    note right
+      Hub center + spokes in circle
+    end note
+  elseif (mesh)
+    :calculate_mesh_layout();
+    note right
+      Devices in circle (full connectivity)
+    end note
+  elseif (linear)
+    :calculate_linear_layout();
+    note right
+      Devices in horizontal chain
+    end note
+  elseif (ring)
+    :calculate_ring_layout();
+    note right
+      Devices in circle (closed loop)
+    end note
+  elseif (ospf)
+    :calculate_ospf_layout();
+    note right
+      Area 0 center + areas radiating out
+    end note
+  else (bgp)
+    :calculate_bgp_layout();
+    note right
+      AS in circle, 2 routers per AS
+    end note
+  endif
+
+  :Calculate (x, y) positions for all nodes;
+}
+
+partition "Step 3: Create Nodes" {
+  :Verify template exists;
+  note right
+    **«resource»**
+    templates://
+
+    Check template_name available
+  end note
+
+  repeat
+    :Create node from template;
+    note right
+      **«tool»** create_node()
+      template_name, x, y, node_name
+    end note
+  repeat while (More nodes?) is (yes)
+  ->no;
+}
+
+partition "Step 4: Generate Link Mappings" #F3E5F5 {
+  if (Topology type?) then (star)
+    :generate_star_links();
+  elseif (mesh)
+    :generate_mesh_links();
+  elseif (linear)
+    :generate_linear_links();
+  elseif (ring)
+    :generate_ring_links();
+  elseif (ospf)
+    :generate_ospf_links();
+  else (bgp)
+    :generate_bgp_links();
+  endif
+
+  :Build list of (node_a, node_b) pairs;
+}
+
+partition "Step 5: Create Links" {
+  repeat
+    :Connect two nodes;
+    note right
+      **«tool»** set_connection()
+      action="connect"
+      node_a, node_b
+      adapter_a, adapter_b
+      port_a, port_b
+    end note
+  repeat while (More links?) is (yes)
+  ->no;
+}
+
+partition "Step 6: Generate IP Addressing Scheme" #F3E5F5 {
+  :Calculate IP addresses for topology;
+  note right
+    Star: 10.0.x.0/24 per spoke
+    Mesh: 10.0.x.0/30 per link
+    Linear: 10.0.x.0/30 per segment
+    OSPF: 10.area.0.x with loopbacks
+    BGP: 10.as.x.x + 172.16.x.x (eBGP)
+  end note
+
+  :Generate IP configuration examples;
+}
+
+partition "Step 7: Verify Topology" {
+  :Export topology diagram;
+  note right
+    **«tool»** export_topology_diagram()
+    output_path, format="both"
+
+    Creates SVG + PNG
+  end note
+
+  :Verify node positions and connections;
+}
+
+partition "Step 8: Document in README" {
+  :Update project README;
+  note right
+    **«tool»** update_project_readme()
+
+    Document:
+    - Topology type and device count
+    - IP addressing scheme
+    - Device list with roles
+    - Next steps checklist
+  end note
+
+  :Create initial documentation;
+  note right
+    - Created date
+    - Topology description
+    - IP scheme examples
+    - Configuration TODOs
+  end note
+}
+
+partition "Step 9: Start Nodes (Optional)" {
+  if (Auto-start nodes?) then (yes)
+    repeat
+      :Start node;
+      note right
+        **«tool»** set_node()
+        action="start"
+      end note
+    repeat while (More nodes?) is (yes)
+    ->no;
+  endif
+}
+
+#90EE90:Lab Setup Complete;
+note right
+  **Deliverables:**
+  ✅ Project created
+  ✅ Nodes positioned
+  ✅ Links established
+  ✅ Topology diagram exported
+  ✅ README documented
+  ✅ IP scheme generated
+
+  **Next Steps:**
+  - Configure IP addresses
+  - Enable routing protocols
+  - Test connectivity
+  - Create snapshot
+end note
+
+stop
+
+@enduml

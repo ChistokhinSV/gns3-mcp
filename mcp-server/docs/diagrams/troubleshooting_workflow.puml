@@ -1,0 +1,260 @@
+@startuml troubleshooting_workflow
+title Network Troubleshooting Workflow (OSI Bottom-Up Approach)
+skinparam backgroundColor #FFFFFF
+skinparam activity {
+  BackgroundColor<<Tool>> #E3F2FD
+  BackgroundColor<<Resource>> #FFF3E0
+  BackgroundColor<<Layer>> #E8F5E9
+  BorderColor #1976D2
+}
+
+start
+
+partition "Step 1: Verify Lab State" {
+  :Check project documentation;
+  note right
+    **«resource»**
+    projects://{project_id}/readme
+
+    Look for:
+    - Node IP addresses/credentials
+    - Known configurations
+    - Previous troubleshooting notes
+    - Network topology docs
+  end note
+
+  :Check node status;
+  note right
+    **«resource»**
+    projects://{project_id}/nodes/
+
+    Verify:
+    - Nodes started (not stopped)
+    - No boot errors
+    - Resources within limits
+  end note
+
+  if (Nodes stopped?) then (yes)
+    :Start nodes;
+    note right
+      **«tool»** set_node()
+      action="start"
+    end note
+  endif
+
+  :Check link status;
+  note right
+    **«resource»**
+    projects://{project_id}/links/
+
+    Verify:
+    - Links active (not suspended)
+    - Correct port mappings
+    - Compatible link types
+  end note
+
+  if (Links suspended?) then (yes)
+    :Unsuspend links;
+    note right
+      **«tool»** set_connection()
+      action="unsuspend"
+    end note
+  endif
+}
+
+partition "Step 2: Verify Console Access" {
+  :Check console sessions;
+  note right
+    **«resource»**
+    sessions://console/{node_name}
+  end note
+
+  :Test console;
+  note right
+    **«tool»** console_send()
+    **«tool»** console_read()
+  end note
+
+  if (Console works?) then (no)
+    #FFCCCC:Fix console access;
+    note right
+      - Wait for boot (10-60s)
+      - Check console type (telnet)
+      - Verify node started
+    end note
+    stop
+  endif
+}
+
+partition "Layer 1: Physical Connectivity" #E8F5E9 {
+  :Export topology diagram (optional);
+  note right
+    **«tool»** export_topology_diagram()
+
+    Visual verification:
+    🟢 Green = active
+    🔴 Red = stopped/suspended
+  end note
+
+  :Verify physical connections;
+  note right
+    **«resource»**
+    projects://{project_id}/links/
+  end note
+
+  if (Links missing?) then (yes)
+    :Create missing links;
+    note right
+      **«tool»** set_connection()
+      action="connect"
+    end note
+  endif
+}
+
+partition "Layer 2: Data Link" #E8F5E9 {
+  :Check interface status;
+  note right
+    **«tool»** ssh_command()
+    show interfaces (Cisco)
+    /interface print (MikroTik)
+    ip link show (Linux)
+  end note
+
+  if (Interface down?) then (yes)
+    :Enable interface;
+    note right
+      **«tool»** ssh_command()
+      no shutdown
+    end note
+  endif
+
+  :Check VLAN configuration;
+  note right
+    **«tool»** ssh_command()
+    show vlan brief
+  end note
+
+  :Check MAC address table;
+  note right
+    **«tool»** ssh_command()
+    show mac address-table
+  end note
+}
+
+partition "Layer 3: Network" #E8F5E9 {
+  :Check IP addressing;
+  note right
+    **«tool»** ssh_command()
+    show ip interface brief (Cisco)
+    /ip address print (MikroTik)
+    ip addr show (Linux)
+  end note
+
+  if (IP not configured?) then (yes)
+    :Configure IP address;
+    note right
+      **«tool»** ssh_command()
+      Configure interface IP
+    end note
+  endif
+
+  :Check routing;
+  note right
+    **«tool»** ssh_command()
+    show ip route (Cisco)
+    /ip route print (MikroTik)
+    ip route show (Linux)
+  end note
+
+  if (No route?) then (yes)
+    :Add static route or enable routing;
+    note right
+      **«tool»** ssh_command()
+      ip route commands
+    end note
+  endif
+
+  :Test reachability;
+  note right
+    **«tool»** ssh_command()
+    ping <destination>
+  end note
+}
+
+partition "Layer 4+: Services" #E8F5E9 {
+  :Check service status;
+  note right
+    **«tool»** ssh_command()
+    systemctl status (Linux)
+    show ip sockets (Cisco)
+  end note
+
+  :Check firewall rules;
+  note right
+    **«tool»** ssh_command()
+    iptables -L -n -v
+  end note
+
+  :Test DNS resolution;
+  note right
+    **«tool»** ssh_command()
+    nslookup / dig
+  end note
+}
+
+partition "Performance Analysis" {
+  :Check CPU usage;
+  note right
+    **«tool»** ssh_command()
+    show processes cpu sorted
+  end note
+
+  :Check memory usage;
+  note right
+    **«tool»** ssh_command()
+    show memory statistics
+  end note
+
+  :Check interface utilization;
+  note right
+    **«tool»** ssh_command()
+    show interfaces
+  end note
+}
+
+partition "Log Collection" {
+  :Collect device logs;
+  note right
+    **«tool»** ssh_command()
+    show logging (Cisco)
+    journalctl (Linux)
+  end note
+
+  :Check SSH command history;
+  note right
+    **«resource»**
+    sessions://ssh/{node_name}/history
+  end note
+
+  :Check SSH buffer;
+  note right
+    **«resource»**
+    sessions://ssh/{node_name}/buffer
+  end note
+}
+
+if (Issue resolved?) then (yes)
+  :Document solution in README;
+  note right
+    **«tool»** update_project_readme()
+    Record fix for future reference
+  end note
+
+  #90EE90:Troubleshooting Complete;
+  stop
+else (no)
+  #FFCCCC:Escalate or continue investigation;
+  stop
+endif
+
+@enduml

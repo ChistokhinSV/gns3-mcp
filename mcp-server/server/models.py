@@ -3,11 +3,11 @@
 Type-safe data models for all GNS3 entities and operations.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # Project Models
 
@@ -28,14 +28,13 @@ class ProjectSummary(BaseModel):
         data['uri'] = self.uri
         return data
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": "opened",
-                "name": "My Network Lab",
-                "uri": "projects://a1b2c3d4-e5f6-7890-1234-567890abcdef"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "status": "opened",
+            "name": "My Network Lab",
+            "uri": "projects://a1b2c3d4-e5f6-7890-1234-567890abcdef"
         }
+    })
 
 
 class ProjectInfo(BaseModel):
@@ -49,14 +48,13 @@ class ProjectInfo(BaseModel):
     auto_close: bool = True
     auto_open: bool = False
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "project_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-                "name": "My Network Lab",
-                "status": "opened"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "project_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+            "name": "My Network Lab",
+            "status": "opened"
         }
+    })
 
 
 class SnapshotInfo(BaseModel):
@@ -66,15 +64,14 @@ class SnapshotInfo(BaseModel):
     created_at: str
     project_id: str
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "snapshot_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-                "name": "Before Config Change",
-                "created_at": "2025-10-25T14:30:00.000Z",
-                "project_id": "proj-123"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "snapshot_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+            "name": "Before Config Change",
+            "created_at": "2025-10-25T14:30:00.000Z",
+            "project_id": "proj-123"
         }
+    })
 
 
 # Node Models
@@ -108,17 +105,16 @@ class NodeSummary(BaseModel):
         data['uri'] = self.uri
         return data
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "name": "Router1",
-                "node_type": "qemu",
-                "status": "started",
-                "console_type": "telnet",
-                "console": 5000,
-                "uri": "nodes://project-id/node-id"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "name": "Router1",
+            "node_type": "qemu",
+            "status": "started",
+            "console_type": "telnet",
+            "console": 5000,
+            "uri": "nodes://project-id/node-id"
         }
+    })
 
 
 class NodeInfo(BaseModel):
@@ -152,18 +148,17 @@ class NodeInfo(BaseModel):
         """Detail view - show all fields"""
         return self.model_dump()
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "node_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-                "name": "Router1",
-                "node_type": "qemu",
-                "status": "started",
-                "console_type": "telnet",
-                "console": 5000,
-                "console_host": "192.168.1.20"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "node_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+            "name": "Router1",
+            "node_type": "qemu",
+            "status": "started",
+            "console_type": "telnet",
+            "console": 5000,
+            "console_host": "192.168.1.20"
         }
+    })
 
 
 # Link Models
@@ -177,16 +172,15 @@ class LinkEndpoint(BaseModel):
     adapter_type: Optional[str] = None
     port_name: Optional[str] = None
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "node_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-                "node_name": "Router1",
-                "adapter_number": 0,
-                "port_number": 0,
-                "port_name": "Ethernet0"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "node_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+            "node_name": "Router1",
+            "adapter_number": 0,
+            "port_number": 0,
+            "port_name": "Ethernet0"
         }
+    })
 
 
 class LinkInfo(BaseModel):
@@ -201,25 +195,24 @@ class LinkInfo(BaseModel):
     capture_compute_id: Optional[str] = None
     suspend: bool = False
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "link_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-                "link_type": "ethernet",
-                "node_a": {
-                    "node_id": "node1-id",
-                    "node_name": "Router1",
-                    "adapter_number": 0,
-                    "port_number": 0
-                },
-                "node_b": {
-                    "node_id": "node2-id",
-                    "node_name": "Router2",
-                    "adapter_number": 0,
-                    "port_number": 1
-                }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "link_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+            "link_type": "ethernet",
+            "node_a": {
+                "node_id": "node1-id",
+                "node_name": "Router1",
+                "adapter_number": 0,
+                "port_number": 0
+            },
+            "node_b": {
+                "node_id": "node2-id",
+                "node_name": "Router2",
+                "adapter_number": 0,
+                "port_number": 1
             }
         }
+    })
 
 
 # Operation Models
@@ -234,18 +227,17 @@ class ConnectOperation(BaseModel):
     adapter_a: Union[str, int] = Field(default=0, description="Adapter on node A (name like 'eth0' or number)")
     adapter_b: Union[str, int] = Field(default=0, description="Adapter on node B (name like 'eth0' or number)")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "action": "connect",
-                "node_a": "Router1",
-                "node_b": "Router2",
-                "port_a": 0,
-                "port_b": 1,
-                "adapter_a": "eth0",
-                "adapter_b": "GigabitEthernet0/0"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "action": "connect",
+            "node_a": "Router1",
+            "node_b": "Router2",
+            "port_a": 0,
+            "port_b": 1,
+            "adapter_a": "eth0",
+            "adapter_b": "GigabitEthernet0/0"
         }
+    })
 
 
 class DisconnectOperation(BaseModel):
@@ -253,13 +245,12 @@ class DisconnectOperation(BaseModel):
     action: Literal["disconnect"]
     link_id: str = Field(description="Link ID to disconnect (from get_links)")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "action": "disconnect",
-                "link_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "action": "disconnect",
+            "link_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
         }
+    })
 
 
 # Union type for connection operations
@@ -295,28 +286,27 @@ class OperationResult(BaseModel):
     completed: List[CompletedOperation]
     failed: Optional[FailedOperation] = None
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "completed": [
-                    {
-                        "index": 0,
-                        "action": "disconnect",
-                        "link_id": "old-link-id"
-                    },
-                    {
-                        "index": 1,
-                        "action": "connect",
-                        "link_id": "new-link-id",
-                        "node_a": "Router1",
-                        "node_b": "Router2",
-                        "port_a": 0,
-                        "port_b": 1
-                    }
-                ],
-                "failed": None
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "completed": [
+                {
+                    "index": 0,
+                    "action": "disconnect",
+                    "link_id": "old-link-id"
+                },
+                {
+                    "index": 1,
+                    "action": "connect",
+                    "link_id": "new-link-id",
+                    "node_a": "Router1",
+                    "node_b": "Router2",
+                    "port_a": 0,
+                    "port_b": 1
+                }
+            ],
+            "failed": None
         }
+    })
 
 
 # Template Models
@@ -347,17 +337,16 @@ class TemplateInfo(BaseModel):
         """Detail view - show all fields"""
         return self.model_dump()
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "template_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-                "name": "Ethernet switch",
-                "category": "switch",
-                "node_type": "ethernet_switch",
-                "builtin": True,
-                "usage": "Default credentials: admin/admin"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "template_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+            "name": "Ethernet switch",
+            "category": "switch",
+            "node_type": "ethernet_switch",
+            "builtin": True,
+            "usage": "Default credentials: admin/admin"
         }
+    })
 
 
 # Network Configuration Models
@@ -371,17 +360,16 @@ class NetworkInterfaceStatic(BaseModel):
     gateway: Optional[str] = Field(default=None, description="Default gateway IP")
     dns: Optional[str] = Field(default="8.8.8.8", description="DNS server IP")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "name": "eth0",
-                "mode": "static",
-                "address": "10.199.0.254",
-                "netmask": "255.255.255.0",
-                "gateway": "10.199.0.1",
-                "dns": "8.8.8.8"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "name": "eth0",
+            "mode": "static",
+            "address": "10.199.0.254",
+            "netmask": "255.255.255.0",
+            "gateway": "10.199.0.1",
+            "dns": "8.8.8.8"
         }
+    })
 
 
 class NetworkInterfaceDHCP(BaseModel):
@@ -390,14 +378,13 @@ class NetworkInterfaceDHCP(BaseModel):
     mode: Literal["dhcp"] = "dhcp"
     dns: Optional[str] = Field(default="8.8.8.8", description="DNS server IP")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "name": "eth0",
-                "mode": "dhcp",
-                "dns": "8.8.8.8"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "name": "eth0",
+            "mode": "dhcp",
+            "dns": "8.8.8.8"
         }
+    })
 
 
 NetworkInterface = Union[NetworkInterfaceStatic, NetworkInterfaceDHCP]
@@ -432,26 +419,25 @@ class NetworkConfig(BaseModel):
 
         return "\n".join(lines)
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "interfaces": [
-                    {
-                        "name": "eth0",
-                        "mode": "static",
-                        "address": "10.199.0.254",
-                        "netmask": "255.255.255.0",
-                        "gateway": "10.199.0.1",
-                        "dns": "8.8.8.8"
-                    },
-                    {
-                        "name": "eth1",
-                        "mode": "dhcp",
-                        "dns": "8.8.8.8"
-                    }
-                ]
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "interfaces": [
+                {
+                    "name": "eth0",
+                    "mode": "static",
+                    "address": "10.199.0.254",
+                    "netmask": "255.255.255.0",
+                    "gateway": "10.199.0.1",
+                    "dns": "8.8.8.8"
+                },
+                {
+                    "name": "eth1",
+                    "mode": "dhcp",
+                    "dns": "8.8.8.8"
+                }
+            ]
         }
+    })
 
 
 # Drawing Models
@@ -467,17 +453,16 @@ class DrawingInfo(BaseModel):
     svg: str
     locked: bool = False
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "drawing_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-                "project_id": "proj-123",
-                "x": 100,
-                "y": 200,
-                "z": 0,
-                "svg": "<svg>...</svg>"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "drawing_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+            "project_id": "proj-123",
+            "x": 100,
+            "y": 200,
+            "z": 0,
+            "svg": "<svg>...</svg>"
         }
+    })
 
 
 # Console Models
@@ -492,18 +477,17 @@ class ConsoleStatus(BaseModel):
     buffer_size: Optional[int] = None
     created_at: Optional[str] = None
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "connected": True,
-                "node_name": "Router1",
-                "session_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-                "host": "192.168.1.20",
-                "port": 5000,
-                "buffer_size": 1024,
-                "created_at": "2025-10-23T10:30:00"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "connected": True,
+            "node_name": "Router1",
+            "session_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+            "host": "192.168.1.20",
+            "port": 5000,
+            "buffer_size": 1024,
+            "created_at": "2025-10-23T10:30:00"
         }
+    })
 
 
 # Error Models
@@ -562,24 +546,23 @@ class ErrorResponse(BaseModel):
     operation_index: Optional[int] = None
     # Version tracking
     server_version: str = Field(default="unknown", description="Server version that produced this error")
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat(), description="Error timestamp (ISO 8601 UTC)")
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat(), description="Error timestamp (ISO 8601 UTC)")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "error": "Node 'Router1' not found in project 'Lab1'",
-                "error_code": "NODE_NOT_FOUND",
-                "details": "Available nodes: Router2, Router3, Switch1",
-                "suggested_action": "Use list_nodes() to see all available nodes in the project",
-                "context": {
-                    "project_id": "abc123",
-                    "node_name": "Router1",
-                    "available_nodes": ["Router2", "Router3", "Switch1"]
-                },
-                "server_version": "0.20.0",
-                "timestamp": "2025-10-25T14:30:00.000Z"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "error": "Node 'Router1' not found in project 'Lab1'",
+            "error_code": "NODE_NOT_FOUND",
+            "details": "Available nodes: Router2, Router3, Switch1",
+            "suggested_action": "Use list_nodes() to see all available nodes in the project",
+            "context": {
+                "project_id": "abc123",
+                "node_name": "Router1",
+                "available_nodes": ["Router2", "Router3", "Switch1"]
+            },
+            "server_version": "0.20.0",
+            "timestamp": "2025-10-25T14:30:00.000Z"
         }
+    })
 
 
 # Validation Helper

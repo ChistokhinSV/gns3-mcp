@@ -109,7 +109,7 @@ View available device templates for understanding device capabilities:
 
 **Using MCP Resources:**
 ```
-Resource: projects://{{project_id}}/templates/
+Resource: templates://
 ```
 
 **Template Information:**
@@ -141,7 +141,33 @@ Resource: projects://{{project_id}}/drawings/
 
 Export the topology as a visual diagram:
 
-**Using export_topology_diagram Tool:**
+### ⚠️ For Agents: Visual Access Guidance
+
+**Topology diagrams are visual images (SVG/PNG format).** Only access diagrams if:
+1. You can process visual information (image analysis capabilities)
+2. You need node **physical locations** on the canvas
+3. Text-based resources (nodes, links, drawings) don't provide sufficient information
+
+**Agent-Friendly Access (No File I/O):**
+```
+# Use diagram resource - returns image data directly
+Resource: diagrams://{{project_id}}/topology
+
+# With format/quality options
+Resource: diagrams://{{project_id}}/topology?format=svg
+Resource: diagrams://{{project_id}}/topology?format=png&dpi=300
+```
+
+**Human-Friendly Access (File Export):**
+Use the `export_topology_diagram` tool below to save files to disk for human viewing.
+
+**When to Skip Visualization:**
+- If you only need connectivity information → Use `links://` resource
+- If you only need node status → Use `nodes://` resource
+- If you only need device types → Use template resources
+- If you cannot process images → Use text-based resources only
+
+### Using export_topology_diagram Tool:
 
 **Basic Export (SVG):**
 ```

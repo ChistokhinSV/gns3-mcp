@@ -1,0 +1,145 @@
+@startuml ssh_setup_workflow
+title SSH Setup Workflow for GNS3 Network Devices
+skinparam backgroundColor #FFFFFF
+skinparam activity {
+  BackgroundColor<<Tool>> #E3F2FD
+  BackgroundColor<<Resource>> #FFF3E0
+  BackgroundColor<<Check>> #F3E5F5
+  BorderColor #1976D2
+}
+
+start
+
+:Check Prerequisites;
+note right
+  **«resource»**
+  projects://{id}/nodes/
+  sessions://console/{node}
+  nodes://{project_id}/{node_id}/template
+end note
+
+partition "Check Template Usage" {
+  :Review template 'usage' field;
+  note right
+    Device-specific SSH instructions
+    Default credentials
+    Configuration examples
+  end note
+}
+
+if (Console accessible?) then (yes)
+  partition "Configure SSH via Console" {
+    :Enter configuration mode;
+    note left
+      **«tool»** console_send()
+      Device-specific commands
+    end note
+
+    :Create administrative user;
+    :Generate RSA keys;
+    :Enable SSH service;
+    :Configure VTY lines;
+    :Save configuration;
+
+    :Read console output;
+    note left
+      **«tool»** console_read()
+      mode="diff"
+    end note
+  }
+
+  partition "Find Management IP" {
+    :Query interface addresses;
+    note right
+      **«tool»** console_send()
+      show ip interface brief (Cisco)
+      /ip address print (MikroTik)
+      ip addr (Linux)
+    end note
+
+    :Read output;
+    note right
+      **«tool»** console_read()
+      mode="last_page"
+    end note
+
+    :Identify management IP;
+  }
+
+  partition "Document in README" {
+    :Record mgmt IP and credentials;
+    note right
+      **«tool»** update_project_readme()
+      - IP address
+      - Username/password
+      - SSH port
+    end note
+  }
+
+  partition "Establish SSH Session" {
+    if (Device on isolated network?) then (yes)
+      :Check lab proxy registry;
+      note right
+        **«resource»**
+        proxies://
+      end note
+
+      :Configure SSH via proxy;
+      note right
+        **«tool»** ssh_configure()
+        proxy="<proxy_id>"
+      end note
+    else (no)
+      :Configure direct SSH;
+      note right
+        **«tool»** ssh_configure()
+        Standard connection
+      end note
+    endif
+  }
+
+  partition "Test Connection" {
+    :Execute show command;
+    note right
+      **«tool»** ssh_command()
+      show version (Cisco)
+      uname -a (Linux)
+    end note
+
+    if (SSH works?) then (yes)
+      :Verify session status;
+      note right
+        **«resource»**
+        sessions://ssh/{node_name}
+      end note
+
+      :Disconnect console (optional);
+      note right
+        **«tool»** console_disconnect()
+        SSH provides better reliability
+      end note
+
+      #90EE90:SSH Setup Complete;
+      stop
+    else (no)
+      #FFCCCC:Troubleshoot SSH;
+      note right
+        - Verify SSH service running
+        - Check firewall rules
+        - Confirm management IP
+        - Verify credentials
+      end note
+      stop
+    endif
+  }
+else (no)
+  #FFCCCC:Start node and wait for boot;
+  note right
+    **«tool»** set_node()
+    action="start"
+    Wait 10-60 seconds
+  end note
+  stop
+endif
+
+@enduml

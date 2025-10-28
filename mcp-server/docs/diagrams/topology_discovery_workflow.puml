@@ -1,0 +1,144 @@
+@startuml topology_discovery_workflow
+title Topology Discovery Workflow for GNS3 Labs
+skinparam backgroundColor #FFFFFF
+skinparam activity {
+  BackgroundColor<<Tool>> #E3F2FD
+  BackgroundColor<<Resource>> #FFF3E0
+  BackgroundColor<<Visual>> #FFE0E0
+  BorderColor #1976D2
+}
+
+start
+
+if (Project specified?) then (yes)
+  :Use specified project;
+else (no)
+  partition "Select Project" {
+    :List all projects;
+    note right
+      **«resource»**
+      projects://
+    end note
+
+    :Identify project ID;
+  }
+endif
+
+partition "Discover Nodes" {
+  :List all nodes;
+  note right
+    **«resource»**
+    projects://{project_id}/nodes/
+
+    Returns:
+    - Node names and types
+    - Status (started/stopped)
+    - Console info
+    - Port counts
+  end note
+
+  :Get detailed node info (optional);
+  note right
+    **«resource»**
+    projects://{project_id}/nodes/{node_id}
+  end note
+}
+
+partition "Discover Links" {
+  :List all connections;
+  note right
+    **«resource»**
+    projects://{project_id}/links/
+
+    Returns:
+    - Connected nodes (A ↔ B)
+    - Port mappings
+    - Link status
+  end note
+}
+
+partition "Discover Templates" {
+  :List available templates;
+  note right
+    **«resource»**
+    templates://
+
+    **Note**: NOT project-scoped
+    Returns static template list
+  end note
+}
+
+partition "Discover Drawings" {
+  :List visual annotations;
+  note right
+    **«resource»**
+    projects://{project_id}/drawings/
+
+    Returns:
+    - Rectangles (zones)
+    - Text labels
+    - Lines
+  end note
+}
+
+if (Visualization needed?) then (yes)
+  partition "Visualize Topology" #FFE0E0 {
+    note left
+      ⚠️ **Visual Topology Access**
+
+      Only access if agent can process
+      visual information (SVG/PNG formats)
+      and needs node physical locations.
+
+      Text resources provide same data
+      in structured format.
+    end note
+
+    if (Agent can process images?) then (yes)
+      :Access diagram resource;
+      note right
+        **«resource» [VISUAL]**
+        diagrams://{project_id}/topology
+        ?format=svg
+
+        Returns scalable vector diagram
+      end note
+    else (no - human user)
+      :Export diagram to file;
+      note right
+        **«tool»** export_topology_diagram()
+        output_path="C:/path"
+        format="both"
+      end note
+    endif
+  }
+endif
+
+partition "Analyze Topology Structure" {
+  :Identify topology pattern;
+  note right
+    - Hub-and-spoke
+    - Full/partial mesh
+    - Tiered (hierarchical)
+    - Linear/ring
+  end note
+
+  :Identify critical devices;
+  note right
+    - Single points of failure
+    - Core/distribution/access roles
+    - Redundant paths
+  end note
+}
+
+#90EE90:Discovery Complete;
+note right
+  **Next Steps:**
+  - SSH Setup (if automating)
+  - Configuration changes
+  - Troubleshooting (if issues)
+end note
+
+stop
+
+@enduml

@@ -9,7 +9,7 @@ import json
 import re
 from typing import Optional
 
-from mcp.server.fastmcp import Context
+from fastmcp import Context
 from models import ErrorResponse
 
 
@@ -148,6 +148,360 @@ def create_line_svg(x2: int, y2: int, stroke: str = "#000000", stroke_width: int
   <line stroke="{stroke}" stroke-width="{stroke_width}" stroke-linecap="round"
         x1="{x1}" y1="{y1}" x2="{x2_adj}" y2="{y2_adj}" />
 </svg>'''
+
+
+# Helper function for generating diagram content (used by both tool and resource)
+
+async def generate_topology_diagram_content(app, project_id: str, format: str = "svg", dpi: int = 150):
+    """Generate topology diagram content without saving to file
+
+    Args:
+        app: AppContext with GNS3 client
+        project_id: GNS3 project ID
+        format: Output format - "svg" or "png"
+        dpi: DPI for PNG rendering (default: 150)
+
+    Returns:
+        Tuple of (content: str, mime_type: str)
+        - For SVG: (svg_string, "image/svg+xml")
+        - For PNG: (base64_encoded_png, "image/png")
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Get all topology data
+    nodes = await app.gns3.get_nodes(project_id)
+    links = await app.gns3.get_links(project_id)
+    drawings = await app.gns3.get_drawings(project_id)
+
+    # Check if project is empty
+    if not nodes and not drawings:
+        raise ValueError("Cannot generate diagram for empty project - no nodes or drawings")
+
+    # Auto-calculate bounds
+    min_x = min_y = float('inf')
+    max_x = max_y = float('-inf')
+
+    for node in nodes:
+        x, y = node['x'], node['y']
+        symbol = node.get('symbol', '')
+
+        # Determine icon size: PNG = 78×78, SVG = 58×58
+        if symbol and symbol.lower().endswith('.png'):
+            icon_size = 78
+        else:
+            icon_size = 58
+
+        # Get label position to account for it in bounds
+        label_info = node.get('label', {})
+        label_x = label_info.get('x', 0)
+        label_y = label_info.get('y', icon_size // 2 + 20)
+
+        # Account for node icon (top-left at x,y)
+        min_x = min(min_x, x)
+        max_x = max(max_x, x + icon_size)
+        min_y = min(min_y, y)
+        max_y = max(max_y, y + icon_size)
+
+        # Account for label position (relative to node top-left)
+        label_abs_x = x + label_x
+        label_abs_y = y + label_y
+        min_x = min(min_x, label_abs_x - 50)  # Approximate text width
+        max_x = max(max_x, label_abs_x + 50)
+        min_y = min(min_y, label_abs_y - 10)  # Approximate text height
+        max_y = max(max_y, label_abs_y + 10)
+
+    for drawing in drawings:
+        # Parse SVG to get dimensions (basic parsing)
+        svg = drawing['svg']
+        if 'width=' in svg and 'height=' in svg:
+            import re
+            w_match = re.search(r'width="(\d+)"', svg)
+            h_match = re.search(r'height="(\d+)"', svg)
+            if w_match and h_match:
+                w, h = int(w_match.group(1)), int(h_match.group(1))
+                min_x = min(min_x, drawing['x'])
+                max_x = max(max_x, drawing['x'] + w)
+                min_y = min(min_y, drawing['y'])
+                max_y = max(max_y, drawing['y'] + h)
+
+    # Add padding
+    padding = 50
+    crop_x = int(min_x - padding)
+    crop_y = int(min_y - padding)
+    crop_width = int(max_x - min_x + padding * 2)
+    crop_height = int(max_y - min_y + padding * 2)
+
+    # Generate SVG (reuse existing logic from export_topology_diagram)
+    # This is the same SVG generation code from lines 266-522 of the original function
+    svg_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{crop_width}" height="{crop_height}"
+     viewBox="{crop_x} {crop_y} {crop_width} {crop_height}">
+
+  <!-- CSS Styles -->
+  <style>
+    .node-label {{
+      dominant-baseline: text-before-edge;
+    }}
+    .link {{
+      stroke-width: 2;
+    }}
+    .link-active {{
+      stroke: #00aa00;
+    }}
+    .link-stopped {{
+      stroke: #808080;
+    }}
+    .port-indicator {{
+      stroke: #000000;
+      stroke-width: 1;
+    }}
+  </style>
+
+'''
+
+    # Build list of items to render with z-order
+    render_items = []  # List of (z_value, type, svg_fragment)
+
+    # 1. Add DRAWINGS to render list
+    for drawing in drawings:
+        x, y = drawing['x'], drawing['y']
+        z = drawing.get('z', 0)
+        svg = drawing['svg']
+
+        # Embed drawing SVG at position
+        drawing_svg = f'  <!-- Drawing at ({x}, {y}) -->\n'
+        drawing_svg += f'  <g transform="translate({x}, {y})">\n'
+        drawing_svg += f'    {svg}\n'
+        drawing_svg += '  </g>\n'
+
+        render_items.append((z, 'drawing', drawing_svg))
+
+    # 2. Add LINKS to render list
+    node_z_map = {n['name']: n.get('z', 1) for n in nodes}
+
+    for link in links:
+        link_nodes = link.get('nodes', [])
+        if len(link_nodes) != 2:
+            continue
+
+        node_a = link_nodes[0]
+        node_b = link_nodes[1]
+
+        # Find node details
+        node_a_data = next((n for n in nodes if n['node_id'] == node_a['node_id']), None)
+        node_b_data = next((n for n in nodes if n['node_id'] == node_b['node_id']), None)
+
+        if not node_a_data or not node_b_data:
+            continue
+
+        # Get node positions and icon sizes
+        ax, ay = node_a_data['x'], node_a_data['y']
+        bx, by = node_b_data['x'], node_b_data['y']
+
+        symbol_a = node_a_data.get('symbol', '')
+        symbol_b = node_b_data.get('symbol', '')
+
+        icon_size_a = 78 if symbol_a.lower().endswith('.png') else 58
+        icon_size_b = 78 if symbol_b.lower().endswith('.png') else 58
+
+        # Links connect to node centers
+        ax_center = ax + icon_size_a / 2
+        ay_center = ay + icon_size_a / 2
+        bx_center = bx + icon_size_b / 2
+        by_center = by + icon_size_b / 2
+
+        # Determine link status (active if both nodes started and link not suspended)
+        status_a = node_a_data.get('status', 'stopped')
+        status_b = node_b_data.get('status', 'stopped')
+        link_suspended = link.get('suspend', False)
+
+        link_active = (status_a == 'started' and status_b == 'started' and not link_suspended)
+        link_class = "link-active" if link_active else "link-stopped"
+
+        # Calculate z-value for link (min of connected nodes - 0.5)
+        z_a = node_z_map.get(node_a_data['name'], 1)
+        z_b = node_z_map.get(node_b_data['name'], 1)
+        link_z = min(z_a, z_b) - 0.5
+
+        # Build link SVG
+        link_svg = f'  <!-- Link: {node_a_data["name"]} <-> {node_b_data["name"]} -->\n'
+        link_svg += f'  <line class="link {link_class}" x1="{ax_center}" y1="{ay_center}" x2="{bx_center}" y2="{by_center}"/>\n'
+
+        # Add port status indicators (circles at connection points)
+        color_a = "#00aa00" if status_a == 'started' and not link_suspended else "#ff0000"
+        color_b = "#00aa00" if status_b == 'started' and not link_suspended else "#ff0000"
+
+        # Calculate indicator positions (slightly offset from node center toward link)
+        dx, dy = bx_center - ax_center, by_center - ay_center
+        length = (dx**2 + dy**2)**0.5
+        if length > 0:
+            dx_norm, dy_norm = dx / length, dy / length
+            offset = icon_size_a / 2  # Place at edge of node
+
+            ind_ax = ax_center + dx_norm * offset
+            ind_ay = ay_center + dy_norm * offset
+            ind_bx = bx_center - dx_norm * (icon_size_b / 2)
+            ind_by = by_center - dy_norm * (icon_size_b / 2)
+
+            link_svg += f'  <circle cx="{ind_ax}" cy="{ind_ay}" r="4" fill="{color_a}"/>\n'
+            link_svg += f'  <circle cx="{ind_bx}" cy="{ind_by}" r="4" fill="{color_b}"/>\n'
+
+        # Store link in render list with calculated z-value
+        render_items.append((link_z, 'link', link_svg))
+
+    # 3. Add NODES to render list
+    for node in nodes:
+        x, y = node['x'], node['y']
+        status = node['status']
+        name = node['name']
+        symbol = node.get('symbol', '')
+
+        # Determine icon size based on symbol type
+        if symbol and symbol.lower().endswith('.png'):
+            icon_size = 78
+        else:
+            icon_size = 58
+
+        # Fetch actual icon if available
+        icon_data = None
+        if symbol:
+            try:
+                # Get raw symbol data from GNS3
+                raw_bytes = await app.gns3.get_symbol_raw(symbol)
+
+                # Determine MIME type
+                if symbol.lower().endswith('.png'):
+                    mime_type_icon = 'image/png'
+                elif symbol.lower().endswith('.svg'):
+                    mime_type_icon = 'image/svg+xml'
+                elif symbol.lower().endswith('.jpg') or symbol.lower().endswith('.jpeg'):
+                    mime_type_icon = 'image/jpeg'
+                else:
+                    mime_type_icon = 'image/png'  # Default
+
+                # Encode as base64 data URI
+                b64_data = base64.b64encode(raw_bytes).decode('utf-8')
+                icon_data = f"data:{mime_type_icon};base64,{b64_data}"
+
+            except Exception as e:
+                logger.warning(f"Failed to fetch icon for {symbol}: {e}")
+                icon_data = None
+
+        # Try category-based fallback if primary icon failed
+        if not icon_data:
+            # Map node_type to category fallback icons
+            node_type = node.get('node_type', '')
+            fallback_symbol = None
+
+            if node_type == 'qemu':
+                fallback_symbol = ':/symbols/affinity/circle/blue/router.svg'
+            elif node_type in ['ethernet_switch', 'ethernet_hub', 'atm_switch', 'frame_relay_switch']:
+                fallback_symbol = ':/symbols/affinity/square/blue/switch_multilayer.svg'
+            elif node_type in ['nat', 'vpcs', 'cloud', 'docker']:
+                fallback_symbol = ':/symbols/classic/computer.svg'
+            else:
+                fallback_symbol = ':/symbols/affinity/circle/blue/router.svg'  # Default
+
+            # Try to fetch category fallback icon
+            if fallback_symbol:
+                try:
+                    raw_bytes = await app.gns3.get_symbol_raw(fallback_symbol)
+                    b64_data = base64.b64encode(raw_bytes).decode('utf-8')
+                    icon_data = f"data:image/svg+xml;base64,{b64_data}"
+                except Exception as e:
+                    logger.warning(f"Failed to fetch fallback icon {fallback_symbol}: {e}")
+                    icon_data = None
+
+        # Extract label information from GNS3 data
+        label_info = node.get('label', {})
+        label_text = label_info.get('text', name)
+        label_x_offset = label_info.get('x', 0)
+        label_y_offset = label_info.get('y', icon_size//2 + 20)
+        label_rotation = label_info.get('rotation', 0)
+        label_style = label_info.get('style', '')
+
+        # Extract font size from style, default to 10
+        font_size = 10.0
+        if label_style:
+            import re
+            font_match = re.search(r'font-size:\s*(\d+\.?\d*)', label_style)
+            if font_match:
+                font_size = float(font_match.group(1))
+
+        # GNS3 Label Positioning
+        if label_x_offset is None:
+            # Auto-center label above node
+            label_x = icon_size / 2
+            label_y = -25
+            text_anchor = "middle"
+        else:
+            # Manual positioning
+            label_x = label_x_offset
+            label_y = label_y_offset
+
+            # Determine text anchor based on position
+            if abs(label_x_offset - icon_size / 2) < 5:
+                text_anchor = "middle"
+            elif label_x_offset > icon_size / 2:
+                text_anchor = "end"
+            else:
+                text_anchor = "start"
+
+        # Apply font fallbacks to label style
+        if label_style:
+            label_style = add_font_fallbacks(label_style)
+
+        # Build node SVG
+        node_svg = f'  <!-- Node: {name} ({status}) -->\n'
+        node_svg += f'  <g transform="translate({x}, {y})">\n'
+
+        # Add node icon (if available)
+        if icon_data:
+            node_svg += f'    <image href="{icon_data}" width="{icon_size}" height="{icon_size}"/>\n'
+        else:
+            # Fallback: colored rectangle
+            color = {"started": "#00aa00", "stopped": "#ff0000", "suspended": "#ffaa00"}.get(status, "#808080")
+            node_svg += f'    <rect width="{icon_size}" height="{icon_size}" fill="{color}" stroke="#000000" stroke-width="2"/>\n'
+            node_svg += f'    <text x="{icon_size/2}" y="{icon_size/2}" text-anchor="middle" dominant-baseline="middle" fill="#ffffff">{name[:8]}</text>\n'
+
+        # Add label
+        label_transform = f'rotate({label_rotation} {label_x} {label_y})' if label_rotation != 0 else ''
+        node_svg += f'    <text class="node-label" x="{label_x}" y="{label_y}" text-anchor="{text_anchor}" transform="{label_transform}" style="{label_style}">{label_text}</text>\n'
+
+        node_svg += '  </g>\n'
+
+        # Store node in render list
+        node_z = node.get('z', 1)
+        render_items.append((node_z, 'node', node_svg))
+
+    # Sort by z-order and render
+    sorted_items = sorted(render_items, key=lambda item: item[0])
+
+    for z_value, item_type, svg_fragment in sorted_items:
+        svg_content += svg_fragment
+
+    svg_content += '</svg>\n'
+
+    # Return based on requested format
+    if format == "svg":
+        return (svg_content, "image/svg+xml")
+    elif format == "png":
+        try:
+            import cairosvg
+            png_bytes = cairosvg.svg2png(
+                bytestring=svg_content.encode('utf-8'),
+                dpi=dpi
+            )
+            # Encode PNG as base64 for transport
+            png_base64 = base64.b64encode(png_bytes).decode('utf-8')
+            return (f"data:image/png;base64,{png_base64}", "image/png")
+        except ImportError:
+            raise ValueError("PNG export requires cairosvg library. Install with: pip install cairosvg")
+    else:
+        raise ValueError(f"Unsupported format: {format}. Use 'svg' or 'png'.")
 
 
 # MCP Tool

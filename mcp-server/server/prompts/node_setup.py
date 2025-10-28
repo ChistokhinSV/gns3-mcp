@@ -3,6 +3,7 @@
 Complete workflow for adding a new node to a lab: create, configure IP, document in README, establish SSH.
 """
 
+
 def render_node_setup_prompt(
     node_name: str,
     template_name: str,
@@ -251,6 +252,36 @@ Monitor boot via console:
 console_read("{node_name}", mode="all")
 ```
 
+## Step 2.5: Check Template Usage Field
+
+Before configuring the device, check the template's usage field for device-specific guidance:
+
+```python
+# View node template usage information
+Resource: nodes://{{project_id}}/{node_name}/template
+```
+
+**The usage field may contain:**
+- Default credentials for initial login
+- Special boot procedures or timing requirements
+- Device-specific configuration quirks
+- Recommended interface naming conventions
+- Known limitations or compatibility notes
+- Management interface defaults
+
+**Example usage field content:**
+```
+Alpine Linux default login:
+- Username: root
+- Password: (blank - just press Enter)
+
+After first login, set password with: passwd
+
+For persistent network config, edit /etc/network/interfaces
+```
+
+Review this information before proceeding with configuration to avoid common pitfalls.
+
 ## Step 3: Configure IP Address
 
 {ip_config}
@@ -319,7 +350,7 @@ ssh_configure("{node_name}", {{
 For devices on isolated networks, use lab proxy:
 
 ```python
-# 1. Discover lab proxies: check gns3://proxy/registry
+# 1. Discover lab proxies: check proxies://
 # 2. Configure SSH through lab proxy:
 ssh_configure("{node_name}", {{
     "device_type": "{device_type}",
@@ -348,7 +379,7 @@ ssh_command("{node_name}", "/system resource print")
 Check SSH session status:
 ```python
 # Via resource
-gns3://sessions/ssh/{node_name}
+sessions://ssh/{node_name}
 ```
 
 ## Step 7: Connect to Network (Optional)

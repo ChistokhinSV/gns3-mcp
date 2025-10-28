@@ -609,6 +609,74 @@ export_topology_diagram("C:/DOWNLOAD_TEMP/{project_name.replace(' ', '_')}", for
 
 This creates SVG and PNG diagrams of your topology.
 
+## Step 7: Document in Project README
+
+**IMPORTANT**: Document the lab topology in the project README for future reference and team collaboration:
+
+```python
+update_project_readme(f\"\"\"
+# {project_name}
+
+## Topology Overview
+- **Type**: {topology_type.capitalize()}
+- **Device Count**: {device_count}
+- **Template**: {template_name}
+- **Created**: {{current_date}}
+
+## Network Design
+
+### IP Addressing Scheme
+[Document your IP ranges, subnets, management IPs]
+
+Example:
+- Management subnet: 192.168.1.0/24
+- Node IPs: 192.168.1.10 - 192.168.1.{10 + device_count}
+
+### Node List
+| Node Name | IP Address | Credentials | Notes |
+|-----------|------------|-------------|-------|
+| [Fill in from your nodes] | | | |
+
+### Links and Connectivity
+[Document physical connections between nodes]
+
+Example:
+- Node1 Gi0/0 ← → Node2 Gi0/0
+- Node2 Gi0/1 ← → Node3 Gi0/0
+
+## Configuration Notes
+
+### Routing Protocol
+[If using OSPF/BGP, document areas, AS numbers, network statements]
+
+### Known Issues
+[Document any limitations or known problems]
+
+### Troubleshooting Tips
+[Document common issues and solutions]
+
+## Access Information
+
+### Console Access
+- Use `sessions://console/` resource to view active console sessions
+- All nodes use telnet console type
+
+### SSH Access
+[Document after configuring SSH on nodes]
+
+## References
+- Topology diagram: [Path to SVG/PNG files]
+- Configuration backups: [If you create backups]
+\"\"\")
+```
+
+**Benefits of README Documentation:**
+- Quick reference for node IPs and credentials
+- Helps troubleshooting by documenting expected behavior
+- Facilitates team collaboration and handoffs
+- Records configuration decisions and rationale
+- Tracks known issues and solutions
+
 ## Topology-Specific Notes
 
 """

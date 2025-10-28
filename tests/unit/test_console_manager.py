@@ -5,7 +5,7 @@ Tests telnet console session management with mocked network I/O.
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch, call
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from console_manager import (
     ConsoleManager,
     ConsoleSession,
@@ -107,7 +107,7 @@ class TestConsoleSession:
             node_name="Router1"
         )
         # Set last_activity to old time
-        session.last_activity = datetime.now() - timedelta(seconds=SESSION_TIMEOUT + 100)
+        session.last_activity = datetime.now(timezone.utc) - timedelta(seconds=SESSION_TIMEOUT + 100)
         assert session.is_expired() is True
 
 
@@ -305,7 +305,7 @@ class TestSessionLifecycle:
 
             # Manually expire the session
             manager.sessions[session_id].last_activity = (
-                datetime.now() - timedelta(seconds=SESSION_TIMEOUT + 100)
+                datetime.now(timezone.utc) - timedelta(seconds=SESSION_TIMEOUT + 100)
             )
 
             # Run cleanup
