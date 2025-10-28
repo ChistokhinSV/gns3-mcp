@@ -88,37 +88,53 @@ usage = read_resource("projects://{id}/nodes/{node_id}/template")
 - Consistent URI scheme (`gns3://` protocol)
 - Better performance with resource subscriptions
 
-**Available Resources:**
+**Available Resources (v0.29.0 - URI Standardization):**
 
-**Project Resources:**
+**Project-Centric Resources:**
 - `projects://` - List all GNS3 projects
 - `projects://{project_id}` - Get project details by ID
-- `projects://{project_id}/nodes/` - List nodes in project (NodeSummary)
-- `projects://{project_id}/nodes/{node_id}` - Get node details (full NodeInfo)
-- `projects://{project_id}/nodes/{node_id}/template` - Get template usage notes for node (v0.23.0)
-- `projects://{project_id}/links/` - List network links in project
-- `projects://{project_id}/templates/` - List available templates (lightweight, no usage)
-- `projects://{project_id}/drawings/` - List drawing objects
-- `projects://{project_id}/snapshots/` - List project snapshots
-- `projects://{project_id}/snapshots/{snapshot_id}` - Get snapshot details
 - `projects://{project_id}/readme` - Get project README/notes (v0.23.0)
+- `projects://{project_id}/sessions/console/` - Console sessions in project (v0.29.1)
+- `projects://{project_id}/sessions/ssh/` - SSH sessions in project (v0.29.1)
 
-**Template Resources:**
-- `gns3://templates/{template_id}` - Get template details with usage notes (v0.23.0)
+**Object-Centric Resources:**
+- `nodes://{project_id}/` - List nodes in project (NodeSummary, table mode v0.30.0)
+- `nodes://{project_id}/{node_id}` - Get node details (full NodeInfo)
+- `nodes://{project_id}/{node_id}/template` - Get template usage notes for node (v0.23.0)
+- `links://{project_id}/` - List network links in project (table mode v0.30.0)
+- `drawings://{project_id}/` - List drawing objects (table mode v0.30.0)
 
-**Console Session Resources:**
-- `gns3://sessions/console/` - List all active console sessions
-- `gns3://sessions/console/{node_name}` - Get console session status for node
+**Diagram Resources (v0.33.0):**
+- `diagrams://{project_id}/topology` - Get topology diagram as SVG (visualize lab layout)
 
-**SSH Session Resources:**
-- `gns3://sessions/ssh/` - List all active SSH sessions
-- `gns3://sessions/ssh/{node_name}` - Get SSH session status for node
-- `gns3://sessions/ssh/{node_name}/history` - Get SSH command history
-- `gns3://sessions/ssh/{node_name}/buffer` - Get SSH continuous buffer
+**Template Resources (Static, Not Project-Scoped):**
+- `templates://` - List all available templates (table mode v0.30.0)
+- `templates://{template_id}` - Get template details with usage notes (v0.23.0)
 
-**SSH Proxy Resources:**
-- `gns3://proxy/status` - Get SSH proxy service status
-- `gns3://proxy/sessions` - List all SSH proxy sessions
+**Session Resources (Dual Access Patterns v0.29.1):**
+
+*Path-based (project-scoped):*
+- `projects://{project_id}/sessions/console/` - Console sessions in project
+- `projects://{project_id}/sessions/ssh/` - SSH sessions in project
+
+*Query-parameter-based (filtered):*
+- `sessions://console/?project_id={id}` - Console sessions filtered by project
+- `sessions://ssh/?project_id={id}` - SSH sessions filtered by project
+
+*Unfiltered (all sessions):*
+- `sessions://console/` - All console sessions across all projects (table mode v0.30.0)
+- `sessions://console/{node_name}` - Console session for specific node
+- `sessions://ssh/` - All SSH sessions across all projects (table mode v0.30.0)
+- `sessions://ssh/{node_name}` - SSH session status for node
+- `sessions://ssh/{node_name}/history` - SSH command history (table mode v0.30.0)
+- `sessions://ssh/{node_name}/buffer` - SSH continuous buffer
+
+**Proxy Resources:**
+- `proxies:///status` - Main proxy status (THREE slashes)
+- `proxies://` - Proxy registry (host + lab proxies, table mode v0.30.0)
+- `proxies://sessions` - All proxy sessions (table mode v0.30.0)
+- `proxies://project/{project_id}` - Proxies for specific project
+- `proxies://{proxy_id}` - Specific proxy details
 
 **Resource vs Tool Usage:**
 - **Resources**: Query state (read-only) - use for browsing, monitoring
@@ -129,33 +145,37 @@ usage = read_resource("projects://{id}/nodes/{node_id}/template")
 # Browse resources (read-only)
 1. List all projects: projects://
 2. Pick project ID from list
-3. View nodes: projects://{id}/nodes/
-4. Check SSH session: gns3://sessions/ssh/R1
+3. View nodes: nodes://{project_id}/
+4. Check topology diagram: diagrams://{project_id}/topology
+5. Check SSH sessions: sessions://ssh/?project_id={project_id}
+6. Check SSH session for specific node: sessions://ssh/R1
 
 # Use tools to modify (actions)
-5. Call configure_ssh() to create SSH session
-6. Call ssh_send_command() to execute commands
-7. Call set_node() to change node state
+7. Call ssh_configure() to create SSH session
+8. Call ssh_command() to execute commands
+9. Call set_node() to change node state
+10. Call export_topology_diagram() to save diagram as PNG/SVG
 ```
 
 **Removed in v0.14.0 (use MCP resources instead):**
-- `list_projects()` → Use resource `projects:/`
-- `list_nodes()` → Use resource `projects://{id}/nodes`
-- `get_node_details()` → Use resource `projects://{id}/nodes/{id}`
-- `get_links()` → Use resource `projects://{id}/links`
-- `list_templates()` → Use resource `projects://{id}/templates`
-- `list_drawings()` → Use resource `projects://{id}/drawings`
-- `get_console_status()` → Use resource `gns3://sessions/console/{node}`
-- `ssh_get_status()` → Use resource `gns3://sessions/ssh/{node}`
-- `ssh_get_history()` → Use resource `gns3://sessions/ssh/{node}/history`
+- `list_projects()` → Use resource `projects://`
+- `list_nodes()` → Use resource `nodes://{project_id}/`
+- `get_node_details()` → Use resource `nodes://{project_id}/{node_id}`
+- `get_links()` → Use resource `links://{project_id}/`
+- `list_templates()` → Use resource `templates://`
+- `list_drawings()` → Use resource `drawings://{project_id}/`
+- `get_console_status()` → Use resource `sessions://console/{node_name}`
+- `ssh_get_status()` → Use resource `sessions://ssh/{node_name}`
+- `ssh_get_history()` → Use resource `sessions://ssh/{node_name}/history`
 - `ssh_get_command_output()` → Use resource with filtering
-- `ssh_read_buffer()` → Use resource `gns3://sessions/ssh/{node}/buffer`
+- `ssh_read_buffer()` → Use resource `sessions://ssh/{node_name}/buffer`
 
-**Final Architecture (v0.23.0):**
-- **24 Action Tools**: Modify state (create, delete, configure, execute commands)
-- **20 MCP Resources**: Browse state (projects, nodes, sessions, status, snapshots, templates)
+**Final Architecture (v0.34.0):**
+- **27 Action Tools**: Modify state (create, delete, configure, execute commands)
+- **21 MCP Resources**: Browse state (projects, nodes, sessions, diagrams, proxies) with table mode
 - **5 MCP Prompts**: Guided workflows (ssh_setup, topology_discovery, troubleshooting, lab_setup, node_setup)
 - **Clear separation**: Tools change things, Resources view things, Prompts guide workflows
+- **Table Mode (v0.30.0)**: All list resources use simple table format for readability
 
 ### Projects
 - **Projects** are isolated network topologies with their own nodes, links, and configuration
@@ -168,6 +188,23 @@ usage = read_resource("projects://{id}/nodes/{node_id}/template")
 - Node types: `qemu` (VMs), `docker` (containers), `ethernet_switch`, `nat`, etc.
 - Node status: `started` or `stopped`
 - Each node has a unique `node_id` and human-readable `name`
+
+**Node Deletion & Cleanup (v0.34.0):**
+- `delete_node(node_name)` removes node from project
+- **Automatic SSH session cleanup**: When a node is deleted, all SSH sessions are automatically cleaned up:
+  - Disconnects SSH sessions on ALL registered proxies (host proxy + lab proxies)
+  - Cleans up internal session mappings
+  - Best-effort cleanup - won't block deletion if cleanup fails
+- **Why**: Prevents orphaned SSH sessions consuming resources
+- **Example**:
+  ```python
+  delete_node("Router1")
+  # Automatically:
+  # 1. Deletes node from GNS3
+  # 2. Disconnects SSH session if active
+  # 3. Cleans up proxy mappings
+  # No manual cleanup needed!
+  ```
 
 ### Choosing Between SSH and Console Tools
 
@@ -391,6 +428,21 @@ if "error" in result:
   5. Disconnect with `console_disconnect(node_name)` when done
 - Sessions are managed automatically by node name
 - Session timeout: 30 minutes of inactivity
+
+**Console State Tracking (v0.34.0):**
+- **IMPORTANT**: Must read console BEFORE sending commands
+- **Why**: Ensures you understand current terminal state (prompt, login screen, etc.)
+- **Enforced**: All send operations (`console_send`, `console_send_and_wait`, `console_keystroke`) check access state
+- **Workflow**:
+  1. First: `console_read("R1")` - Check terminal state (are you at login? prompt? password?)
+  2. Then: `console_send("R1", "command\n")` - Send appropriate command
+  3. Read again: `console_read("R1")` - Verify command executed
+- **Error**: If you try to send without reading first, you'll get:
+  ```
+  "Cannot send to console - terminal not accessed yet.
+   Use console_read() to check current terminal state first."
+  ```
+- **Best Practice**: Always read → send → read pattern for reliable automation
 
 ### Interactive Console Automation (v0.21.1)
 
@@ -771,6 +823,47 @@ result = send_and_wait_console("R1",
 6. Read output after each command
 ```
 
+### Topology Visualization (v0.33.0)
+
+**Viewing Diagrams:**
+Use the diagram resource to quickly visualize lab topology:
+```
+# Get topology as SVG
+diagram = read_resource("diagrams://{project_id}/topology")
+```
+
+**Exporting Diagrams:**
+Use `export_topology_diagram()` tool to save diagrams as files:
+```
+# Export as both SVG and PNG
+export_topology_diagram(
+    output_path="/path/to/topology",
+    format="both"  # or "svg", "png"
+)
+
+# Export with crop region
+export_topology_diagram(
+    output_path="/path/to/cropped",
+    format="png",
+    crop_x=100, crop_y=100,
+    crop_width=800, crop_height=600
+)
+```
+
+**Diagram Features:**
+- Node positions, status indicators (color-coded by status)
+- Network links with connection information
+- Drawing objects (labels, shapes, annotations)
+- Automatic layout based on node coordinates
+- SVG format: scalable, text-based, ideal for AI analysis
+- PNG format: rasterized for sharing/presentation
+
+**Use Cases:**
+- Document lab topology
+- Visual topology review before making changes
+- Share lab configuration with team
+- Analyze network layout and connectivity patterns
+
 ## MCP Prompts - Guided Workflows (v0.17.0)
 
 **MCP prompts** provide step-by-step guidance for complex multi-step operations.
@@ -831,6 +924,27 @@ Usage:
 ```
 Call the lab_setup prompt with topology_type and device_count
 Example: lab_setup(topology_type="ospf", device_count=3)
+```
+
+**node_setup** - Complete Node Setup Workflow (v0.23.0)
+- End-to-end workflow for adding new node to lab
+- Covers: create, boot, configure IP, document, establish SSH
+- Device-specific configuration commands (Cisco IOS, Linux, MikroTik)
+- Automatic project README documentation updates
+- SSH session verification
+
+Workflow steps:
+1. Create node from template at specified coordinates
+2. Start node and wait for boot completion (device-specific timing)
+3. Configure IP address via console (device-specific commands)
+4. Document IP/credentials in project README
+5. Establish and verify SSH session for automation
+
+Usage:
+```
+Call the node_setup prompt to get guided workflow
+Example: node_setup(template_name="Cisco IOSv", node_name="R1",
+                    x=100, y=100, ip_address="10.1.1.1/24")
 ```
 
 ## SSH Automation (v0.12.0)
