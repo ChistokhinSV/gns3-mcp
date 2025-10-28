@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "description": "GNS3 lab automation with AI agent",
   "long_description": "GNS3 v3 lab automation MCP server. Can create/delete/modify nodes, drawings, connect/disconnect nodes, configure them with console and ssh proxy access",
   "author": {
@@ -70,7 +70,7 @@
       "description": "Close the currently opened project"
     },
     {
-      "name": "set_node",
+      "name": "set_node_properties",
       "description": "Configure node properties and/or control state"
     },
     {
@@ -78,31 +78,31 @@
       "description": "Create a new node from template at specified coordinates"
     },
     {
-      "name": "console_send",
+      "name": "send_console_data",
       "description": "Send data to console (auto-connects)"
     },
     {
-      "name": "console_read",
+      "name": "read_console_output",
       "description": "Read console output with mode parameter (mode='diff'/'last_page'/'num_pages'/'all', supports grep filtering)"
     },
     {
-      "name": "console_disconnect",
+      "name": "disconnect_console",
       "description": "Disconnect console session"
     },
     {
-      "name": "console_keystroke",
+      "name": "send_console_keystroke",
       "description": "Send special keystroke to console (navigation, editing, control keys)"
     },
     {
-      "name": "console_send_and_wait",
+      "name": "send_console_command_and_wait",
       "description": "Send command and wait for prompt pattern with timeout (pattern matching + auto-polling, output and timing)"
     },
     {
-      "name": "console_batch",
+      "name": "console_batch_operations",
       "description": "Execute multiple console operations in batch (send/send_and_wait/read/keystroke) with two-phase validation and full parameter support"
     },
     {
-      "name": "set_connection",
+      "name": "set_network_connections",
       "description": "Batch manage network connections with two-phase validation"
     },
     {
@@ -130,16 +130,20 @@
       "description": "Update project README/notes - agent can store IP addresses, credentials, architecture diagrams, troubleshooting notes"
     },
     {
-      "name": "ssh_configure",
+      "name": "configure_ssh_session",
       "description": "Configure SSH session with multi-proxy support and auto-recovery. Use proxy='host' (default) for main proxy, or proxy=proxy_id for lab proxies (discovered via gns3://proxy/registry). Auto-recovery: 30min TTL, health checks, auto-recreates stale sessions. After 'Socket is closed' error: just retry - no force needed. Requires SSH enabled on device first."
     },
     {
-      "name": "ssh_command",
+      "name": "execute_ssh_command",
       "description": "Execute SSH command(s) with auto-detection (string=show command, list=config commands)"
     },
     {
-      "name": "ssh_disconnect",
+      "name": "disconnect_ssh_session",
       "description": "Disconnect SSH session (returns JSON status)"
+    },
+    {
+      "name": "ssh_batch_operations",
+      "description": "Execute multiple SSH operations in batch with two-phase validation"
     },
     {
       "name": "export_topology_diagram",
@@ -156,6 +160,10 @@
     {
       "name": "delete_drawing",
       "description": "Delete a drawing object from the current project"
+    },
+    {
+      "name": "create_drawings_batch",
+      "description": "Create multiple drawing objects in batch"
     }
   ],
   "prompts": [

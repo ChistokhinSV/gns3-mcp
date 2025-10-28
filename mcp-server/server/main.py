@@ -749,7 +749,7 @@ async def node_setup(
 # ============================================================================
 
 @mcp.tool(
-    name="Open project",
+    name="open_project",
     tags={"project", "management", "idempotent"},
     annotations={"idempotent": True}
 )
@@ -766,7 +766,7 @@ async def open_project(
 
 
 @mcp.tool(
-    name="Create project",
+    name="create_project",
     tags={"project", "management", "creates-resource", "idempotent"},
     annotations={"idempotent": True, "creates_resource": True}
 )
@@ -788,7 +788,7 @@ async def create_project(
 
 
 @mcp.tool(
-    name="Close project",
+    name="close_project",
     tags={"project", "management", "idempotent"},
     annotations={"idempotent": True}
 )
@@ -805,7 +805,7 @@ async def close_project(ctx: Context) -> str:
 
 
 @mcp.tool(
-    name="Set node properties",
+    name="set_node_properties",
     tags={"node", "topology", "modifies-state", "idempotent"},
     annotations={"idempotent": True}
 )
@@ -844,7 +844,7 @@ async def set_node(
 
 
 @mcp.tool(
-    name="Send console data",
+    name="send_console_data",
     tags={"console", "device-access", "modifies-state"}
 )
 async def console_send(
@@ -893,7 +893,7 @@ async def console_send(
 
 
 @mcp.tool(
-    name="Read console output",
+    name="read_console_output",
     tags={"console", "device-access", "read-only"},
     annotations={"read_only": True}
 )
@@ -949,7 +949,7 @@ async def console_read(
 
 
 @mcp.tool(
-    name="Disconnect console",
+    name="disconnect_console",
     tags={"console", "device-access", "idempotent"},
     annotations={"idempotent": True}
 )
@@ -966,7 +966,7 @@ async def console_disconnect(
 
 
 @mcp.tool(
-    name="Send console keystroke",
+    name="send_console_keystroke",
     tags={"console", "device-access", "modifies-state"}
 )
 async def console_keystroke(
@@ -1006,7 +1006,7 @@ async def console_keystroke(
 
 
 @mcp.tool(
-    name="Send console command and wait",
+    name="send_console_command_and_wait",
     tags={"console", "device-access", "automation"}
 )
 async def console_send_and_wait(
@@ -1061,7 +1061,7 @@ async def console_send_and_wait(
 
 
 @mcp.tool(
-    name="Console batch operations",
+    name="console_batch_operations",
     tags={"console", "device-access", "bulk", "automation"}
 )
 async def console_batch(
@@ -1170,7 +1170,7 @@ async def console_batch(
 
 
 @mcp.tool(
-    name="Set network connections",
+    name="set_network_connections",
     tags={"network", "topology", "bulk", "modifies-state"},
     annotations={"modifies_topology": True}
 )
@@ -1205,7 +1205,7 @@ async def set_connection(
 
 
 @mcp.tool(
-    name="Create node",
+    name="create_node",
     tags={"node", "topology", "creates-resource"},
     annotations={"creates_resource": True, "modifies_topology": True}
 )
@@ -1240,7 +1240,7 @@ async def create_node(
 
 
 @mcp.tool(
-    name="Delete node",
+    name="delete_node",
     tags={"node", "topology", "destructive", "idempotent"},
     annotations={"destructive": True, "idempotent": True, "modifies_topology": True}
 )
@@ -1264,7 +1264,7 @@ async def delete_node(
 
 
 @mcp.tool(
-    name="Get node file",
+    name="get_node_file",
     tags={"node", "read-only"}
 )
 async def get_node_file(
@@ -1292,7 +1292,7 @@ async def get_node_file(
 
 
 @mcp.tool(
-    name="Write node file",
+    name="write_node_file",
     tags={"node", "modifies-state"}
 )
 async def write_node_file(
@@ -1323,7 +1323,7 @@ async def write_node_file(
 
 
 @mcp.tool(
-    name="Configure node network",
+    name="configure_node_network",
     tags={"network", "node", "modifies-state"},
     annotations={"modifies_topology": True}
 )
@@ -1386,7 +1386,7 @@ async def configure_node_network(
     return await configure_node_network_impl(app, node_name, interfaces)
 
 @mcp.tool(
-    name="Get project README",
+    name="get_project_readme",
     tags={"documentation", "project", "read-only"}
 )
 async def get_project_readme(
@@ -1432,7 +1432,7 @@ async def get_project_readme(
 
 
 @mcp.tool(
-    name="Update project README",
+    name="update_project_readme",
     tags={"documentation", "project", "modifies-state"}
 )
 async def update_project_readme(
@@ -1497,7 +1497,7 @@ async def update_project_readme(
 # export_topology_diagram tool now registered from export_tools module
 # Register the imported tool with MCP
 mcp.tool(
-    name="Export topology diagram",
+    name="export_topology_diagram",
     description="Export topology diagram to SVG/PNG files on disk. For agents: use diagrams://{project_id}/topology resource for direct access without saving files.",
     tags={"topology", "visualization", "export", "file-io", "idempotent"},
     annotations={"idempotent": True, "read_only": True, "creates_resource": True}
@@ -1509,7 +1509,7 @@ mcp.tool(
 # ============================================================================
 
 @mcp.tool(
-    name="Create drawing",
+    name="create_drawing",
     tags={"drawing", "topology", "visualization", "creates-resource"},
     annotations={"creates_resource": True}
 )
@@ -1586,7 +1586,7 @@ async def create_drawing(
 
 
 @mcp.tool(
-    name="Update drawing",
+    name="update_drawing",
     tags={"drawing", "topology", "visualization", "modifies-state"},
     annotations={"idempotent": True}
 )
@@ -1614,7 +1614,7 @@ async def update_drawing(
 
 
 @mcp.tool(
-    name="Delete drawing",
+    name="delete_drawing",
     tags={"drawing", "topology", "visualization", "destructive", "idempotent"},
     annotations={"destructive": True, "idempotent": True}
 )
@@ -1638,7 +1638,7 @@ async def delete_drawing(
 
 
 @mcp.tool(
-    name="Create drawings batch",
+    name="create_drawings_batch",
     tags={"drawing", "topology", "visualization", "bulk", "creates-resource"},
 )
 async def create_drawings_batch(
@@ -1704,7 +1704,7 @@ from tools.ssh_tools import (
 
 
 @mcp.tool(
-    name="Configure SSH session",
+    name="configure_ssh_session",
     tags={"ssh", "device-access", "automation", "idempotent"},
     annotations={"idempotent": True}
 )
@@ -1799,7 +1799,7 @@ async def ssh_configure(
 
 
 @mcp.tool(
-    name="Execute SSH command",
+    name="execute_ssh_command",
     tags={"ssh", "device-access", "automation"}
 )
 async def ssh_command(
@@ -1871,7 +1871,7 @@ async def ssh_command(
 
 
 @mcp.tool(
-    name="Disconnect SSH session",
+    name="disconnect_ssh_session",
     tags={"ssh", "device-access", "idempotent"},
     annotations={"idempotent": True}
 )
@@ -1888,7 +1888,7 @@ async def ssh_disconnect(
 
 
 @mcp.tool(
-    name="SSH batch operations",
+    name="ssh_batch_operations",
     tags={"ssh", "device-access", "bulk", "automation"}
 )
 async def ssh_batch(

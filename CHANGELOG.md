@@ -5,6 +5,40 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.36.0] - 2025-10-28 - **CRITICAL FIX** - Tool Name Validation
+
+### Fixed
+- **MCP Tool Name Validation Error**: Fixed all tool names to comply with MCP naming requirements
+  - **Error**: `tools.0.FrontendRemoteToolDefinition.name: String should match pattern '^[a-zA-Z0-9_-]{1,64}$'`
+  - **Root Cause**: Tool names contained spaces (e.g., "Open project", "Send console data")
+  - **MCP Requirement**: Tool names must only contain letters, numbers, underscores, and hyphens (no spaces)
+  - **Fix**: Replaced all spaces in tool names with underscores
+  - **Impact**: Extension now loads successfully in Claude Desktop without validation errors
+  - **Scope**: All 27 tools renamed (e.g., "Open project" → "open_project", "Send console data" → "send_console_data")
+
+### Changed
+- **Tool Names** (all 27 tools updated):
+  - Project tools: `open_project`, `create_project`, `close_project`
+  - Node tools: `set_node_properties`, `create_node`, `delete_node`, `get_node_file`, `write_node_file`, `configure_node_network`
+  - Console tools: `send_console_data`, `read_console_output`, `disconnect_console`, `send_console_keystroke`, `send_console_command_and_wait`, `console_batch_operations`
+  - Network tools: `set_network_connections`
+  - Documentation tools: `get_project_readme`, `update_project_readme`
+  - SSH tools: `configure_ssh_session`, `execute_ssh_command`, `disconnect_ssh_session`, `ssh_batch_operations`
+  - Drawing tools: `create_drawing`, `update_drawing`, `delete_drawing`, `create_drawings_batch`
+  - Export tools: `export_topology_diagram`
+
+### Technical Details
+- **Files Modified**:
+  - `server/main.py`: Updated all `@mcp.tool(name=...)` decorators to use underscores
+  - `manifest.json`: Updated version to 0.36.0 and synced tool names with decorators
+  - Added missing `ssh_batch_operations` and `create_drawings_batch` to manifest
+- **Validation**: MCP extension schema now passes without errors
+- **Compatibility**: Claude Desktop can now load and use all tools
+
+### Migration Notes
+- **Breaking Change**: If you have custom scripts or documentation referencing old tool names with spaces, update them to use underscores
+- **Example**: Change `"Open project"` to `"open_project"` in all tool calls
+
 ## [0.35.0] - 2025-10-28 - Dependency Management & Claude Desktop Fix
 
 ### Fixed
