@@ -35,8 +35,8 @@ This is **expected behavior** when Claude Code tries to use local Grep tool on L
 
 #### Workaround
 Use MCP resources and tools instead of local file operations:
-- ✅ Read README: `gns3://projects/{id}/readme` resource
-- ✅ Get nodes: `gns3://projects/{id}/nodes` resource
+- ✅ Read README: `projects://{id}/readme` resource
+- ✅ Get nodes: `projects://{id}/nodes` resource
 - ✅ File operations: Use Docker node tools (get_node_file, write_node_file)
 - ❌ Don't use local Grep/Read on GNS3 project paths from Windows
 
@@ -85,7 +85,7 @@ MCP server hangs during initialization when GNS3 server is temporarily unavailab
 - Resources fail with "MCP server resource not found"
 - Happens on AI agent 3rd+ restart
 - Server appears running but doesn't respond
-- All resource URIs fail (e.g., `gns3://projects/{id}`)
+- All resource URIs fail (e.g., `projects://{id}`)
 
 #### Root Cause
 **Blocking authentication during startup** (main.py:410):
@@ -316,10 +316,10 @@ Signature mismatch between tool declaration and implementation:
 Snapshot resources (v0.18.0) and new template resources (v0.23.0) were implemented in resource_manager.py with URI patterns but never registered in main.py with @mcp.resource decorators, making them inaccessible via MCP protocol.
 
 #### Missing Resources
-- `gns3://projects/{id}/snapshots/` - List project snapshots
-- `gns3://projects/{id}/snapshots/{id}` - Get snapshot details
+- `projects://{id}/snapshots/` - List project snapshots
+- `projects://{id}/snapshots/{id}` - Get snapshot details
 - `gns3://templates/{id}` - Get template with usage notes (v0.23.0)
-- `gns3://projects/{id}/nodes/{id}/template` - Get node's template usage (v0.23.0)
+- `projects://{id}/nodes/{id}/template` - Get node's template usage (v0.23.0)
 
 #### Resolution
 Added @mcp.resource decorators in main.py for all four missing resources (lines 547-571). Total MCP resources now correctly registered: 20 (was showing 0 in ListMcpResources).

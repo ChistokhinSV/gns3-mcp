@@ -4,16 +4,20 @@ Provides tools for viewing and managing network links (connections) between node
 """
 import json
 import logging
-from typing import TYPE_CHECKING, List, Dict, Any
+from typing import TYPE_CHECKING, Any, Dict, List
 
+from error_utils import create_error_response
 from link_validator import LinkValidator
 from models import (
-    LinkInfo, LinkEndpoint, ErrorResponse, ErrorCode,
-    ConnectOperation, DisconnectOperation,
-    CompletedOperation, FailedOperation, OperationResult,
-    validate_connection_operations
+    CompletedOperation,
+    ConnectOperation,
+    ErrorCode,
+    FailedOperation,
+    LinkEndpoint,
+    LinkInfo,
+    OperationResult,
+    validate_connection_operations,
 )
-from error_utils import create_error_response
 
 if TYPE_CHECKING:
     from main import AppContext

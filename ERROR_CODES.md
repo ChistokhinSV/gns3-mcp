@@ -56,7 +56,7 @@ Errors when requested resources don't exist or cannot be found.
   }
 }
 ```
-**How to fix**: Check node name spelling (case-sensitive) or use resource `gns3://projects/{id}/nodes/` to see available nodes
+**How to fix**: Check node name spelling (case-sensitive) or use resource `projects://{id}/nodes/` to see available nodes
 
 ---
 
@@ -70,7 +70,7 @@ Errors when requested resources don't exist or cannot be found.
   "suggested_action": "Use get_links() to see available link IDs"
 }
 ```
-**How to fix**: Verify link ID using resource `gns3://projects/{id}/links/`
+**How to fix**: Verify link ID using resource `projects://{id}/links/`
 
 ---
 
@@ -89,7 +89,7 @@ Errors when requested resources don't exist or cannot be found.
   }
 }
 ```
-**How to fix**: Check template name spelling or use resource `gns3://projects/{id}/templates/` to see available templates
+**How to fix**: Check template name spelling or use resource `projects://{id}/templates/` to see available templates
 
 ---
 
@@ -101,10 +101,10 @@ Errors when requested resources don't exist or cannot be found.
   "error": "Drawing 'draw-123' not found in project",
   "error_code": "DRAWING_NOT_FOUND",
   "details": "Available drawing IDs: draw-456, draw-789",
-  "suggested_action": "Use list_drawings() or resource gns3://projects/{id}/drawings/ to see available drawings"
+  "suggested_action": "Use list_drawings() or resource projects://{id}/drawings/ to see available drawings"
 }
 ```
-**How to fix**: Verify drawing ID using resource `gns3://projects/{id}/drawings/`
+**How to fix**: Verify drawing ID using resource `projects://{id}/drawings/`
 
 ---
 
@@ -116,10 +116,10 @@ Errors when requested resources don't exist or cannot be found.
   "error": "Snapshot 'Before Config' not found in project",
   "error_code": "SNAPSHOT_NOT_FOUND",
   "details": "Available snapshots: Initial Setup, After OSPF",
-  "suggested_action": "Use resource gns3://projects/{id}/snapshots/ to see available snapshots"
+  "suggested_action": "Use resource projects://{id}/snapshots/ to see available snapshots"
 }
 ```
-**How to fix**: Check snapshot name or use resource `gns3://projects/{id}/snapshots/` to list snapshots
+**How to fix**: Check snapshot name or use resource `projects://{id}/snapshots/` to list snapshots
 
 ---
 

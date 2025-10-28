@@ -7,8 +7,8 @@ Two-phase validation for network topology changes:
 This prevents partial topology changes that leave the network in an inconsistent state.
 """
 
-from typing import Dict, List, Set, Tuple, Optional
 import logging
+from typing import Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 

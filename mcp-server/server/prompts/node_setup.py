@@ -214,7 +214,7 @@ This workflow guides you through setting up **{node_name}** from scratch.
 ## Prerequisites
 
 - Project must be opened
-- Template "{template_name}" must exist (check resource `gns3://projects/{{id}}/templates/`)
+- Template "{template_name}" must exist (check resource `projects://{{id}}/templates/`)
 - Console access available after node starts
 
 ## Step 1: Create Node
@@ -400,13 +400,13 @@ Now that {node_name} is configured:
 ## Troubleshooting
 
 **Node won't start:**
-- Check template is valid: resource `gns3://projects/{{id}}/templates/`
+- Check template is valid: resource `projects://{{id}}/templates/`
 - Verify enough resources (RAM, CPU) on GNS3 server
 - Check GNS3 server logs
 
 **Can't access console:**
 - Wait for boot completion (check console output)
-- Verify node is started: resource `gns3://projects/{{id}}/nodes/{node_name}`
+- Verify node is started: resource `projects://{{id}}/nodes/{node_name}`
 - Check console type is telnet
 
 **SSH connection fails:**

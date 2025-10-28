@@ -4,17 +4,17 @@ Provides tools for listing, creating, modifying, and deleting GNS3 nodes.
 """
 import asyncio
 import json
-from typing import TYPE_CHECKING, Optional, Dict, Any
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from models import NodeInfo, NodeSummary, ErrorResponse, ErrorCode
 from error_utils import (
     create_error_response,
     node_not_found_error,
+    node_running_error,
     project_not_found_error,
     template_not_found_error,
-    node_running_error,
-    validation_error
+    validation_error,
 )
+from models import ErrorCode, NodeInfo, NodeSummary
 
 if TYPE_CHECKING:
     from main import AppContext
@@ -241,7 +241,7 @@ async def set_node_impl(app: "AppContext",
             ]
             hardware_props['ports_mapping'] = ports_mapping
         else:
-            results.append(f"Warning: Port configuration only supported for ethernet switches")
+            results.append("Warning: Port configuration only supported for ethernet switches")
 
     # Wrap hardware properties in 'properties' object for QEMU nodes
     if hardware_props and node['node_type'] == 'qemu':
@@ -319,7 +319,7 @@ async def set_node_impl(app: "AppContext",
                     results.append(f"Retry {attempt + 1}/3: Waiting for stop...")
 
                 if not stopped:
-                    results.append(f"Warning: Node may not have stopped completely")
+                    results.append("Warning: Node may not have stopped completely")
 
                 # Start node
                 await app.gns3.start_node(app.current_project_id, node_id)
@@ -464,7 +464,7 @@ async def get_node_file_impl(app: "AppContext", node_name: str, file_path: str) 
         # Validate node type
         if node['node_type'] not in ('docker', 'vpcs'):
             return create_error_response(
-                error=f"File operations only supported for Docker and VPCS nodes",
+                error="File operations only supported for Docker and VPCS nodes",
                 error_code=ErrorCode.OPERATION_FAILED.value,
                 details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker' or 'vpcs'",
                 suggested_action="Only Docker and VPCS nodes support file read/write operations",
@@ -521,7 +521,7 @@ async def write_node_file_impl(app: "AppContext", node_name: str, file_path: str
         # Validate node type
         if node['node_type'] not in ('docker', 'vpcs'):
             return create_error_response(
-                error=f"File operations only supported for Docker and VPCS nodes",
+                error="File operations only supported for Docker and VPCS nodes",
                 error_code=ErrorCode.OPERATION_FAILED.value,
                 details=f"Node '{node_name}' is type '{node['node_type']}', expected 'docker' or 'vpcs'",
                 suggested_action="Only Docker and VPCS nodes support file read/write operations",
@@ -570,7 +570,7 @@ async def configure_node_network_impl(app: "AppContext", node_name: str, interfa
         return project_not_found_error()
 
     try:
-        from models import NetworkConfig, NetworkInterfaceStatic, NetworkInterfaceDHCP
+        from models import NetworkConfig, NetworkInterfaceDHCP, NetworkInterfaceStatic
 
         # Validate and parse interfaces
         parsed_interfaces = []

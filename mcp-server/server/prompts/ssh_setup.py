@@ -224,7 +224,7 @@ This guided workflow helps you enable SSH access on **{node_name}** ({device_typ
 
 ## Prerequisites
 
-- Node must be running (check with resource `gns3://projects/{{id}}/nodes/`)
+- Node must be running (check with resource `projects://{{id}}/nodes/`)
 - Console access available (check with resource `gns3://sessions/console/{node_name}`)
 - Know the device's management IP address
 

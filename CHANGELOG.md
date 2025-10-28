@@ -5,6 +5,41 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0] - 2025-10-28 - Resource URI Standardization & Code Quality Infrastructure
+
+### Changed
+- **BREAKING**: Resource URI schemes changed from `gns3://` to proper semantic schemes
+  - `gns3://templates/*` → `templates://*`
+  - `gns3://sessions/*` → `sessions://*`
+  - `gns3://proxy/*` → `proxies://*`
+  - All resource URLs now use consistent URI schemes
+- **Resource Metadata**: All 21 resources now have complete metadata (name, title, description, mime_type)
+- **URI Patterns**: Fixed mismatches between ResourceManager patterns and decorator URLs
+  - Templates pattern corrected (static, not project-scoped)
+  - Session resources properly project-scoped (`projects://{id}/sessions/*`)
+  - Proxy resources use path-based routing (not query params: `proxies://project/{id}`)
+- **Code Quality**: Full linting infrastructure with Ruff, Mypy, Black
+  - Added comprehensive linting configuration in pyproject.toml
+  - Pre-commit hooks for automated quality checks
+  - Line length standardized to 100 characters
+
+### Removed
+- **BREAKING**: Snapshot resources removed (planned for future reimplementation)
+  - Removed `resource_snapshots()` and `resource_snapshot()` decorators
+  - Commented out snapshot handlers in ResourceManager
+  - Snapshot functionality requires additional work for GNS3 v3 API compatibility
+
+### Added
+- **Linting Tools**: Ruff (fast linter), Mypy (type checker), Black (formatter), pre-commit
+- **Configuration Files**: pyproject.toml with Ruff, Mypy, Black configuration
+- **Pre-commit Hooks**: Automated linting, formatting, type checking, and extension building
+- **Complete Resource Metadata**: All decorators now include name, title, description, mime_type
+
+### Fixed
+- ResourceManager URI_PATTERNS now match decorator URLs exactly
+- All trailing slashes consistent across resource URIs
+- Import organization (all imports are used and necessary)
+
 ## [0.28.0] - Local Execution on SSH Proxy Container (FEATURE)
 
 ### Added
@@ -200,7 +235,7 @@ configure_node_network("A-PROXY", [
 
 ### Added
 - **NEW**: Project README/notes functionality via GNS3 native README.txt storage
-  - MCP Resource: `gns3://projects/{id}/readme` - browsable, read-only access to project notes
+  - MCP Resource: `projects://{id}/readme` - browsable, read-only access to project notes
   - Tool: `get_project_readme()` - retrieve project documentation in markdown format
   - Tool: `update_project_readme()` - save project documentation (IP schemes, credentials, architecture)
   - **Storage**: Uses native GNS3 `/v3/projects/{id}/files/README.txt` API endpoints
@@ -228,7 +263,7 @@ configure_node_network("A-PROXY", [
   - `mcp-server/server/resources/resource_manager.py`: Added readme URI pattern and handler (+15 LOC)
   - `mcp-server/server/main.py`: Added resource and 2 tools (+102 LOC)
   - `mcp-server/manifest.json`: Version 0.22.3→0.23.0, added 2 tools, updated descriptions
-- **NEW RESOURCES**: 1 (gns3://projects/{id}/readme)
+- **NEW RESOURCES**: 1 (projects://{id}/readme)
 - **NEW TOOLS**: 2 (get_project_readme, update_project_readme)
 - **TOTAL NEW CODE**: ~196 LOC
 - **RATIONALE**: Enables AI agent to maintain project-specific context without consuming main conversation
@@ -499,7 +534,7 @@ configure_node_network("A-PROXY", [
   - `create_drawing`: Create rectangle, ellipse, line, or text annotations
   - `update_drawing`: Modify position (x/y/z), rotation, svg content, locked state
   - `delete_drawing`: Remove drawing object by ID
-  - **Hybrid pattern**: Resources (gns3://projects/{id}/drawings/) for READ, Tools for WRITE
+  - **Hybrid pattern**: Resources (projects://{id}/drawings/) for READ, Tools for WRITE
 
 ### Changed
 - `mcp-server/server/main.py`: Added annotations to 17 tools, 8 completion handlers, 3 drawing tools (+300 LOC)
@@ -522,8 +557,8 @@ configure_node_network("A-PROXY", [
   - `create_snapshot`: Save project state with validation
   - `restore_snapshot`: Restore to previous snapshot state
 - **NEW**: 2 new MCP resources for snapshot browsing
-  - `gns3://projects/{id}/snapshots/` - List all snapshots in project
-  - `gns3://projects/{id}/snapshots/{id}` - Snapshot details
+  - `projects://{id}/snapshots/` - List all snapshots in project
+  - `projects://{id}/snapshots/{id}` - Snapshot details
 - **NEW**: lab_setup prompt - Automated topology creation with 6 topology types
   - `star`, `mesh`, `linear`, `ring`, `ospf`, `bgp`
 

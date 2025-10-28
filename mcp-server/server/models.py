@@ -3,16 +3,43 @@
 Type-safe data models for all GNS3 entities and operations.
 """
 
-from enum import Enum
-from pydantic import BaseModel, Field, field_validator
-from typing import Literal, List, Optional, Dict, Any, Union
 from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Literal, Optional, Union
 
+from pydantic import BaseModel, Field
 
 # Project Models
 
+class ProjectSummary(BaseModel):
+    """Minimal project information for list_projects (lightweight)"""
+    status: str  # opened, closed, etc.
+    name: str
+    project_id: str = Field(exclude=True)  # Store internally, exclude from output
+
+    @property
+    def uri(self) -> str:
+        """Return project URI with projects:// prefix"""
+        return f"projects://{self.project_id}"
+
+    def model_dump(self, **kwargs):
+        """Custom serialization to include uri instead of project_id"""
+        data = super().model_dump(**kwargs)
+        data['uri'] = self.uri
+        return data
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "opened",
+                "name": "My Network Lab",
+                "uri": "projects://a1b2c3d4-e5f6-7890-1234-567890abcdef"
+            }
+        }
+
+
 class ProjectInfo(BaseModel):
-    """GNS3 Project information"""
+    """GNS3 Project information (full details)"""
     project_id: str
     name: str
     status: Literal["opened", "closed"]
@@ -64,6 +91,7 @@ class NodeSummary(BaseModel):
     """Minimal node information for list_nodes (lightweight)"""
     node_id: str
     name: str
+    node_type: str
     node_type: str
     status: Literal["started", "stopped", "suspended"]
     console_type: Optional[str] = None

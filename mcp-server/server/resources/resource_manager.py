@@ -7,8 +7,7 @@ Supports 15 resource URIs for browsable state.
 
 import json
 import re
-from typing import TYPE_CHECKING, Optional, Dict, Any, List
-from urllib.parse import urlparse, parse_qs
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from main import AppContext
@@ -20,39 +19,36 @@ class ResourceManager:
     # URI patterns with named groups
     URI_PATTERNS = {
         # Project resources
-        r'^gns3://projects/$': 'list_projects',
-        r'^gns3://projects/(?P<project_id>[^/]+)$': 'get_project',
-        r'^gns3://projects/(?P<project_id>[^/]+)/nodes/$': 'list_nodes',
-        r'^gns3://projects/(?P<project_id>[^/]+)/nodes/(?P<node_id>[^/]+)$': 'get_node',
-        r'^gns3://projects/(?P<project_id>[^/]+)/nodes/(?P<node_id>[^/]+)/template$': 'get_node_template_usage',
-        r'^gns3://projects/(?P<project_id>[^/]+)/links/$': 'list_links',
-        r'^gns3://projects/(?P<project_id>[^/]+)/templates/$': 'list_templates',
-        r'^gns3://projects/(?P<project_id>[^/]+)/drawings/$': 'list_drawings',
-        r'^gns3://projects/(?P<project_id>[^/]+)/snapshots/$': 'list_snapshots',
-        r'^gns3://projects/(?P<project_id>[^/]+)/snapshots/(?P<snapshot_id>[^/]+)$': 'get_snapshot',
-        r'^gns3://projects/(?P<project_id>[^/]+)/readme$': 'get_project_readme',
+        r'^projects://$': 'list_projects',
+        r'^projects://(?P<project_id>[^/]+)$': 'get_project',
+        r'^projects://(?P<project_id>[^/]+)/readme$': 'get_project_readme',
+        r'^projects://(?P<project_id>[^/]+)/sessions/console/$': 'list_console_sessions',  # Project-scoped console sessions
+        r'^projects://(?P<project_id>[^/]+)/sessions/ssh/$': 'list_ssh_sessions',  # Project-scoped SSH sessions
 
-        # Template resources
-        r'^gns3://templates/(?P<template_id>[^/]+)$': 'get_template',
+        r'^nodes://(?P<project_id>[^/]+)/$': 'list_nodes',
+        r'^nodes://(?P<project_id>[^/]+)/(?P<node_id>[^/]+)$': 'get_node',
+        r'^nodes://(?P<project_id>[^/]+)/(?P<node_id>[^/]+)/template$': 'get_node_template_usage',
 
-        # Console session resources
-        r'^gns3://sessions/console/$': 'list_console_sessions',
-        r'^gns3://sessions/console/(?P<node_name>[^/]+)$': 'get_console_session',
+        r'^links://(?P<project_id>[^/]+)/$': 'list_links',
 
-        # SSH session resources
-        r'^gns3://sessions/ssh/$': 'list_ssh_sessions',
-        r'^gns3://sessions/ssh/(?P<node_name>[^/]+)$': 'get_ssh_session',
-        r'^gns3://sessions/ssh/(?P<node_name>[^/]+)/history$': 'get_ssh_history',
-        r'^gns3://sessions/ssh/(?P<node_name>[^/]+)/buffer$': 'get_ssh_buffer',
+        r'^drawings://(?P<project_id>[^/]+)/$': 'list_drawings',
+
+        # Templates (static, not project-scoped)
+        r'^templates://$': 'list_templates',
+        r'^templates://(?P<template_id>[^/]+)$': 'get_template',
+
+        # Node-specific session resources (by node name, not project-scoped)
+        r'^sessions://console/(?P<node_name>[^/]+)$': 'get_console_session',
+        r'^sessions://ssh/(?P<node_name>[^/]+)$': 'get_ssh_session',
+        r'^sessions://ssh/(?P<node_name>[^/]+)/history$': 'get_ssh_history',
+        r'^sessions://ssh/(?P<node_name>[^/]+)/buffer$': 'get_ssh_buffer',
 
         # SSH proxy resources
-        r'^gns3://proxy/status$': 'get_proxy_status',
-        r'^gns3://proxy/registry$': 'get_proxy_registry',
-        r'^gns3://proxy/sessions$': 'list_proxy_sessions',
-
-        # Proxy resource templates (project-scoped)
-        r'^gns3://projects/(?P<project_id>[^/]+)/proxies$': 'list_project_proxies',
-        r'^gns3://proxy/(?P<proxy_id>[^/]+)$': 'get_proxy',
+        r'^proxies:///status$': 'get_proxy_status',
+        r'^proxies://$': 'get_proxy_registry',
+        r'^proxies://sessions$': 'list_proxy_sessions',
+        r'^proxies://project/(?P<project_id>[^/]+)$': 'list_project_proxies',  # Path-based, not query param
+        r'^proxies://(?P<proxy_id>[^/]+)$': 'get_proxy',
     }
 
     def __init__(self, app: "AppContext"):
@@ -63,7 +59,7 @@ class ResourceManager:
         Parse resource URI and extract handler name and parameters
 
         Args:
-            uri: Resource URI (e.g., gns3://projects/abc123/nodes/)
+            uri: Resource URI (e.g., projects://abc123/nodes/)
 
         Returns:
             Tuple of (handler_name, parameters_dict) or (None, None) if no match
@@ -92,15 +88,15 @@ class ResourceManager:
                 "error": "Invalid resource URI",
                 "uri": uri,
                 "supported_patterns": [
-                    "gns3://projects/",
-                    "gns3://projects/{id}",
-                    "gns3://projects/{id}/nodes/",
-                    "gns3://projects/{id}/nodes/{id}",
-                    "gns3://projects/{id}/links/",
-                    "gns3://projects/{id}/templates/",
-                    "gns3://projects/{id}/drawings/",
-                    "gns3://projects/{id}/snapshots/",
-                    "gns3://projects/{id}/snapshots/{id}",
+                    "projects://",
+                    "projects://{id}",
+                    "projects://{id}/nodes/",
+                    "projects://{id}/nodes/{id}",
+                    "projects://{id}/links/",
+                    "projects://{id}/templates/",
+                    "projects://{id}/drawings/",
+                    "projects://{id}/snapshots/",
+                    "projects://{id}/snapshots/{id}",
                     "gns3://sessions/console/",
                     "gns3://sessions/console/{node}",
                     "gns3://sessions/ssh/",
@@ -145,7 +141,7 @@ class ResourceManager:
 
         # Add projects list resource
         resources.append({
-            "uri": "gns3://projects/",
+            "uri": "projects://",
             "name": "Projects",
             "description": "List of all GNS3 projects",
             "mimeType": "application/json"
@@ -156,37 +152,37 @@ class ResourceManager:
             project_id = proj['project_id']
             resources.extend([
                 {
-                    "uri": f"gns3://projects/{project_id}",
+                    "uri": f"projects://{project_id}",
                     "name": f"Project: {proj['name']}",
                     "description": f"Details for project {proj['name']}",
                     "mimeType": "application/json"
                 },
                 {
-                    "uri": f"gns3://projects/{project_id}/nodes/",
+                    "uri": f"projects://{project_id}/nodes/",
                     "name": f"Nodes in {proj['name']}",
                     "description": f"List of nodes in project {proj['name']}",
                     "mimeType": "application/json"
                 },
                 {
-                    "uri": f"gns3://projects/{project_id}/links/",
+                    "uri": f"projects://{project_id}/links/",
                     "name": f"Links in {proj['name']}",
                     "description": f"List of links in project {proj['name']}",
                     "mimeType": "application/json"
                 },
                 {
-                    "uri": f"gns3://projects/{project_id}/templates/",
+                    "uri": f"projects://{project_id}/templates/",
                     "name": f"Templates in {proj['name']}",
                     "description": f"Available templates for project {proj['name']}",
                     "mimeType": "application/json"
                 },
                 {
-                    "uri": f"gns3://projects/{project_id}/drawings/",
+                    "uri": f"projects://{project_id}/drawings/",
                     "name": f"Drawings in {proj['name']}",
                     "description": f"List of drawings in project {proj['name']}",
                     "mimeType": "application/json"
                 },
                 {
-                    "uri": f"gns3://projects/{project_id}/snapshots/",
+                    "uri": f"projects://{project_id}/snapshots/",
                     "name": f"Snapshots in {proj['name']}",
                     "description": f"List of snapshots in project {proj['name']}",
                     "mimeType": "application/json"
@@ -196,25 +192,25 @@ class ResourceManager:
         # Session resources
         resources.extend([
             {
-                "uri": "gns3://sessions/console/",
+                "uri": "sessions://console/",
                 "name": "Console Sessions",
                 "description": "List of active console sessions",
                 "mimeType": "application/json"
             },
             {
-                "uri": "gns3://sessions/ssh/",
+                "uri": "sessions://ssh/",
                 "name": "SSH Sessions",
                 "description": "List of active SSH sessions",
                 "mimeType": "application/json"
             },
             {
-                "uri": "gns3://proxy/status",
-                "name": "SSH Proxy Status",
-                "description": "SSH proxy service status",
+                "uri": "proxies://status",
+                "name": "Main SSH Proxy Status",
+                "description": "Gets status of the main SSH proxy that resides on GNS3 host",
                 "mimeType": "application/json"
             },
             {
-                "uri": "gns3://proxy/sessions",
+                "uri": "proxies://sessions",
                 "name": "SSH Proxy Sessions",
                 "description": "All SSH proxy sessions",
                 "mimeType": "application/json"
@@ -228,7 +224,7 @@ class ResourceManager:
     # ========================================================================
 
     async def list_projects(self) -> str:
-        """List all GNS3 projects"""
+        """List all GNS3 projects with their statuses and IDs"""
         from .project_resources import list_projects_impl
         return await list_projects_impl(self.app)
 
@@ -262,15 +258,16 @@ class ResourceManager:
         from .project_resources import list_drawings_impl
         return await list_drawings_impl(self.app, project_id)
 
-    async def list_snapshots(self, project_id: str) -> str:
-        """List snapshots in project"""
-        from .project_resources import list_snapshots_impl
-        return await list_snapshots_impl(self.app, project_id)
-
-    async def get_snapshot(self, project_id: str, snapshot_id: str) -> str:
-        """Get snapshot details"""
-        from .project_resources import get_snapshot_impl
-        return await get_snapshot_impl(self.app, project_id, snapshot_id)
+    # REMOVED v0.29.0 - Snapshot functionality removed (planned for future reimplementation)
+    # async def list_snapshots(self, project_id: str) -> str:
+    #     """List snapshots in project"""
+    #     from .project_resources import list_snapshots_impl
+    #     return await list_snapshots_impl(self.app, project_id)
+    #
+    # async def get_snapshot(self, project_id: str, snapshot_id: str) -> str:
+    #     """Get snapshot details"""
+    #     from .project_resources import get_snapshot_impl
+    #     return await get_snapshot_impl(self.app, project_id, snapshot_id)
 
     async def get_project_readme(self, project_id: str) -> str:
         """Get project README/notes"""

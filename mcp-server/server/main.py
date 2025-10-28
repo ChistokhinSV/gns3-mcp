@@ -1,342 +1,63 @@
-"""GNS3 MCP Server v0.19.0
+"""GNS3 MCP server
 
-Model Context Protocol server for GNS3 lab automation.
-Provides console and SSH automation tools for network devices.
-
-IMPORTANT: Tool Selection Guidelines
-====================================
-When automating network devices, ALWAYS prefer SSH tools over console tools!
-
-SSH Tools (Preferred):
-- ssh_command() - Auto-detects show vs config commands
-- Better reliability with automatic prompt detection
-- Structured output and error handling
-- Supports 200+ device types via Netmiko
-
-Console Tools (Use Only When Necessary):
-- console_send(), console_read(), console_disconnect(), console_keystroke()
-- For initial device configuration (enabling SSH, creating users)
-- For troubleshooting when SSH is unavailable
-- For devices without SSH support (VPCS, simple switches)
-
-Typical Workflow:
-1. Use console tools to configure SSH access on device
-2. Establish SSH session with ssh_configure()
-3. Switch to SSH tools for all automation tasks
-4. Return to console only if SSH fails
-
-Version 0.19.0 - UX & Advanced Features (FEATURE):
-- NEW: MCP tool annotations for all 20 tools
-  * destructive: delete_node, restore_snapshot, delete_drawing (3 tools)
-  * idempotent: open_project, create_project, close_project, set_node, console_disconnect,
-                ssh_configure, ssh_disconnect, update_drawing, export_topology_diagram (9 tools)
-  * read_only: console_read (1 tool)
-  * creates_resource: create_project, create_node, create_snapshot, export_topology_diagram,
-                      create_drawing (5 tools)
-  * modifies_topology: set_connection, create_node, delete_node (3 tools)
-- DEFERRED: Autocomplete support for 7 parameter types via MCP completions (disabled - FastMCP API differs)
-  * node_name: All console/SSH/node tools autocomplete from current project nodes
-  * template_name: create_node autocompletes from available templates
-  * action (set_node): start/stop/suspend/reload/restart
-  * project_name: open_project autocompletes from all projects
-  * snapshot_name: restore_snapshot autocompletes from project snapshots
-  * drawing_type: create_drawing autocompletes rectangle/ellipse/line/text
-  * topology_type: lab_setup autocompletes star/mesh/linear/ring/ospf/bgp
-- NEW: 3 drawing tools for visual annotations (hybrid architecture)
-  * create_drawing: Create rectangle, ellipse, line, or text annotations
-  * update_drawing: Modify position, rotation, appearance, lock state
-  * delete_drawing: Remove drawing objects
-  * Follows hybrid pattern: Resources for READ, Tools for WRITE
-- ARCHITECTURE: 20 tools + 17 resources + 4 prompts + 8 completions = Enhanced UX
-- FILE CHANGES:
-  * Modified: main.py (added annotations to 17 tools, 8 completion handlers, 3 drawing tools, +300 LOC)
-  * Modified: drawing_tools.py (added update_drawing_impl, +65 LOC)
-  * Modified: manifest.json (version 0.18.0→0.19.0, added 3 tools, updated descriptions)
-- NO BREAKING CHANGES: All existing tools, resources, prompts unchanged
-- RATIONALE: Tool annotations enable IDE warnings for destructive operations, autocomplete
-  improves discoverability and reduces errors, drawing tools restore functionality removed
-  in v0.15.0 with improved hybrid architecture
-
-Version 0.18.0 - Core Lab Automation (FEATURE):
-- NEW: 5 new tools for complete lab lifecycle management
-  * create_project: Create new projects and auto-open
-  * close_project: Close current project
-  * create_node: Create nodes from templates at specified coordinates (restored from v0.15.0)
-  * create_snapshot: Save project state with validation (warns on running nodes)
-  * restore_snapshot: Restore to previous state (stops nodes, disconnects sessions)
-- NEW: 2 new MCP resources for snapshot browsing
-  * gns3://projects/{id}/snapshots/ - List all snapshots
-  * gns3://projects/{id}/snapshots/{id} - Snapshot details
-- NEW: lab_setup prompt - Automated topology creation with 6 types
-  * Star: Hub-and-spoke topology (device_count = spokes)
-  * Mesh: Full mesh topology (device_count = routers)
-  * Linear: Chain topology (device_count = routers)
-  * Ring: Circular topology (device_count = routers)
-  * OSPF: Multi-area with backbone (device_count = areas, 3 routers per area)
-  * BGP: Multiple AS topology (device_count = AS, 2 routers per AS)
-  * Includes: Layout algorithms, link generation, IP addressing schemes
-- ARCHITECTURE: 16 tools + 17 resources + 4 prompts = Complete lab automation
-- FILE CHANGES:
-  * Created: snapshot_tools.py (~200 LOC), prompts/lab_setup.py (~800 LOC)
-  * Modified: gns3_client.py (+100 LOC), project_tools.py (+100 LOC),
-              main.py (+100 LOC), models.py (+30 LOC),
-              project_resources.py (+100 LOC), resource_manager.py (+20 LOC)
-- NO BREAKING CHANGES: All existing tools, resources, and prompts unchanged
-- RATIONALE: Enables complete lab automation from project creation through topology
-  setup to snapshot management. Lab setup prompt reduces manual work for common topologies.
-
-Version 0.17.0 - MCP Prompts (FEATURE):
-- NEW: 3 guided workflow prompts for common GNS3 operations
-  * ssh_setup: Device-specific SSH configuration (Cisco, MikroTik, Juniper, Arista, Linux)
-  * topology_discovery: Discover and visualize network topology with resources
-  * troubleshooting: OSI model-based troubleshooting methodology
-- ARCHITECTURE: 11 tools + 15 resources + 3 prompts = Complete MCP server
-- ENHANCED: Workflow guidance for complex multi-step operations
-- DEVICE COVERAGE: 6 device types with specific configuration commands
-- NO BREAKING CHANGES: All tools and resources unchanged, prompts additive
-- RATIONALE: Prompts guide users through complex workflows, reducing errors and improving efficiency
-
-Version 0.15.0 - Complete Tool Consolidation (BREAKING CHANGES):
-- RENAMED: All tools now follow {category}_{action} pattern for consistency
-  * send_console → console_send
-  * read_console → console_read
-  * disconnect_console → console_disconnect
-  * send_keystroke → console_keystroke
-  * configure_ssh → ssh_configure
-- MERGED: SSH command tools with auto-detection
-  * ssh_send_command + ssh_send_config_set → ssh_command (auto-detects show vs config)
-- REMOVED: 7 deprecated/low-usage tools
-  * send_and_wait_console → Use console_send + console_read workflow
-  * create_node → Will be resource template in v0.16.0
-  * create_drawing → Will be resource template in v0.16.0
-  * delete_drawing → Use GNS3 GUI (low usage)
-  * ssh_cleanup_sessions → Use explicit ssh_disconnect
-  * ssh_get_job_status → Already available as resource gns3://sessions/ssh/{node}/jobs/{id}
-- NEW: ssh_disconnect tool for explicit session cleanup
-- FINAL ARCHITECTURE: 11 core tools + 15 browsable resources
-  * Tools: open_project, set_node, delete_node, console_send, console_read, console_disconnect,
-           console_keystroke, set_connection, ssh_configure, ssh_command, ssh_disconnect
-  * Resources: 15 gns3:// URIs for browsing state
-- RATIONALE: Consistent naming, simpler SSH interface, reduced tool count (17→11)
-
-Version 0.14.0 - Tool Consolidation (BREAKING CHANGES - Phase 1):
-- REMOVED: 11 deprecated query tools (replaced by MCP resources in v0.13.0)
-  * list_projects → use resource gns3://projects
-  * list_nodes → use resource gns3://projects/{id}/nodes
-  * get_node_details → use resource gns3://projects/{id}/nodes/{id}
-  * get_links → use resource gns3://projects/{id}/links
-  * list_templates → use resource gns3://projects/{id}/templates
-  * list_drawings → use resource gns3://projects/{id}/drawings
-  * get_console_status → use resource gns3://sessions/console/{node}
-  * ssh_get_status → use resource gns3://sessions/ssh/{node}
-  * ssh_get_history → use resource gns3://sessions/ssh/{node}/history
-  * ssh_get_command_output → query resource with filtering
-  * ssh_read_buffer → use resource gns3://sessions/ssh/{node}/buffer
-- FINAL ARCHITECTURE: 10 core tools + 15 browsable resources
-  * Tools: Actions that modify state (create, delete, configure, execute)
-  * Resources: Read-only browsable state (projects, nodes, sessions, status)
-- RATIONALE: Clearer separation of concerns, reduced cognitive load, better IDE integration
-
-Version 0.13.0 - MCP Resources (BREAKING CHANGES - Phase 1):
-- NEW: 15 MCP resources for browsable state (gns3:// URI scheme)
-  * gns3://projects/ - List all projects
-  * gns3://projects/{id} - Project details
-  * gns3://projects/{id}/nodes/ - List nodes in project
-  * gns3://projects/{id}/nodes/{id} - Node details with full info
-  * gns3://projects/{id}/links/ - List links in project
-  * gns3://projects/{id}/templates/ - Available templates
-  * gns3://projects/{id}/drawings/ - List drawings
-  * gns3://sessions/console/ - All console sessions
-  * gns3://sessions/console/{node} - Console session status
-  * gns3://sessions/ssh/ - All SSH sessions
-  * gns3://sessions/ssh/{node} - SSH session status
-  * gns3://sessions/ssh/{node}/history - SSH command history
-  * gns3://sessions/ssh/{node}/buffer - SSH continuous buffer
-  * gns3://proxy/status - SSH proxy service status
-  * gns3://proxy/sessions - All SSH proxy sessions
-- REFACTORED: Resource architecture with 3 new modules
-  * resources/resource_manager.py - URI routing (330 LOC)
-  * resources/project_resources.py - Project/node/link resources (340 LOC)
-  * resources/session_resources.py - Console/SSH session resources (230 LOC)
-- DEPRECATED: 11 query tools (still available, will be removed in v0.14.0)
-  * list_projects → gns3://projects/
-  * list_nodes → gns3://projects/{id}/nodes/
-  * get_node_details → gns3://projects/{id}/nodes/{id}
-  * get_links → gns3://projects/{id}/links/
-  * list_templates → gns3://projects/{id}/templates/
-  * list_drawings → gns3://projects/{id}/drawings/
-  * get_console_status → gns3://sessions/console/{node}
-  * ssh_get_status → gns3://sessions/ssh/{node}
-  * ssh_get_history → gns3://sessions/ssh/{node}/history
-  * ssh_get_command_output → gns3://sessions/ssh/{node}/history (with filtering)
-  * ssh_read_buffer → gns3://sessions/ssh/{node}/buffer
-- ENHANCED: Better IDE integration with resource discovery
-- NO BREAKING CHANGES: All existing tools still work (deprecated tools functional)
-
-Version 0.12.4 - Error Handling Improvement (BUGFIX):
-- FIXED: configure_ssh error messages now properly distinguish SSH connection
-  errors (timeout, auth failure) from server errors
-- Better error parsing from SSH proxy HTTP responses
-
-Version 0.12.3 - Console Output Fix (BUGFIX):
-- FIXED: send_and_wait_console now accumulates all output during polling
-
-Version 0.12.2 - Lightweight Node Listing (BUGFIX):
-- FIXED: list_nodes returns lightweight NodeSummary to prevent large output failures
-
-Version 0.12.1 - Grep Filtering (FEATURE):
-- ADDED: Grep-style pattern filtering for SSH and console buffers
-
-Version 0.12.0 - SSH Proxy Service (FEATURE - Phase 1):
-- NEW: SSH proxy service (FastAPI container on port 8022, Python 3.13-slim)
-- NEW: 9 MCP tools for SSH automation via Netmiko (200+ device types)
-  * configure_ssh, ssh_send_command, ssh_send_config_set
-  * ssh_read_buffer, ssh_get_history, ssh_get_command_output
-  * ssh_get_status, ssh_cleanup_sessions, ssh_get_job_status
-- NEW: Dual storage - continuous buffer + per-command job history
-- NEW: Adaptive async execution (poll wait_timeout, return job_id for long commands)
-- NO BREAKING CHANGES: All existing tools unchanged, SSH tools additive
-
-Version 0.11.0 - Code Organization Refactoring (REFACTOR):
-- ADDED: Console manager unit tests (38 tests, 76% coverage)
-- REFACTORED: Extracted 19 tools to 6 modules (tools/ directory)
-- IMPROVED: Reduced main.py from 1,836 to 914 LOC (50% reduction)
-
-Version 0.10.0 - Testing Infrastructure (FEATURE):
-- ADDED: Comprehensive unit testing infrastructure (pytest 8.4.2, 134 tests total)
-- REFACTORED: Extracted export functionality to export_tools.py module
-
-Version 0.9.0 - Major Cleanup (BREAKING CHANGES):
-- REMOVED: Caching infrastructure, detect_console_state() tool
-- CHANGED: read_console() now uses mode parameter ("diff"/"last_page"/"all")
-  * Drawings and nodes intermixed by z-value (sorted rendering)
-  * Port indicators integrated into link rendering
-  * Ensures correct layering: links → nodes/drawings (by z) → high-z elements
-
-Version 0.6.3 - Font Fallback Chain:
-- FIXED: Font fallback for consistent cross-platform rendering in SVG/PNG exports
-  * TypeWriter → Courier New → Courier → Liberation Mono → Consolas → monospace
-  * Other fonts get appropriate fallback chains (serif, sans-serif)
-  * Ensures consistent appearance regardless of system font availability
-
-Version 0.6.2 - Label Rendering Fix:
-- FIXED: Node label positioning in export_topology_diagram() now matches official GNS3
-  * Labels use GNS3-stored positions directly (no incorrect offset additions)
-  * Dynamic text-anchor based on label position (start/middle/end)
-  * Auto-centering when x is None (matches GNS3 behavior)
-  * Removes dominant-baseline from CSS, applies text-before-edge
-
-Version 0.6.1 - Newline Normalization & Special Keystrokes:
-- FIXED: All newlines automatically converted to \r\n (CR+LF) for console compatibility
-  * Copy-paste multi-line text directly - newlines just work
-  * send_console() and send_and_wait_console() normalize all line endings
-  * Handles \n, \r, \r\n uniformly → all become \r\n
-  * Add raw=True parameter to disable processing
-- NEW: send_keystroke() - Send special keys for TUI navigation and vim editing
-  * Navigation: up, down, left, right, home, end, pageup, pagedown
-  * Editing: enter (sends \r\n), backspace, delete, tab, esc
-  * Control: ctrl_c, ctrl_d, ctrl_z, ctrl_a, ctrl_e
-  * Function keys: f1-f12
-- FIXED: detect_console_state() now checks only last non-empty line (not 5 lines)
-  * Prevents detecting old prompts instead of current state
-  * Fixed MikroTik password patterns: "new password>" not "new password:"
-
-Version 0.6.0 - Interactive Console Tools:
-- NEW: send_and_wait_console() - Send command and wait for prompt pattern
-- NEW: detect_console_state() - Auto-detect device type and console state
-- ENHANCED: Console tool docstrings with timing guidance
-- Added DEVICE_PATTERNS library for auto-detection
-
-Version 0.5.1 - Label Alignment:
-- Fixed node label alignment - right-aligned and vertically centered
-
-Version 0.5.0 - Port Status Indicators:
-- Topology export shows port status (green=active, red=stopped)
-
-Version 0.4.2 - Topology Export:
-- NEW: export_topology_diagram() - Export topology as SVG/PNG
-
-Version 0.4.0 - Node Creation & Drawing Objects:
-- NEW: delete_node, list_templates, create_node
-- NEW: list_drawings, create_rectangle, create_text, create_ellipse
-
-Version 0.3.0 - Type Safety & Caching:
-- Type-safe Pydantic models, two-phase validation, performance caching
+GNS3 lab automation with AI agent
 """
 
 import argparse
 import asyncio
 import json
 import logging
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from mcp.server.fastmcp import FastMCP, Context
-from mcp.types import Completion
-
-from gns3_client import GNS3Client
 from console_manager import ConsoleManager
-from link_validator import LinkValidator
-from models import (
-    ProjectInfo, NodeInfo, LinkInfo, LinkEndpoint,
-    ConnectOperation, DisconnectOperation,
-    CompletedOperation, FailedOperation, OperationResult,
-    ConsoleStatus, ErrorResponse,
-    TemplateInfo, DrawingInfo,
-    validate_connection_operations
-)
 from export_tools import (
     export_topology_diagram,
-    create_rectangle_svg,
-    create_text_svg,
-    create_ellipse_svg,
-    create_line_svg
 )
-from tools.project_tools import (
-    list_projects_impl,
-    open_project_impl,
-    create_project_impl,
-    close_project_impl
+from gns3_client import GNS3Client
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.types import Completion
+from models import (
+    ErrorResponse,
 )
-from tools.node_tools import (
-    list_nodes_impl,
-    get_node_details_impl,
-    set_node_impl,
-    create_node_impl,
-    delete_node_impl,
-    get_node_file_impl,
-    write_node_file_impl,
-    configure_node_network_impl
-)
-from tools.console_tools import (
-    send_console_impl,
-    read_console_impl,
-    disconnect_console_impl,
-    get_console_status_impl,
-    send_and_wait_console_impl,
-    send_keystroke_impl,
-    console_batch_impl
-)
-from tools.link_tools import get_links_impl, set_connection_impl
-from tools.drawing_tools import (
-    list_drawings_impl,
-    create_drawing_impl,
-    update_drawing_impl,
-    delete_drawing_impl,
-    create_drawings_batch_impl
-)
-from tools.template_tools import list_templates_impl
-from tools.snapshot_tools import create_snapshot_impl, restore_snapshot_impl
-from resources import ResourceManager
 from prompts import (
+    render_lab_setup_prompt,
+    render_node_setup_prompt,
     render_ssh_setup_prompt,
     render_topology_discovery_prompt,
     render_troubleshooting_prompt,
-    render_lab_setup_prompt,
-    render_node_setup_prompt
+)
+from resources import ResourceManager
+from tools.console_tools import (
+    console_batch_impl,
+    disconnect_console_impl,
+    read_console_impl,
+    send_and_wait_console_impl,
+    send_console_impl,
+    send_keystroke_impl,
+)
+from tools.drawing_tools import (
+    create_drawing_impl,
+    create_drawings_batch_impl,
+    delete_drawing_impl,
+    update_drawing_impl,
+)
+from tools.link_tools import set_connection_impl
+from tools.node_tools import (
+    configure_node_network_impl,
+    create_node_impl,
+    delete_node_impl,
+    get_node_file_impl,
+    set_node_impl,
+    write_node_file_impl,
+)
+from tools.project_tools import (
+    close_project_impl,
+    create_project_impl,
+    open_project_impl,
 )
 
 # Read version from manifest.json (single source of truth)
@@ -546,103 +267,182 @@ mcp = FastMCP(
 # ============================================================================
 
 # Project resources
-@mcp.resource("gns3://projects")
+@mcp.resource("projects://",
+    name="Projects",  # human-readable name
+    title="GNS3 projects list", # human-readable name
+    description="List all GNS3 projects with their statuses and IDs", # defaults to docsctring
+    # json output
+    mime_type="application/json"
+)
 async def resource_projects() -> str:
-    """List all GNS3 projects"""
+    """List all GNS3 projects with their statuses and IDs"""
     return await _app.resource_manager.list_projects()
 
-@mcp.resource("gns3://projects/{project_id}")
+@mcp.resource("projects://{project_id}",
+    name="Project details",  # human-readable name
+    title="GNS3 project details", # human-readable name
+    description="Details for a specific GNS3 project", # defaults to docsctring
+    mime_type="text/plain",
+)
 async def resource_project(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_project(project_id)
 
-@mcp.resource("gns3://projects/{project_id}/nodes")
+@mcp.resource("nodes://{project_id}/",
+    name="Project nodes",
+    title="GNS3 project nodes list",
+    description="List all nodes (devices) in a specific GNS3 project with status and basic info",
+    mime_type="application/json"
+)
 async def resource_nodes(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_nodes(project_id)
 
-@mcp.resource("gns3://projects/{project_id}/nodes/{node_id}")
+@mcp.resource("nodes://{project_id}/{node_id}",
+    name="Node details",
+    title="GNS3 node details",
+    description="Detailed information about a specific node including status, coordinates, console settings, and properties",
+    mime_type="application/json"
+)
 async def resource_node(ctx: Context, project_id: str, node_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_node(project_id, node_id)
 
-@mcp.resource("gns3://projects/{project_id}/links")
+@mcp.resource("links://{project_id}/",
+    name="Project links",
+    title="GNS3 project network links",
+    description="List all network links (connections) between nodes in a specific project",
+    mime_type="application/json"
+)
 async def resource_links(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_links(project_id)
 
-@mcp.resource("gns3://templates")
+@mcp.resource("templates://",
+    name="Templates",
+    title="GNS3 templates list",
+    description="List all available GNS3 device templates (routers, switches, Docker containers, VMs)",
+    mime_type="application/json"
+)
 async def resource_templates() -> str:
     """List all available GNS3 templates"""
     return await _app.resource_manager.list_templates()
 
-@mcp.resource("gns3://projects/{project_id}/drawings")
+@mcp.resource("drawings://{project_id}/",
+    name="Project drawings",
+    title="GNS3 project drawing objects",
+    description="List all drawing objects (rectangles, ellipses, lines, text labels) in a specific project",
+    mime_type="application/json"
+)
 async def resource_drawings(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_drawings(project_id)
 
-@mcp.resource("gns3://projects/{project_id}/snapshots")
-async def resource_snapshots(ctx: Context, project_id: str) -> str:
-    app: AppContext = ctx.request_context.lifespan_context
-    return await app.resource_manager.list_snapshots(project_id)
+# REMOVED v0.29.0 - Snapshot resources removed (planned for future reimplementation)
+# Snapshot functionality requires additional work to properly handle GNS3 v3 API snapshot operations
 
-@mcp.resource("gns3://projects/{project_id}/snapshots/{snapshot_id}")
-async def resource_snapshot(ctx: Context, project_id: str, snapshot_id: str) -> str:
-    app: AppContext = ctx.request_context.lifespan_context
-    return await app.resource_manager.get_snapshot(project_id, snapshot_id)
-
-@mcp.resource("gns3://projects/{project_id}/readme")
+@mcp.resource("projects://{project_id}/readme",
+    name="Project README",
+    title="GNS3 project README/notes",
+    description="Project documentation in markdown - IP schemes, credentials, architecture notes, troubleshooting guides",
+    mime_type="text/markdown"
+)
 async def resource_project_readme(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_project_readme(project_id)
 
-@mcp.resource("gns3://projects/{project_id}/sessions/console")
+@mcp.resource("projects://{project_id}/sessions/console/",
+    name="Project console sessions",
+    title="Active console sessions for project",
+    description="List all active console (telnet) sessions for nodes in a specific project",
+    mime_type="application/json"
+)
 async def resource_console_sessions(ctx: Context, project_id: str) -> str:
     """List console sessions for project nodes"""
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_console_sessions(project_id)
 
-@mcp.resource("gns3://projects/{project_id}/sessions/ssh")
+@mcp.resource("projects://{project_id}/sessions/ssh/",
+    name="Project SSH sessions",
+    title="Active SSH sessions for project",
+    description="List all active SSH sessions for nodes in a specific project",
+    mime_type="application/json"
+)
 async def resource_ssh_sessions(ctx: Context, project_id: str) -> str:
     """List SSH sessions for project nodes"""
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_ssh_sessions(project_id)
 
 # Template resources
-@mcp.resource("gns3://templates/{template_id}")
+@mcp.resource("templates://{template_id}",
+    name="Template details",
+    title="GNS3 template details",
+    description="Detailed information about a specific template including properties, default settings, and usage notes",
+    mime_type="application/json"
+)
 async def resource_template(ctx: Context, template_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_template(template_id)
 
-@mcp.resource("gns3://projects/{project_id}/nodes/{node_id}/template")
+@mcp.resource("nodes://{project_id}/{node_id}/template",
+    name="Node template usage",
+    title="Template usage notes for node",
+    description="Template-specific configuration hints and usage notes for this node instance",
+    mime_type="text/markdown"
+)
 async def resource_node_template(ctx: Context, project_id: str, node_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_node_template_usage(project_id, node_id)
 
 # Console session resources (node-specific templates only)
-@mcp.resource("gns3://sessions/console/{node_name}")
+@mcp.resource("sessions://console/{node_name}",
+    name="Console session",
+    title="Console session for node",
+    description="Console session state and buffer for a specific node - connection status and recent output",
+    mime_type="application/json"
+)
 async def resource_console_session(ctx: Context, node_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_console_session(node_name)
 
 # SSH session resources (node-specific templates only)
-@mcp.resource("gns3://sessions/ssh/{node_name}")
+@mcp.resource("sessions://ssh/{node_name}",
+    name="SSH session",
+    title="SSH session for node",
+    description="SSH session state for a specific node - connection status, device type, and proxy routing",
+    mime_type="application/json"
+)
 async def resource_ssh_session(ctx: Context, node_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_ssh_session(node_name)
 
-@mcp.resource("gns3://sessions/ssh/{node_name}/history")
+@mcp.resource("sessions://ssh/{node_name}/history",
+    name="SSH command history",
+    title="SSH command history for node",
+    description="Command history for a specific node's SSH session - chronological list of executed commands",
+    mime_type="application/json"
+)
 async def resource_ssh_history(ctx: Context, node_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_ssh_history(node_name)
 
-@mcp.resource("gns3://sessions/ssh/{node_name}/buffer")
+@mcp.resource("sessions://ssh/{node_name}/buffer",
+    name="SSH output buffer",
+    title="SSH output buffer for node",
+    description="Accumulated SSH output buffer for a specific node - recent command outputs and console text",
+    mime_type="text/plain"
+)
 async def resource_ssh_buffer(ctx: Context, node_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_ssh_buffer(node_name)
 
 # SSH proxy resources
-@mcp.resource("gns3://proxy/status")
+@mcp.resource("proxies:///status",
+    name="Main proxy status",
+    title="SSH proxy service status",
+    description="Health status and version of the main SSH proxy on GNS3 host (default proxy for ssh_configure)",
+    mime_type="application/json"
+)
 async def resource_proxy_status() -> str:
     """Get SSH proxy service status (main proxy on GNS3 host)
 
@@ -651,7 +451,12 @@ async def resource_proxy_status() -> str:
     """
     return await _app.resource_manager.get_proxy_status()
 
-@mcp.resource("gns3://proxy/registry")
+@mcp.resource("proxies://",
+    name="Lab proxy registry",
+    title="Discovered lab SSH proxies",
+    description="All discovered SSH proxy containers in GNS3 lab projects - use proxy_id for routing through isolated networks",
+    mime_type="application/json"
+)
 async def resource_proxy_registry() -> str:
     """Discover lab SSH proxies via Docker API (v0.26.0 Multi-Proxy Support)
 
@@ -673,7 +478,12 @@ async def resource_proxy_registry() -> str:
     """
     return await _app.resource_manager.get_proxy_registry()
 
-@mcp.resource("gns3://proxy/sessions")
+@mcp.resource("proxies://sessions",
+    name="All proxy sessions",
+    title="SSH sessions across all proxies",
+    description="Aggregated list of ALL active SSH sessions from main proxy and lab proxies - global lab infrastructure view",
+    mime_type="application/json"
+)
 async def resource_proxy_sessions() -> str:
     """List all SSH sessions across all proxies (v0.26.0 Multi-Proxy Aggregation)
 
@@ -684,12 +494,17 @@ async def resource_proxy_sessions() -> str:
     so you can see which proxy manages each session.
 
     Use this for a global view of all SSH connectivity across the entire lab infrastructure.
-    For project-specific sessions, use gns3://projects/{id}/sessions/ssh instead.
+    For project-specific sessions, use projects://{id}/sessions/ssh instead.
     """
     return await _app.resource_manager.list_proxy_sessions()
 
 # Proxy resource templates (project-scoped)
-@mcp.resource("gns3://projects/{project_id}/proxies")
+@mcp.resource("proxies://project/{project_id}",
+    name="Project proxies",
+    title="Lab proxies for project",
+    description="SSH proxy containers running in a specific GNS3 project - filtered view of proxy registry",
+    mime_type="application/json"
+)
 async def resource_project_proxies(ctx: Context, project_id: str) -> str:
     """List lab proxies for specific project (filtered view of registry)
 
@@ -699,7 +514,12 @@ async def resource_project_proxies(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_project_proxies(project_id)
 
-@mcp.resource("gns3://proxy/{proxy_id}")
+@mcp.resource("proxies://{proxy_id}",
+    name="Proxy details",
+    title="Lab proxy details",
+    description="Detailed information about a specific lab proxy - container details, network config, connection info",
+    mime_type="application/json"
+)
 async def resource_proxy(ctx: Context, proxy_id: str) -> str:
     """Get detailed information about a specific lab proxy
 
@@ -1537,73 +1357,6 @@ async def configure_node_network(ctx: Context, node_name: str, interfaces: list)
 
     return await configure_node_network_impl(app, node_name, interfaces)
 
-
-@mcp.tool(annotations={
-    "creates_resource": True
-})
-async def create_snapshot(ctx: Context, name: str, description: str = "") -> str:
-    """Create a snapshot of the current project state
-
-    Snapshots capture the entire project state including:
-    - All node configurations and positions
-    - All link connections
-    - Drawing objects
-    - Project settings
-
-    Warning is issued (but not blocking) if nodes are running. For consistent snapshots,
-    stop all nodes before creating a snapshot.
-
-    Args:
-        name: Snapshot name (must be unique within project)
-        description: Optional snapshot description
-
-    Returns:
-        JSON with SnapshotInfo for created snapshot
-
-    Example:
-        >>> create_snapshot("Before Config Change")
-        >>> create_snapshot("Working Configuration", "Config before OSPF changes")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await create_snapshot_impl(app, name, description)
-
-
-@mcp.tool(annotations={
-    "destructive": True
-})
-async def restore_snapshot(ctx: Context, snapshot_name: str) -> str:
-    """Restore project to a previous snapshot state
-
-    This operation:
-    1. Stops all running nodes
-    2. Disconnects all console sessions
-    3. Restores project to snapshot state
-
-    All current changes since the snapshot will be lost.
-
-    Args:
-        snapshot_name: Name of the snapshot to restore
-
-    Returns:
-        JSON with success message and restore details
-
-    Example:
-        >>> restore_snapshot("Before Config Change")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await restore_snapshot_impl(app, snapshot_name)
-
-
 @mcp.tool()
 async def get_project_readme(ctx: Context, project_id: Optional[str] = None) -> str:
     """Get project README/notes
@@ -1903,10 +1656,10 @@ async def create_drawings_batch(ctx: Context, drawings: list[dict]) -> str:
 
 from tools.ssh_tools import (
     configure_ssh_impl,
+    ssh_batch_impl,
+    ssh_disconnect_impl,
     ssh_send_command_impl,
     ssh_send_config_set_impl,
-    ssh_disconnect_impl,
-    ssh_batch_impl
 )
 
 
@@ -2265,35 +2018,6 @@ async def complete_project_names_DISABLED(ctx: Context, prefix: str) -> list[Com
         logger.warning(f"Failed to fetch projects for completion: {e}")
         return []
 
-
-# # Completion for snapshot names
-# @mcp.completion("restore_snapshot", "snapshot_name")
-async def complete_snapshot_names_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
-    """Autocomplete snapshot names"""
-    app: AppContext = ctx.request_context.lifespan_context
-
-    if not app.current_project_id:
-        return []
-
-    try:
-        snapshots = await app.gns3.get_snapshots(app.current_project_id)
-
-        matching = [s for s in snapshots if s["name"].lower().startswith(prefix.lower())]
-
-        return [
-            Completion(
-                value=snapshot["name"],
-                label=snapshot["name"],
-                description=f"Created: {snapshot.get('created_at', 'Unknown')}"
-            )
-            for snapshot in matching[:10]
-        ]
-
-    except Exception as e:
-        logger.warning(f"Failed to fetch snapshots for completion: {e}")
-        return []
-
-
 # # Completion for drawing types (enum)
 # @mcp.completion("create_drawing", "drawing_type")
 async def complete_drawing_types_DISABLED(ctx: Context, prefix: str) -> list[Completion]:
@@ -2391,7 +2115,7 @@ if __name__ == "__main__":
     elif args.transport == "sse":
         # Legacy SSE transport (deprecated, use HTTP instead)
         import uvicorn
-        print(f"WARNING: SSE transport is deprecated. Consider using --transport http instead.")
+        print("WARNING: SSE transport is deprecated. Consider using --transport http instead.")
         print(f"Starting MCP server with SSE transport at http://{args.http_host}:{args.http_port}/sse")
 
         # Create ASGI app for SSE transport

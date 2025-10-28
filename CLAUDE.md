@@ -10,31 +10,110 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.25.0
+## Current Version: v0.29.0
 
-**Latest Release:** v0.25.0 - Docker Node File Operations (FEATURE)
+**Latest Release:** v0.29.0 - Resource URI Standardization & Code Quality Infrastructure (BREAKING CHANGES)
 
-### Recent Changes (v0.22.0 - v0.25.0)
+### Recent Changes (v0.25.0 - v0.29.0)
 
-**v0.25.0** - Added Docker node file operations and network configuration (3 new tools)
-**v0.24.3** - Fixed create_node tool missing properties parameter
-**v0.24.2** - Fixed templates as global static resource (not project-scoped)
-**v0.24.1** - Added project-scoped session list templates, fixed naming consistency
-**v0.24.0** - Added template usage notes resources and project README resources
-**v0.23.0** - Added project notes/memory system (get_project_readme, update_project_readme)
-**v0.22.3** - Documentation cleanup (removed label rendering implementation)
-**v0.22.2** - Documentation cleanup (removed outdated v0.3.0 architecture)
-**v0.22.1** - Extracted version history to CHANGELOG.md
-**v0.22.0** - Batch console operations (console_batch tool)
+**v0.29.0** - **BREAKING**: Resource URI scheme changes, complete metadata, linting infrastructure
+**v0.28.0** - Local execution on SSH proxy container (ssh_command with node_name="@")
+**v0.27.0** - Configurable SSH session timeouts
+**v0.26.0** - Multi-proxy support for isolated network access
+**v0.25.0** - Docker node file operations and network configuration (3 new tools)
 
 ### Current State
 - **27 Tools**: Complete GNS3 lab automation toolkit including Docker file operations
-- **19 Resources**: 3 static (projects, proxy/status, templates) + 16 templates (project-scoped)
+- **21 Resources**: Complete metadata (name, title, description, mime_type) with proper URI schemes
 - **5 Prompts**: Guided workflows for SSH setup, topology discovery, troubleshooting, lab setup, node setup
+- **Code Quality**: Ruff, Mypy, Black linting with pre-commit hooks
 - **Project Memory**: Per-project README for IP schemes, credentials, architecture notes
-- **Docker File Ops**: Read/write files in containers, configure network interfaces (static/DHCP)
 
 For complete version history and detailed release notes, see [CHANGELOG.md](CHANGELOG.md).
+
+## Code Quality Standards
+
+### Linting Tools
+- **Ruff**: Fast Python linter (replaces flake8, isort, pyupgrade) - 10-100x faster
+- **Mypy**: Static type checker - catches type errors before runtime
+- **Black**: Opinionated code formatter - consistent style across codebase
+- **Pre-commit**: Automated quality checks on every commit
+
+### Running Linters Manually
+
+```bash
+# Check all issues (no changes)
+ruff check mcp-server/server/
+
+# Auto-fix safe issues
+ruff check --fix mcp-server/server/
+
+# Format code (modifies files)
+black mcp-server/server/
+
+# Type check (reports issues)
+mypy mcp-server/server/
+```
+
+### Pre-commit Hooks
+
+Automatically run on every commit (configured in `.pre-commit-config.yaml`):
+1. **Ruff linter** - checks code quality, auto-fixes safe issues
+2. **Ruff formatter** - formats code consistently
+3. **Black formatter** - additional formatting
+4. **Mypy type checker** - static type analysis
+5. **Build extension** - rebuilds .mcpb if server code changed
+
+Install hooks:
+```bash
+pre-commit install
+```
+
+Test hooks without committing:
+```bash
+# Run on all files
+pre-commit run --all-files
+
+# Run on staged files only
+pre-commit run
+```
+
+### Configuration Files
+
+All linting configuration centralized in [pyproject.toml](pyproject.toml):
+
+**Key Settings:**
+- Line length: 100 characters
+- Target: Python 3.9+
+- Excludes: `mcp-server/lib/` (vendored dependencies)
+- Type checking: Lenient (can be tightened incrementally)
+
+**Ignored Rules:**
+- `E501` - Line too long (Black handles this)
+- `B008` - Function calls in defaults (FastMCP decorator pattern)
+- `UP006/UP007` - Allow `Optional`, `List` for clarity (Python 3.9+ style also supported)
+
+### Code Style Guidelines
+
+**Type Hints:**
+- Use type hints for all public functions
+- Can use either `List`/`Dict` or `list`/`dict` (both accepted)
+- Prefer `Optional[T]` over `T | None` for clarity
+
+**Imports:**
+- Automatically sorted by Ruff
+- Unused imports automatically removed
+- `__init__.py` files can have unused imports (F401 ignored)
+
+**Docstrings:**
+- All public functions have docstrings
+- Current style: Mixed (Google + reStructuredText)
+- Include: purpose, args, returns, examples
+
+**Error Handling:**
+- Use structured error responses (`ErrorResponse` model)
+- Log errors with appropriate levels
+- Don't expose sensitive data in errors
 
 ## Version Management
 

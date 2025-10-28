@@ -4,10 +4,10 @@ SVG/PNG diagram generation for GNS3 network topologies.
 Extracted from main.py v0.9.1 for better modularity.
 """
 
-import json
 import base64
+import json
 import re
-from typing import Optional, Dict, Any, List
+from typing import Optional
 
 from mcp.server.fastmcp import Context
 from models import ErrorResponse
@@ -182,8 +182,9 @@ async def export_topology_diagram(ctx: Context, output_path: str,
         JSON with created file paths and diagram info
     """
     # Import here to avoid circular dependency
-    from main import validate_current_project
     import logging
+
+    from main import validate_current_project
 
     logger = logging.getLogger(__name__)
     app = ctx.request_context.lifespan_context

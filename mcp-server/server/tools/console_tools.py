@@ -4,19 +4,19 @@ Provides tools for interacting with node consoles via telnet.
 """
 import asyncio
 import json
-import time
 import re
+import time
 from typing import TYPE_CHECKING, Optional
 
-from models import ConsoleStatus, ErrorResponse, ErrorCode
 from error_utils import (
+    console_connection_failed_error,
     create_error_response,
     node_not_found_error,
-    project_not_found_error,
-    console_connection_failed_error,
     node_stopped_error,
-    validation_error
+    project_not_found_error,
+    validation_error,
 )
+from models import ConsoleStatus, ErrorCode
 
 if TYPE_CHECKING:
     from main import AppContext
@@ -778,7 +778,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
             return create_error_response(
                 error=f"Operation {idx} missing required field 'node_name'",
                 error_code=ErrorCode.INVALID_PARAMETER.value,
-                details=f"All operations must specify 'node_name'",
+                details="All operations must specify 'node_name'",
                 suggested_action="Add 'node_name' field to operation",
                 context={"operation_index": idx, "operation": op}
             )

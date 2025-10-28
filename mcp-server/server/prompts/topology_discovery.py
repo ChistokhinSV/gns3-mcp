@@ -26,10 +26,10 @@ List available projects to find the one you want to explore:
 **Using MCP Resources (recommended):**
 ```
 # Browse all projects
-Resource: gns3://projects/
+Resource: projects://
 
 # View specific project details
-Resource: gns3://projects/{{project_id}}
+Resource: projects://{{project_id}}
 ```
 
 **Using Tools:**
@@ -53,10 +53,10 @@ Explore all network devices and hosts in the project:
 **Using MCP Resources (recommended):**
 ```
 # List all nodes with basic info
-Resource: gns3://projects/{{project_id}}/nodes/
+Resource: projects://{{project_id}}/nodes/
 
 # Get detailed node information
-Resource: gns3://projects/{{project_id}}/nodes/{{node_id}}
+Resource: projects://{{project_id}}/nodes/{{node_id}}
 ```
 
 **Node Information Includes:**
@@ -79,7 +79,7 @@ Map all network connections between devices:
 **Using MCP Resources (recommended):**
 ```
 # List all links with connection details
-Resource: gns3://projects/{{project_id}}/links/
+Resource: projects://{{project_id}}/links/
 ```
 
 **Link Information Includes:**
@@ -109,7 +109,7 @@ View available device templates for understanding device capabilities:
 
 **Using MCP Resources:**
 ```
-Resource: gns3://projects/{{project_id}}/templates/
+Resource: projects://{{project_id}}/templates/
 ```
 
 **Template Information:**
@@ -123,7 +123,7 @@ Explore visual annotations in the topology:
 
 **Using MCP Resources:**
 ```
-Resource: gns3://projects/{{project_id}}/drawings/
+Resource: projects://{{project_id}}/drawings/
 ```
 
 **Drawing Types:**
@@ -260,13 +260,13 @@ Once you've discovered the topology:
 ## Related Resources and Tools
 
 **MCP Resources (browsing state):**
-- `gns3://projects/` - List all projects
-- `gns3://projects/{id}` - Project details
-- `gns3://projects/{id}/nodes/` - All nodes
-- `gns3://projects/{id}/nodes/{id}` - Specific node details
-- `gns3://projects/{id}/links/` - All links
-- `gns3://projects/{id}/templates/` - Available templates
-- `gns3://projects/{id}/drawings/` - Visual annotations
+- `projects://` - List all projects
+- `projects://{id}` - Project details
+- `projects://{id}/nodes/` - All nodes
+- `projects://{id}/nodes/{id}` - Specific node details
+- `projects://{id}/links/` - All links
+- `projects://{id}/templates/` - Available templates
+- `projects://{id}/drawings/` - Visual annotations
 
 **Tools (actions):**
 - `open_project(name)` - Open a project

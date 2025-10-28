@@ -25,7 +25,7 @@ async def list_console_sessions_impl(app: "AppContext", project_id: str) -> str:
     """
     List all active console sessions for nodes in a project
 
-    Resource URI: gns3://projects/{project_id}/sessions/console
+    Resource URI: projects://{project_id}/sessions/console
 
     Args:
         project_id: Project ID to filter sessions by
@@ -109,7 +109,7 @@ async def list_ssh_sessions_impl(app: "AppContext", project_id: str) -> str:
 
     Queries all proxies (host + discovered lab proxies) and aggregates sessions.
 
-    Resource URI: gns3://projects/{project_id}/sessions/ssh
+    Resource URI: projects://{project_id}/sessions/ssh
 
     Args:
         project_id: Project ID to filter sessions by
@@ -481,7 +481,7 @@ async def list_project_proxies_impl(app: "AppContext", project_id: str) -> str:
     """
     List proxies for specific project (template-style resource)
 
-    Resource URI: gns3://projects/{project_id}/proxies
+    Resource URI: projects://{project_id}/proxies
 
     Returns:
         JSON array of proxy summaries for the specified project

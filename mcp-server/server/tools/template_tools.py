@@ -5,8 +5,8 @@ Provides tools for listing available GNS3 device templates.
 import json
 from typing import TYPE_CHECKING
 
-from models import TemplateInfo, ErrorResponse, ErrorCode
 from error_utils import create_error_response
+from models import ErrorCode, TemplateInfo
 
 if TYPE_CHECKING:
     from main import AppContext

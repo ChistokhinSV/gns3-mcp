@@ -5,8 +5,7 @@ link configuration, and IP addressing.
 """
 
 import math
-from typing import Dict, Tuple, List
-
+from typing import Dict, List, Tuple
 
 # ============================================================================
 # Layout Algorithms - Calculate Node Positions
@@ -276,7 +275,7 @@ def generate_ospf_links(area_count: int, routers_per_area: int) -> List[Tuple[st
 
         # Connect to backbone (first router in area connects to first ABR)
         if routers_per_area > 0:
-            links.append((f"ABR0-1", f"R{area_idx}-1"))
+            links.append(("ABR0-1", f"R{area_idx}-1"))
 
     return links
 
@@ -331,7 +330,7 @@ def generate_star_ips(spoke_count: int) -> Dict[str, Dict[str, str]]:
 
     # Each spoke gets .2 on its subnet
     for i in range(1, spoke_count + 1):
-        ips[f"Spoke{i}"] = {f"Gi0/0": f"{base}.{i}.2/24"}
+        ips[f"Spoke{i}"] = {"Gi0/0": f"{base}.{i}.2/24"}
 
     return ips
 
@@ -376,8 +375,8 @@ def generate_linear_ips(device_count: int) -> Dict[str, Dict[str, str]]:
 
     for i in range(1, device_count):
         # Link between R{i} and R{i+1}
-        ips[f"R{i}"][f"Gi0/1"] = f"10.0.{i}.1/30"
-        ips[f"R{i+1}"][f"Gi0/0"] = f"10.0.{i}.2/30"
+        ips[f"R{i}"]["Gi0/1"] = f"10.0.{i}.1/30"
+        ips[f"R{i+1}"]["Gi0/0"] = f"10.0.{i}.2/30"
 
     return ips
 
@@ -437,14 +436,14 @@ def generate_bgp_ips(as_count: int) -> Dict[str, Dict[str, str]]:
     # eBGP links use 172.16.x.x range
     ebgp_subnet = 1
     for as_idx in range(1, as_count):
-        ips[f"AS{as_idx}-R2"][f"Gi0/1"] = f"172.16.{ebgp_subnet}.1/30"
-        ips[f"AS{as_idx+1}-R1"][f"Gi0/1"] = f"172.16.{ebgp_subnet}.2/30"
+        ips[f"AS{as_idx}-R2"]["Gi0/1"] = f"172.16.{ebgp_subnet}.1/30"
+        ips[f"AS{as_idx+1}-R1"]["Gi0/1"] = f"172.16.{ebgp_subnet}.2/30"
         ebgp_subnet += 1
 
     # Close the circle
     if as_count > 2:
-        ips[f"AS{as_count}-R2"][f"Gi0/1"] = f"172.16.{ebgp_subnet}.1/30"
-        ips["AS1-R1"][f"Gi0/1"] = f"172.16.{ebgp_subnet}.2/30"
+        ips[f"AS{as_count}-R2"]["Gi0/1"] = f"172.16.{ebgp_subnet}.1/30"
+        ips["AS1-R1"]["Gi0/1"] = f"172.16.{ebgp_subnet}.2/30"
 
     return ips
 
@@ -551,7 +550,7 @@ This workflow automates creation of a complete {topology_type} lab topology.
 ## Prerequisites
 
 - GNS3 server running and authenticated
-- Template "{template_name}" available (check with resource `gns3://projects/{{id}}/templates/`)
+- Template "{template_name}" available (check with resource `projects://{{id}}/templates/`)
 - Sufficient system resources for {total_devices} nodes
 
 ## Step 1: Create Project
@@ -597,7 +596,7 @@ Start all nodes in the project:
 
 ```python
 # Get all nodes and start them
-# (Use resource gns3://projects/{{id}}/nodes/ to list, then set_node() to start each)
+# (Use resource projects://{{id}}/nodes/ to list, then set_node() to start each)
 ```
 
 ## Step 6: Verify Topology

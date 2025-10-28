@@ -5,11 +5,11 @@ Provides tools for listing and opening GNS3 projects.
 import json
 from typing import TYPE_CHECKING, Optional
 
-from models import ProjectInfo, ErrorResponse, ErrorCode
 from error_utils import create_error_response, project_not_found_error
+from models import ErrorCode, ProjectInfo
 
 if TYPE_CHECKING:
-    from main import Context, AppContext
+    from main import AppContext
 
 
 async def list_projects_impl(app: "AppContext") -> str:

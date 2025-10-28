@@ -5,13 +5,14 @@ Supports multiple concurrent sessions with output buffering and diff tracking.
 """
 
 import asyncio
-import telnetlib3
+import logging
 import re
-from typing import Dict, Optional, Tuple
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-import logging
-import uuid
+from typing import Dict, Optional
+
+import telnetlib3
 
 logger = logging.getLogger(__name__)
 

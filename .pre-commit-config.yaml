@@ -1,0 +1,39 @@
+repos:
+  # Ruff - Fast Python linter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.15
+    hooks:
+      # Run linter
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Run formatter
+      - id: ruff-format
+
+  # Black - Code formatter
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+        language_version: python3.9
+
+  # Mypy - Type checker
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [
+          'pydantic>=2.0.0',
+          'httpx>=0.28.1',
+          'types-aiofiles',
+        ]
+        exclude: 'mcp-server/lib/'
+
+  # Build desktop extension
+  - repo: local
+    hooks:
+      - id: build-mcpb
+        name: Build desktop extension
+        entry: bash -c 'cd mcp-server && npx @anthropic-ai/mcpb pack'
+        language: system
+        pass_filenames: false
+        files: '^mcp-server/(server/.*\.py|manifest\.json)$'

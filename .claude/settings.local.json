@@ -17,7 +17,13 @@
       "Bash(test:*)",
       "Bash(ssh gns3:*)",
       "WebFetch(domain:gns3-server.readthedocs.io)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(curl:*)",
+      "Read(//c/HOME/1. Scripts/**)",
+      "Bash(docker image inspect:*)",
+      "Bash(docker manifest inspect:*)",
+      "Bash(docker image save:*)",
+      "Bash(tar:*)"
     ],
     "deny": [],
     "ask": []

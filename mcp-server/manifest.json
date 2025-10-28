@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.28.4",
-  "description": "GNS3 lab automation - 29 tools + 19 resources (3 static + 16 templates) + 5 prompts with local execution (node_name='@'), batch operations, and auto-reconnect",
-  "long_description": "COMPLETE MCP SERVER: 29 tools + 19 browsable resources + 5 workflow prompts + Local Execution + Batch operations + Multi-proxy SSH routing.\n\nKEY FEATURES:\n• Auto-Connect to Opened Projects: Commands automatically connect to projects opened in GNS3 GUI (v0.28.1)\n  - No manual open_project() needed if project is already open in GNS3\n  - Seamless workflow: open project in GUI → tools work immediately\n  - Detects project state changes and auto-connects as needed\n• Local Execution on SSH Proxy Container: Run diagnostic tools and ansible from container (v0.28.0)\n  - ssh_command('@', 'ping -c 3 10.1.1.1') - Execute command on SSH proxy container\n  - No ssh_configure() needed for local execution\n  - Tools: ping, traceroute, dig, curl, ansible-core, python3, bash\n  - Working dir: /opt/gns3-ssh-proxy (ansible playbooks mount)\n  - Mix local and remote operations in ssh_batch()\n• Batch Operations: Execute multiple operations efficiently with two-phase validation\n  - ssh_batch() - Execute SSH commands across multiple devices in batch\n  - create_drawings_batch() - Create multiple diagram shapes/labels in batch\n  - Two-phase execution: Validates all operations first, then executes all (atomic)\n• Configurable SSH Timeout: Per-session timeout control (default: 4 hours)\n  - ssh_configure(session_timeout=14400) - Custom session timeout in seconds\n  - Extended from 30 minutes to 4 hours default for long-running operations\n• Multi-Proxy SSH Support: Route SSH connections through discovered lab proxies for isolated networks\n  - ssh_configure(proxy='host') - Use main proxy on GNS3 host (default)\n  - ssh_configure(proxy=proxy_id) - Use lab proxy for isolated networks\n  - Resource: gns3://proxy/registry - Discover lab proxies via Docker API\n  - Automatic routing: ssh_command() routes to correct proxy per session\n• Docker Node File Operations: Read/write files in Docker containers, configure network interfaces\n  - Tools: get_node_file(), write_node_file(), configure_node_network()\n  - Supports: Network config (static/DHCP), multi-interface setup, automatic node restart\n  - Use Cases: SSH proxy setup, custom container config, network troubleshooting\n• Project Notes/Memory: Store IPs, credentials, and architecture in per-project README\n  - Tools: get_project_readme(), update_project_readme()\n  - Resource: gns3://projects/{id}/readme\n• Template Usage Notes: Access device-specific default credentials and setup instructions\n  - Resource: gns3://projects/{id}/nodes/{id}/template\n• 29 Action Tools: Create nodes, configure devices, manage connections, Docker file ops, batch operations\n• 19 MCP Resources: Browse projects, nodes, sessions (3 static + 16 templates)\n• 5 Workflow Prompts: Guided setup for SSH, topology discovery, troubleshooting\n\nVersion 0.28.1: Auto-connect to projects opened in GNS3 GUI. Version 0.28.0: Local execution on SSH proxy container (node_name='@'). Version 0.27.1: Auto-reconnect to GNS3 server (30s retry). For complete docs see SKILL.md. Supports GNS3 v3 API.",
+  "version": "0.29.0",
+  "description": "GNS3 lab automation with AI agent",
+  "long_description": "GNS3 v3 lab automation MCP server. Can create/delete/modify nodes, drawings, connect/disconnect nodes, configure them with console and ssh proxy access",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -59,27 +59,27 @@
   "tools": [
     {
       "name": "open_project",
-      "description": "Open a GNS3 project by name (returns JSON ProjectInfo)"
+      "description": "Open a GNS3 project by name"
     },
     {
       "name": "create_project",
-      "description": "Create a new GNS3 project and auto-open it (returns JSON ProjectInfo)"
+      "description": "Create a new GNS3 project and auto-open it"
     },
     {
       "name": "close_project",
-      "description": "Close the currently opened project (returns JSON success message)"
+      "description": "Close the currently opened project"
     },
     {
       "name": "set_node",
-      "description": "Configure node properties and/or control state (returns JSON status message)"
+      "description": "Configure node properties and/or control state"
     },
     {
       "name": "create_node",
-      "description": "Create a new node from template at specified coordinates (returns JSON NodeInfo)"
+      "description": "Create a new node from template at specified coordinates"
     },
     {
       "name": "console_send",
-      "description": "Send data to console (auto-connects, returns status string)"
+      "description": "Send data to console (auto-connects)"
     },
     {
       "name": "console_read",
@@ -87,7 +87,7 @@
     },
     {
       "name": "console_disconnect",
-      "description": "Disconnect console session (returns JSON status)"
+      "description": "Disconnect console session"
     },
     {
       "name": "console_keystroke",
@@ -95,7 +95,7 @@
     },
     {
       "name": "console_send_and_wait",
-      "description": "Send command and wait for prompt pattern with timeout (pattern matching + auto-polling, returns JSON with output and timing)"
+      "description": "Send command and wait for prompt pattern with timeout (pattern matching + auto-polling, output and timing)"
     },
     {
       "name": "console_batch",
@@ -103,39 +103,31 @@
     },
     {
       "name": "set_connection",
-      "description": "Batch manage network connections with two-phase validation (returns JSON OperationResult)"
+      "description": "Batch manage network connections with two-phase validation"
     },
     {
       "name": "delete_node",
-      "description": "Delete a node from the current project (returns JSON confirmation)"
+      "description": "Delete a node from the current project"
     },
     {
       "name": "get_node_file",
-      "description": "Read file from Docker node filesystem (returns JSON with file contents)"
+      "description": "Read file from Docker node filesystem"
     },
     {
       "name": "write_node_file",
-      "description": "Write file to Docker node filesystem - requires manual node restart to apply changes (returns JSON confirmation)"
+      "description": "Write file to Docker node filesystem - requires manual node restart to apply changes"
     },
     {
       "name": "configure_node_network",
-      "description": "Configure network interfaces on Docker node with static IP or DHCP - automatically restarts node to apply (returns JSON with configured interfaces)"
-    },
-    {
-      "name": "create_snapshot",
-      "description": "Create a snapshot of the current project state (returns JSON SnapshotInfo)"
-    },
-    {
-      "name": "restore_snapshot",
-      "description": "Restore project to a previous snapshot state (returns JSON success message)"
+      "description": "Configure network interfaces on Docker node with static IP or DHCP - automatically restarts node to apply (returns configured interfaces)"
     },
     {
       "name": "get_project_readme",
-      "description": "Get project README/notes in markdown format - IP schemes, credentials, architecture notes (returns JSON with content)"
+      "description": "Get project README/notes in markdown format - IP schemes, credentials, architecture notes"
     },
     {
       "name": "update_project_readme",
-      "description": "Update project README/notes - agent can store IP addresses, credentials, architecture diagrams, troubleshooting notes (returns JSON success)"
+      "description": "Update project README/notes - agent can store IP addresses, credentials, architecture diagrams, troubleshooting notes"
     },
     {
       "name": "ssh_configure",
@@ -151,19 +143,19 @@
     },
     {
       "name": "export_topology_diagram",
-      "description": "Export topology diagram as SVG/PNG with optional crop region (returns JSON with file paths)"
+      "description": "Export topology diagram as SVG/PNG with optional crop region"
     },
     {
       "name": "create_drawing",
-      "description": "Create a drawing object - rectangle, ellipse, line, or text (returns JSON with drawing info)"
+      "description": "Create a drawing object - rectangle, ellipse, line, or text"
     },
     {
       "name": "update_drawing",
-      "description": "Update properties of an existing drawing object (returns JSON with updated drawing)"
+      "description": "Update properties of an existing drawing object"
     },
     {
       "name": "delete_drawing",
-      "description": "Delete a drawing object from the current project (returns JSON confirmation)"
+      "description": "Delete a drawing object from the current project"
     }
   ],
   "prompts": [

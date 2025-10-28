@@ -11,18 +11,37 @@ if TYPE_CHECKING:
     from main import AppContext
 
 
-async def list_projects_impl(app: "AppContext") -> str:
+async def list_projects_impl(app: "AppContext", detailed: bool = False) -> str:
     """
-    List all GNS3 projects
+    List all GNS3 projects with their statuses and URIs
 
-    Resource URI: gns3://projects/
+    Resource URI: projects://
+
+    Args:
+        detailed: If False (default), return lightweight ProjectSummary with uri field.
+                  If True, return full project data from GNS3 API.
 
     Returns:
-        JSON array of projects with status information
+        JSON array of project summaries (default) or full project data (detailed=True)
     """
     try:
         projects = await app.gns3.get_projects()
-        return json.dumps(projects, indent=2)
+
+        if detailed:
+            # Return full data from GNS3 API
+            return json.dumps(projects, indent=2)
+        else:
+            # Return lightweight ProjectSummary format with uri
+            from models import ProjectSummary
+            summaries = [
+                ProjectSummary(
+                    status=p['status'],
+                    name=p['name'],
+                    project_id=p['project_id']
+                ).model_dump()
+                for p in projects
+            ]
+            return json.dumps(summaries, indent=2)
     except Exception as e:
         return json.dumps({
             "error": "Failed to list projects",
@@ -34,7 +53,7 @@ async def get_project_impl(app: "AppContext", project_id: str) -> str:
     """
     Get project details by ID
 
-    Resource URI: gns3://projects/{project_id}
+    Resource URI: projects://{project_id}
 
     Args:
         project_id: GNS3 project UUID
@@ -65,7 +84,7 @@ async def list_nodes_impl(app: "AppContext", project_id: str) -> str:
     """
     List all nodes in a project
 
-    Resource URI: gns3://projects/{project_id}/nodes/
+    Resource URI: projects://{project_id}/nodes/
 
     Args:
         project_id: GNS3 project UUID
@@ -114,7 +133,7 @@ async def get_node_impl(app: "AppContext", project_id: str, node_id: str) -> str
     """
     Get detailed node information
 
-    Resource URI: gns3://projects/{project_id}/nodes/{node_id}
+    Resource URI: projects://{project_id}/nodes/{node_id}
 
     Args:
         project_id: GNS3 project UUID
@@ -175,7 +194,7 @@ async def list_links_impl(app: "AppContext", project_id: str) -> str:
     """
     List all network links in a project
 
-    Resource URI: gns3://projects/{project_id}/links/
+    Resource URI: projects://{project_id}/links/
 
     Args:
         project_id: GNS3 project UUID
@@ -357,7 +376,7 @@ async def get_node_template_usage_impl(app: "AppContext", project_id: str, node_
     """
     Get template usage notes for a specific node
 
-    Resource URI: gns3://projects/{project_id}/nodes/{node_id}/template
+    Resource URI: projects://{project_id}/nodes/{node_id}/template
 
     Args:
         project_id: GNS3 project UUID
@@ -410,7 +429,7 @@ async def list_drawings_impl(app: "AppContext", project_id: str) -> str:
     """
     List all drawing objects in a project
 
-    Resource URI: gns3://projects/{project_id}/drawings/
+    Resource URI: projects://{project_id}/drawings/
 
     Args:
         project_id: GNS3 project UUID
@@ -459,7 +478,7 @@ async def list_snapshots_impl(app: "AppContext", project_id: str) -> str:
     """
     List all snapshots in a project
 
-    Resource URI: gns3://projects/{project_id}/snapshots/
+    Resource URI: projects://{project_id}/snapshots/
 
     Args:
         project_id: GNS3 project UUID
@@ -506,7 +525,7 @@ async def get_snapshot_impl(app: "AppContext", project_id: str, snapshot_id: str
     """
     Get snapshot details by ID
 
-    Resource URI: gns3://projects/{project_id}/snapshots/{snapshot_id}
+    Resource URI: projects://{project_id}/snapshots/{snapshot_id}
 
     Args:
         project_id: GNS3 project UUID
@@ -557,7 +576,7 @@ async def get_snapshot_impl(app: "AppContext", project_id: str, snapshot_id: str
 
 
 async def get_project_readme_impl(app: "AppContext", project_id: str):
-    """Resource handler for gns3://projects/{id}/readme
+    """Resource handler for projects://{id}/readme
 
     Returns project README/notes in markdown format
     """

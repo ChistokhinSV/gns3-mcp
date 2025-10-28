@@ -25,7 +25,7 @@ GNS3 (Graphical Network Simulator-3) is a network emulation platform for buildin
 - `get_project_readme()` - Retrieve project documentation
 - `update_project_readme(content)` - Save/update documentation (markdown format)
 
-**Resource:** `gns3://projects/{id}/readme` (read-only browsing)
+**Resource:** `projects://{id}/readme` (read-only browsing)
 
 **Example Workflow:**
 ```python
@@ -63,13 +63,13 @@ update_project_readme("""
 - Console availability and device-specific quirks
 
 **How to access:**
-- **For specific node:** `gns3://projects/{id}/nodes/{node_id}/template`
+- **For specific node:** `projects://{id}/nodes/{node_id}/template`
 - **For template:** `gns3://templates/{template_id}`
 
 **Example:**
 ```python
 # Get usage notes for a MikroTik node you just created
-usage = read_resource("gns3://projects/{id}/nodes/{node_id}/template")
+usage = read_resource("projects://{id}/nodes/{node_id}/template")
 # Returns: "The login is admin, with no password by default.
 #           On first boot, RouterOS is actually being installed..."
 ```
@@ -91,17 +91,17 @@ usage = read_resource("gns3://projects/{id}/nodes/{node_id}/template")
 **Available Resources:**
 
 **Project Resources:**
-- `gns3://projects/` - List all GNS3 projects
-- `gns3://projects/{project_id}` - Get project details by ID
-- `gns3://projects/{project_id}/nodes/` - List nodes in project (NodeSummary)
-- `gns3://projects/{project_id}/nodes/{node_id}` - Get node details (full NodeInfo)
-- `gns3://projects/{project_id}/nodes/{node_id}/template` - Get template usage notes for node (v0.23.0)
-- `gns3://projects/{project_id}/links/` - List network links in project
-- `gns3://projects/{project_id}/templates/` - List available templates (lightweight, no usage)
-- `gns3://projects/{project_id}/drawings/` - List drawing objects
-- `gns3://projects/{project_id}/snapshots/` - List project snapshots
-- `gns3://projects/{project_id}/snapshots/{snapshot_id}` - Get snapshot details
-- `gns3://projects/{project_id}/readme` - Get project README/notes (v0.23.0)
+- `projects://` - List all GNS3 projects
+- `projects://{project_id}` - Get project details by ID
+- `projects://{project_id}/nodes/` - List nodes in project (NodeSummary)
+- `projects://{project_id}/nodes/{node_id}` - Get node details (full NodeInfo)
+- `projects://{project_id}/nodes/{node_id}/template` - Get template usage notes for node (v0.23.0)
+- `projects://{project_id}/links/` - List network links in project
+- `projects://{project_id}/templates/` - List available templates (lightweight, no usage)
+- `projects://{project_id}/drawings/` - List drawing objects
+- `projects://{project_id}/snapshots/` - List project snapshots
+- `projects://{project_id}/snapshots/{snapshot_id}` - Get snapshot details
+- `projects://{project_id}/readme` - Get project README/notes (v0.23.0)
 
 **Template Resources:**
 - `gns3://templates/{template_id}` - Get template details with usage notes (v0.23.0)
@@ -127,9 +127,9 @@ usage = read_resource("gns3://projects/{id}/nodes/{node_id}/template")
 **Example Resource Workflow:**
 ```
 # Browse resources (read-only)
-1. List all projects: gns3://projects/
+1. List all projects: projects://
 2. Pick project ID from list
-3. View nodes: gns3://projects/{id}/nodes/
+3. View nodes: projects://{id}/nodes/
 4. Check SSH session: gns3://sessions/ssh/R1
 
 # Use tools to modify (actions)
@@ -139,12 +139,12 @@ usage = read_resource("gns3://projects/{id}/nodes/{node_id}/template")
 ```
 
 **Removed in v0.14.0 (use MCP resources instead):**
-- `list_projects()` → Use resource `gns3://projects`
-- `list_nodes()` → Use resource `gns3://projects/{id}/nodes`
-- `get_node_details()` → Use resource `gns3://projects/{id}/nodes/{id}`
-- `get_links()` → Use resource `gns3://projects/{id}/links`
-- `list_templates()` → Use resource `gns3://projects/{id}/templates`
-- `list_drawings()` → Use resource `gns3://projects/{id}/drawings`
+- `list_projects()` → Use resource `projects:/`
+- `list_nodes()` → Use resource `projects://{id}/nodes`
+- `get_node_details()` → Use resource `projects://{id}/nodes/{id}`
+- `get_links()` → Use resource `projects://{id}/links`
+- `list_templates()` → Use resource `projects://{id}/templates`
+- `list_drawings()` → Use resource `projects://{id}/drawings`
 - `get_console_status()` → Use resource `gns3://sessions/console/{node}`
 - `ssh_get_status()` → Use resource `gns3://sessions/ssh/{node}`
 - `ssh_get_history()` → Use resource `gns3://sessions/ssh/{node}/history`
@@ -334,7 +334,7 @@ if "error" in result:
 
 2. **Node not found**: Typo in node name (case-sensitive)
    - Error: `NODE_NOT_FOUND`
-   - Fix: Check available_nodes in error context or use resource `gns3://projects/{id}/nodes/`
+   - Fix: Check available_nodes in error context or use resource `projects://{id}/nodes/`
 
 3. **Port already in use**: Trying to connect already-connected port
    - Error: `PORT_IN_USE`
@@ -1222,12 +1222,12 @@ restore_snapshot("Before OSPF Configuration")
 
 List available snapshots via resource:
 ```
-gns3://projects/{project_id}/snapshots/
+projects://{project_id}/snapshots/
 ```
 
 View snapshot details:
 ```
-gns3://projects/{project_id}/snapshots/{snapshot_id}
+projects://{project_id}/snapshots/{snapshot_id}
 ```
 
 ## Project Notes/Memory (v0.23.0)
@@ -1257,7 +1257,7 @@ gns3://projects/{project_id}/snapshots/{snapshot_id}
 ### MCP Resource
 
 ```
-gns3://projects/{project_id}/readme
+projects://{project_id}/readme
 ```
 
 Browsable resource for read-only access to project notes.
@@ -1396,12 +1396,12 @@ Returns: Full template details including usage field
 
 **For a specific node (most common):**
 ```
-Resource: gns3://projects/{project_id}/nodes/{node_id}/template
+Resource: projects://{project_id}/nodes/{node_id}/template
 Returns: Template usage notes for that node
 ```
 
 **Lazy Loading Pattern:**
-- Template list (`gns3://projects/{id}/templates/`) excludes usage to keep lightweight
+- Template list (`projects://{id}/templates/`) excludes usage to keep lightweight
 - Usage loaded separately only when needed to avoid context bloat
 - Each node has `template_id` linking to its template
 
@@ -1409,7 +1409,7 @@ Returns: Template usage notes for that node
 
 **Check default credentials before connecting:**
 ```
-1. Get node details: gns3://projects/{id}/nodes/{node_id}
+1. Get node details: projects://{id}/nodes/{node_id}
 2. Note template_id from node
 3. Check template usage: gns3://templates/{template_id}
 4. See "Username: admin" in usage field
@@ -1418,7 +1418,7 @@ Returns: Template usage notes for that node
 
 **Find persistent storage directories:**
 ```
-1. Browse node's template: gns3://projects/{id}/nodes/{node_id}/template
+1. Browse node's template: projects://{id}/nodes/{node_id}/template
 2. Look for "persistent" in usage field
 3. Note which directories survive reboots
 4. Store important data in those locations
@@ -1509,7 +1509,7 @@ lab_setup("ospf", device_count=2,
 Create visual annotations on topology diagrams using drawing tools.
 
 **Hybrid Pattern:**
-- **READ**: Browse drawings via resource `gns3://projects/{id}/drawings/`
+- **READ**: Browse drawings via resource `projects://{id}/drawings/`
 - **WRITE**: Modify drawings via tools (create_drawing, update_drawing, delete_drawing)
 
 ### Available Drawing Types

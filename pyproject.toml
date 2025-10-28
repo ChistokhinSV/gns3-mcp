@@ -1,0 +1,78 @@
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+# Exclude generated and vendored code
+exclude = [
+    ".git",
+    "__pycache__",
+    "mcp-server/lib",
+    "*.egg-info",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+
+ignore = [
+    "E501",  # line too long (let Black handle)
+    "E701",  # multiple statements on one line (sometimes more readable)
+    "B008",  # do not perform function calls in argument defaults (FastMCP uses this)
+    "B007",  # loop variable not used (intentional in some cases)
+    "B904",  # raise from (not always necessary)
+    "UP035", # typing.Dict vs dict (both acceptable, prefer explicit for clarity)
+    "UP006", # use-pep585-annotation (allow Optional, List for clarity)
+    "UP007", # use-pep604-annotation (allow Optional for clarity)
+    "SIM102", # nested if (sometimes more readable)
+    "SIM105", # contextlib.suppress (prefer explicit try/except)
+    "SIM108", # ternary operator (sometimes less readable)
+    "F841",  # unused variable (may be used for documentation)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+# Start lenient, tighten later
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+
+# Allow missing imports for third-party libs
+ignore_missing_imports = true
+
+# Exclude patterns
+exclude = [
+    'mcp-server/lib/',
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py39']
+skip-string-normalization = false
+exclude = '''
+/(
+    \.git
+  | __pycache__
+  | mcp-server/lib
+  | *.egg-info
+)/
+'''
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

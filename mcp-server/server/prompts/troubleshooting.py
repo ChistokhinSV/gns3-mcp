@@ -48,7 +48,7 @@ Follow the OSI model bottom-up approach:
 **Check Node Status:**
 ```
 # View all nodes and their states
-Resource: gns3://projects/{{project_id}}/nodes/
+Resource: projects://{{project_id}}/nodes/
 ```
 
 **Key Checks:**
@@ -64,7 +64,7 @@ set_node(node_name="NodeName", action="start")
 **Check Link Status:**
 ```
 # View all links
-Resource: gns3://projects/{{project_id}}/links/
+Resource: projects://{{project_id}}/links/
 ```
 
 **Key Checks:**
@@ -144,8 +144,8 @@ export_topology_diagram(
 **Common Layer 1 Issues:**
 
 **Issue: Link shows red indicator**
-- Check node status: `Resource: gns3://projects/{id}/nodes/{id}`
-- Check link status: `Resource: gns3://projects/{id}/links/`
+- Check node status: `Resource: projects://{id}/nodes/{id}`
+- Check link status: `Resource: projects://{id}/links/`
 - Start nodes if stopped
 - Unsuspend links if suspended
 
@@ -494,8 +494,8 @@ Issue Detected
 - **Topology Discovery Workflow**: Understand network structure
 
 **Resources (viewing state):**
-- `gns3://projects/{id}/nodes/` - Node status
-- `gns3://projects/{id}/links/` - Link status
+- `projects://{id}/nodes/` - Node status
+- `projects://{id}/links/` - Link status
 - `gns3://sessions/console/{node}` - Console session state
 - `gns3://sessions/ssh/{node}` - SSH session state
 

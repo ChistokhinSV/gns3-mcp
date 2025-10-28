@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Main proxy on GNS3 host - with Docker API discovery enabled
   gns3-ssh-proxy-main:
@@ -14,14 +12,14 @@ services:
       - /opt/gns3-ssh-proxy:/opt/gns3-ssh-proxy
     environment:
       # API port (default: 8022)
-      - API_PORT=8022
+      - API_PORT=${API_PORT:-8022}
       # Logging level (default: INFO)
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       # GNS3 server credentials for proxy discovery
-      - GNS3_HOST=localhost
-      - GNS3_PORT=80
-      - GNS3_USERNAME=admin
-      - GNS3_PASSWORD=${GNS3_PASSWORD}  # Set in .env file
+      - GNS3_HOST=${GNS3_HOST:-localhost}
+      - GNS3_PORT=${GNS3_PORT:-80}
+      - GNS3_USERNAME=${GNS3_USERNAME:-admin}
+      - GNS3_PASSWORD=${GNS3_PASSWORD:-admin}  # Set in .env file
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8022/health"]
       interval: 30s
@@ -34,28 +32,3 @@ services:
           memory: 512M
         reservations:
           memory: 256M
-
-  # Example: Lab proxy template (used inside GNS3 projects)
-  # This is just a reference - lab proxies are created by GNS3 from templates
-  # gns3-ssh-proxy-lab:
-  #   image: chistokhinsv/gns3-ssh-proxy:latest
-  #   container_name: A-PROXY
-  #   network_mode: host
-  #   restart: unless-stopped
-  #   # NO Docker socket mount - lab proxies don't need discovery
-  #   volumes:
-  #     # Mount directory for sharing scripts/configs with host
-  #     - /opt/gns3-ssh-proxy:/opt/gns3-ssh-proxy
-  #   environment:
-  #     - API_PORT=8022
-  #     - LOG_LEVEL=INFO
-  #   # Note: Network configuration done via GNS3 MCP tools or manually
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8022/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 10s
-
-# For production deployment, create .env file with:
-# GNS3_PASSWORD=your-gns3-password

@@ -5,14 +5,9 @@ Provides tools for creating and managing drawing objects (shapes, text, lines).
 import json
 from typing import TYPE_CHECKING, Optional
 
-from models import DrawingInfo, ErrorResponse, ErrorCode
-from error_utils import create_error_response, drawing_not_found_error, validation_error
-from export_tools import (
-    create_rectangle_svg,
-    create_ellipse_svg,
-    create_line_svg,
-    create_text_svg
-)
+from error_utils import create_error_response, validation_error
+from export_tools import create_ellipse_svg, create_line_svg, create_rectangle_svg, create_text_svg
+from models import DrawingInfo, ErrorCode
 
 if TYPE_CHECKING:
     from main import AppContext
@@ -310,7 +305,7 @@ async def delete_drawing_impl(app: "AppContext", drawing_id: str) -> str:
             error=f"Failed to delete drawing '{drawing_id}'",
             error_code=ErrorCode.OPERATION_FAILED.value,
             details=str(e),
-            suggested_action="Verify drawing ID exists using list_drawings() or resource gns3://projects/{id}/drawings/",
+            suggested_action="Verify drawing ID exists using list_drawings() or resource projects://{id}/drawings/",
             context={"drawing_id": drawing_id, "project_id": app.current_project_id, "exception": str(e)}
         )
 
@@ -438,7 +433,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
             return create_error_response(
                 error=f"Drawing {idx} missing required field 'x'",
                 error_code=ErrorCode.MISSING_PARAMETER.value,
-                details=f"All drawings must specify 'x' coordinate",
+                details="All drawings must specify 'x' coordinate",
                 suggested_action="Add 'x' field to drawing",
                 context={"drawing_index": idx, "drawing": drawing}
             )
@@ -447,7 +442,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
             return create_error_response(
                 error=f"Drawing {idx} missing required field 'y'",
                 error_code=ErrorCode.MISSING_PARAMETER.value,
-                details=f"All drawings must specify 'y' coordinate",
+                details="All drawings must specify 'y' coordinate",
                 suggested_action="Add 'y' field to drawing",
                 context={"drawing_index": idx, "drawing": drawing}
             )

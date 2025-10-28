@@ -13,10 +13,9 @@ Workflow:
 
 import json
 import os
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import httpx
-
 from error_utils import create_error_response, validation_error
 from models import ErrorCode
 
@@ -953,7 +952,7 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
             return create_error_response(
                 error=f"Operation {idx} missing required field 'node_name'",
                 error_code=ErrorCode.INVALID_PARAMETER.value,
-                details=f"All operations must specify 'node_name'",
+                details="All operations must specify 'node_name'",
                 suggested_action="Add 'node_name' field to operation",
                 context={"operation_index": idx, "operation": op}
             )
