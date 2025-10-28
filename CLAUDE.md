@@ -322,6 +322,22 @@ claude mcp add --transport stdio gns3-lab --scope user -- `
 4. Include examples for common workflows
 5. No packaging needed (skill is separate)
 
+### Regenerate Activity Diagrams
+
+**Location**: `mcp-server/docs/diagrams/`
+
+When modifying `.puml` files, manually regenerate SVG files:
+
+```bash
+# Regenerate all diagrams
+java -jar plantuml.jar -tsvg mcp-server/docs/diagrams/*.puml
+
+# Regenerate specific diagram
+java -jar plantuml.jar -tsvg mcp-server/docs/diagrams/ssh_setup_workflow.puml
+```
+
+**Note**: SVG generation is NOT automatic on commit (removed from pre-commit hook due to Windows incompatibility). Always regenerate and commit SVG files when updating .puml sources.
+
 ## Dependency Management
 
 **Python dependencies** (requirements.txt):

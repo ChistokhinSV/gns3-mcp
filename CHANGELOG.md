@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.33.0] - 2025-10-28 - Prompt Refactoring, Diagram Resource, Activity Diagrams
 
+### Fixed
+- **Pre-commit Hook**: Removed PlantUML SVG auto-generation (Windows incompatible)
+  - Issue: bash -c hook fails on Windows with '/bin/sh not found' error
+  - Solution: Manual SVG regeneration when .puml files change
+  - Command: `java -jar plantuml.jar -tsvg mcp-server/docs/diagrams/*.puml`
+
 ### Added
 - **NEW RESOURCE**: `diagrams://{project_id}/topology` - Agent-friendly topology diagram access without file I/O
   - Returns SVG/PNG image data directly through MCP protocol
@@ -21,9 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - lab_setup_workflow.puml + SVG (4.0KB + 59.1KB)
   - node_setup_workflow.puml + SVG (5.1KB + 66.4KB)
   - Location: `mcp-server/docs/diagrams/`
-- **Pre-commit Hook**: Auto-generate SVG diagrams from PlantUML sources
-  - Triggers on changes to `.puml` files in `mcp-server/docs/diagrams/`
-  - Uses PlantUML JAR from PATH: `java -jar plantuml.jar -tsvg`
+  - **Note**: SVG files committed to repo, no automatic regeneration on commit
 
 ### Changed
 - **ALL PROMPTS REFACTORED**: Enhanced @mcp.prompt() decorators with metadata
