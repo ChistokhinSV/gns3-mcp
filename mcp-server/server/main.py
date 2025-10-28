@@ -268,11 +268,10 @@ mcp = FastMCP(
 
 # Project resources
 @mcp.resource("projects://",
-    name="Projects",  # human-readable name
-    title="GNS3 projects list", # human-readable name
-    description="List all GNS3 projects with their statuses and IDs", # defaults to docsctring
-    # json output
-    mime_type="application/json"
+    name="Projects",
+    title="GNS3 projects list",
+    description="List all GNS3 projects with their statuses and IDs",
+    mime_type="text/plain"
 )
 async def resource_projects() -> str:
     """List all GNS3 projects with their statuses and IDs"""
@@ -292,7 +291,7 @@ async def resource_project(ctx: Context, project_id: str) -> str:
     name="Project nodes",
     title="GNS3 project nodes list",
     description="List all nodes (devices) in a specific GNS3 project with status and basic info",
-    mime_type="application/json"
+    mime_type="text/plain"
 )
 async def resource_nodes(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
@@ -312,7 +311,7 @@ async def resource_node(ctx: Context, project_id: str, node_id: str) -> str:
     name="Project links",
     title="GNS3 project network links",
     description="List all network links (connections) between nodes in a specific project",
-    mime_type="application/json"
+    mime_type="text/plain"
 )
 async def resource_links(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
@@ -322,7 +321,7 @@ async def resource_links(ctx: Context, project_id: str) -> str:
     name="Templates",
     title="GNS3 templates list",
     description="List all available GNS3 device templates (routers, switches, Docker containers, VMs)",
-    mime_type="application/json"
+    mime_type="text/plain"
 )
 async def resource_templates() -> str:
     """List all available GNS3 templates"""
@@ -332,7 +331,7 @@ async def resource_templates() -> str:
     name="Project drawings",
     title="GNS3 project drawing objects",
     description="List all drawing objects (rectangles, ellipses, lines, text labels) in a specific project",
-    mime_type="application/json"
+    mime_type="text/plain"
 )
 async def resource_drawings(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
@@ -355,7 +354,7 @@ async def resource_project_readme(ctx: Context, project_id: str) -> str:
     name="Project console sessions",
     title="Active console sessions for project",
     description="List all active console (telnet) sessions for nodes in a specific project",
-    mime_type="application/json"
+    mime_type="text/plain"
 )
 async def resource_console_sessions(ctx: Context, project_id: str) -> str:
     """List console sessions for project nodes"""
@@ -366,7 +365,7 @@ async def resource_console_sessions(ctx: Context, project_id: str) -> str:
     name="Project SSH sessions",
     title="Active SSH sessions for project",
     description="List all active SSH sessions for nodes in a specific project",
-    mime_type="application/json"
+    mime_type="text/plain"
 )
 async def resource_ssh_sessions(ctx: Context, project_id: str) -> str:
     """List SSH sessions for project nodes"""
@@ -399,7 +398,7 @@ async def resource_node_template(ctx: Context, project_id: str, node_id: str) ->
     name="Console sessions",
     title="All console sessions",
     description="List all console sessions (optionally filtered by ?project_id=xxx query parameter)",
-    mime_type="application/json"
+    mime_type="text/plain"
 )
 async def resource_console_sessions_all() -> str:
     return await _app.resource_manager.list_console_sessions()
@@ -408,7 +407,7 @@ async def resource_console_sessions_all() -> str:
     name="SSH sessions",
     title="All SSH sessions",
     description="List all SSH sessions (optionally filtered by ?project_id=xxx query parameter)",
-    mime_type="application/json"
+    mime_type="text/plain"
 )
 async def resource_ssh_sessions_all() -> str:
     return await _app.resource_manager.list_ssh_sessions()
@@ -474,7 +473,7 @@ async def resource_proxy_status() -> str:
     name="Lab proxy registry",
     title="Discovered lab SSH proxies",
     description="All discovered SSH proxy containers in GNS3 lab projects - use proxy_id for routing through isolated networks",
-    mime_type="application/json"
+    mime_type="text/plain"
 )
 async def resource_proxy_registry() -> str:
     """Discover lab SSH proxies via Docker API (v0.26.0 Multi-Proxy Support)
@@ -501,7 +500,7 @@ async def resource_proxy_registry() -> str:
     name="All proxy sessions",
     title="SSH sessions across all proxies",
     description="Aggregated list of ALL active SSH sessions from main proxy and lab proxies - global lab infrastructure view",
-    mime_type="application/json"
+    mime_type="text/plain"
 )
 async def resource_proxy_sessions() -> str:
     """List all SSH sessions across all proxies (v0.26.0 Multi-Proxy Aggregation)

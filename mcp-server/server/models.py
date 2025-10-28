@@ -89,23 +89,34 @@ class NodeConsole(BaseModel):
 
 class NodeSummary(BaseModel):
     """Minimal node information for list_nodes (lightweight)"""
-    node_id: str
+    project_id: str = Field(exclude=True)  # Store internally, exclude from output
+    node_id: str = Field(exclude=True)  # Store internally, exclude from output
     name: str
-    node_type: str
     node_type: str
     status: Literal["started", "stopped", "suspended"]
     console_type: Optional[str] = None
     console: Optional[int] = None
 
+    @property
+    def uri(self) -> str:
+        """Return node URI with nodes:// prefix"""
+        return f"nodes://{self.project_id}/{self.node_id}"
+
+    def model_dump(self, **kwargs):
+        """Custom serialization to include uri instead of node_id/project_id"""
+        data = super().model_dump(**kwargs)
+        data['uri'] = self.uri
+        return data
+
     class Config:
         json_schema_extra = {
             "example": {
-                "node_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
                 "name": "Router1",
                 "node_type": "qemu",
                 "status": "started",
                 "console_type": "telnet",
-                "console": 5000
+                "console": 5000,
+                "uri": "nodes://project-id/node-id"
             }
         }
 
@@ -136,6 +147,10 @@ class NodeInfo(BaseModel):
     adapters: Optional[int] = None
     hdd_disk_image: Optional[str] = None
     hda_disk_image: Optional[str] = None
+
+    def to_detail_view(self) -> Dict[str, Any]:
+        """Detail view - show all fields"""
+        return self.model_dump()
 
     class Config:
         json_schema_extra = {
@@ -316,6 +331,21 @@ class TemplateInfo(BaseModel):
     builtin: bool = False
     symbol: Optional[str] = None
     usage: Optional[str] = None  # Template usage notes (credentials, setup instructions)
+
+    @property
+    def uri(self) -> str:
+        """Return template URI with templates:// prefix"""
+        return f"templates://{self.template_id}"
+
+    def to_list_view(self) -> Dict[str, Any]:
+        """List view - hide compute_id, symbol, template_id, usage; show uri"""
+        data = self.model_dump(exclude={'template_id', 'compute_id', 'symbol', 'usage'})
+        data['uri'] = self.uri
+        return data
+
+    def to_detail_view(self) -> Dict[str, Any]:
+        """Detail view - show all fields"""
+        return self.model_dump()
 
     class Config:
         json_schema_extra = {

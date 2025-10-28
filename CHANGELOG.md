@@ -5,6 +5,43 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0] - 2025-10-28 - Table Mode & Resource Improvements
+
+### Changed
+- **BREAKING**: Resource output format changed from JSON to text tables (mime_type: text/plain)
+  - Affected resources: projects, nodes, links, templates, drawings, console sessions, SSH sessions, proxies, proxy sessions
+  - Single item/detail views remain as JSON
+  - Uses tabulate library with "simple" table style (no borders)
+- **BREAKING**: List resources now return URIs instead of IDs
+  - Templates: Return `uri` field (`templates://{id}`) instead of `template_id`
+  - Nodes: Return `uri` field (`nodes://{project_id}/{node_id}`) instead of separate IDs
+- Template list view now hides implementation details (`compute_id`, `symbol` excluded)
+- Template detail view shows all fields (unchanged)
+- Node list view remains minimal (already correct)
+- Node detail view shows all fields (unchanged)
+
+### Added
+- **Tabulate library** for table formatting (simple style, no borders)
+- **Proxy type differentiation**: All proxy resources now include `type` field
+  - `"host"`: Main SSH proxy on GNS3 host
+  - `"gns3_internal"`: SSH proxy containers in lab projects
+- **Host proxy in registry**: `proxies://` now includes main host proxy (always visible)
+- Model view methods for TemplateInfo and NodeInfo (`to_list_view()`, `to_detail_view()`)
+- URI properties for TemplateInfo and NodeSummary models
+- Table formatting helper function (`format_table()`) in resource modules
+
+### Fixed
+- **CRITICAL**: Missing `Optional` import in session_resources.py causing ValueError
+  - Fixed `proxies://` resource error: "name 'Optional' is not defined"
+  - Fixed `proxies://sessions` resource error: "name 'Optional' is not defined"
+  - Fixed type hint for `search` parameter in get_ssh_history_impl
+
+### Technical Details
+- Added `tabulate>=0.9.0` to requirements.txt
+- Updated 11 resource MIME types: projects, nodes, links, templates, drawings, 4 session resources, 2 proxy resources
+- Format table helper added to project_resources.py and session_resources.py
+- Proxy type field added to 3 functions: list_ssh_sessions_impl, get_proxy_registry_impl, list_proxy_sessions_impl
+
 ## [0.29.1] - 2025-10-28 - Dual Access Patterns for Session Resources
 
 ### Added

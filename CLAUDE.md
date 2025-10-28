@@ -10,25 +10,26 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.29.1
+## Current Version: v0.30.0
 
-**Latest Release:** v0.29.1 - Dual Access Patterns for Session Resources
+**Latest Release:** v0.30.0 - Table Mode & Resource Improvements (BREAKING CHANGES)
 
-### Recent Changes (v0.25.0 - v0.29.1)
+### Recent Changes (v0.26.0 - v0.30.0)
 
+**v0.30.0** - **BREAKING**: Table mode output, URIs instead of IDs, proxy type field
 **v0.29.1** - Dual access patterns for sessions (path-based + query-param)
 **v0.29.0** - **BREAKING**: Resource URI scheme changes, complete metadata, linting infrastructure
 **v0.28.0** - Local execution on SSH proxy container (ssh_command with node_name="@")
 **v0.27.0** - Configurable SSH session timeouts
 **v0.26.0** - Multi-proxy support for isolated network access
-**v0.25.0** - Docker node file operations and network configuration (3 new tools)
 
 ### Current State
 - **27 Tools**: Complete GNS3 lab automation toolkit including Docker file operations
-- **21 Resources**: Complete metadata (name, title, description, mime_type) with proper URI schemes
+- **21 Resources**: Text table output (simple style), URIs instead of IDs, complete metadata
 - **5 Prompts**: Guided workflows for SSH setup, topology discovery, troubleshooting, lab setup, node setup
 - **Code Quality**: Ruff, Mypy, Black linting with pre-commit hooks
 - **Project Memory**: Per-project README for IP schemes, credentials, architecture notes
+- **Table Output**: All list resources use tabulate library with "simple" style (no borders)
 
 For complete version history and detailed release notes, see [CHANGELOG.md](CHANGELOG.md).
 

@@ -5,10 +5,30 @@ Handles resources for projects, nodes, links, templates, and drawings.
 """
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List
+
+from tabulate import tabulate
 
 if TYPE_CHECKING:
     from main import AppContext
+
+
+def format_table(data: List[Dict[str, Any]], columns: List[str]) -> str:
+    """Format list of dicts as simple text table
+
+    Args:
+        data: List of dictionaries containing data
+        columns: List of column names to include in output
+
+    Returns:
+        Formatted table string with "simple" style (no borders)
+    """
+    if not data:
+        return "No items found"
+
+    # Extract specified columns from each dict
+    rows = [[item.get(col, "") for col in columns] for item in data]
+    return tabulate(rows, headers=columns, tablefmt="simple")
 
 
 async def list_projects_impl(app: "AppContext", detailed: bool = False) -> str:
@@ -18,35 +38,31 @@ async def list_projects_impl(app: "AppContext", detailed: bool = False) -> str:
     Resource URI: projects://
 
     Args:
-        detailed: If False (default), return lightweight ProjectSummary with uri field.
-                  If True, return full project data from GNS3 API.
+        detailed: If False (default), return table format with uri field.
+                  If True, return full project data as JSON from GNS3 API.
 
     Returns:
-        JSON array of project summaries (default) or full project data (detailed=True)
+        Formatted text table of project summaries (default) or JSON (detailed=True)
     """
     try:
         projects = await app.gns3.get_projects()
 
         if detailed:
-            # Return full data from GNS3 API
+            # Return full data from GNS3 API as JSON
             return json.dumps(projects, indent=2)
         else:
-            # Return lightweight ProjectSummary format with uri
+            # Return formatted table with ProjectSummary data
             from models import ProjectSummary
+
             summaries = [
                 ProjectSummary(
-                    status=p['status'],
-                    name=p['name'],
-                    project_id=p['project_id']
+                    status=p["status"], name=p["name"], project_id=p["project_id"]
                 ).model_dump()
                 for p in projects
             ]
-            return json.dumps(summaries, indent=2)
+            return format_table(summaries, columns=["status", "name", "uri"])
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to list projects",
-            "details": str(e)
-        }, indent=2)
+        return f"Error: Failed to list projects\nDetails: {str(e)}"
 
 
 async def get_project_impl(app: "AppContext", project_id: str) -> str:
@@ -106,27 +122,27 @@ async def list_nodes_impl(app: "AppContext", project_id: str) -> str:
         # Get nodes
         nodes = await app.gns3.get_nodes(project_id)
 
-        # Return lightweight NodeSummary format
+        # Return formatted table with NodeSummary data
         from models import NodeSummary
+
         summaries = [
             NodeSummary(
-                node_id=n['node_id'],
-                name=n['name'],
-                node_type=n['node_type'],
-                status=n['status'],
-                console_type=n['console_type'],
-                console=n.get('console')
+                project_id=project_id,
+                node_id=n["node_id"],
+                name=n["name"],
+                node_type=n["node_type"],
+                status=n["status"],
+                console_type=n["console_type"],
+                console=n.get("console"),
             ).model_dump()
             for n in nodes
         ]
 
-        return json.dumps(summaries, indent=2)
+        return format_table(
+            summaries, columns=["name", "node_type", "status", "console_type", "console", "uri"]
+        )
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to list nodes",
-            "project_id": project_id,
-            "details": str(e)
-        }, indent=2)
+        return f"Error: Failed to list nodes in project {project_id}\nDetails: {str(e)}"
 
 
 async def get_node_impl(app: "AppContext", project_id: str, node_id: str) -> str:
@@ -302,37 +318,33 @@ async def list_templates_impl(app: "AppContext") -> str:
     """
     List available GNS3 templates
 
-    Resource URI: gns3://templates
+    Resource URI: templates://
 
     Returns:
-        JSON array of template information
+        Formatted text table of template information (excludes compute_id, symbol, usage)
     """
     try:
         templates = await app.gns3.get_templates()
 
-        # Build template info (excludes usage to keep list lightweight)
+        # Build template info using list view (hides compute_id, symbol, usage)
         from models import TemplateInfo
+
         template_infos = [
             TemplateInfo(
-                template_id=t['template_id'],
-                name=t['name'],
-                category=t.get('category', 'guest'),
-                node_type=t.get('template_type'),
-                builtin=t.get('builtin', False),
-                compute_id=t.get('compute_id', 'local'),
-                symbol=t.get('symbol')
-                # usage excluded - use gns3://templates/{id} for full details
-            ).model_dump()
+                template_id=t["template_id"],
+                name=t["name"],
+                category=t.get("category", "guest"),
+                node_type=t.get("template_type"),
+                builtin=t.get("builtin", False),
+                compute_id=t.get("compute_id", "local"),
+                symbol=t.get("symbol"),
+            ).to_list_view()
             for t in templates
         ]
 
-        return json.dumps(template_infos, indent=2)
+        return format_table(template_infos, columns=["name", "category", "node_type", "builtin", "uri"])
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to list templates",
-            "project_id": project_id,
-            "details": str(e)
-        }, indent=2)
+        return f"Error: Failed to list templates\nDetails: {str(e)}"
 
 
 async def get_template_impl(app: "AppContext", template_id: str) -> str:
@@ -352,18 +364,19 @@ async def get_template_impl(app: "AppContext", template_id: str) -> str:
         template = await app.gns3.get_template(template_id)
 
         from models import TemplateInfo
+
         template_info = TemplateInfo(
-            template_id=template['template_id'],
-            name=template['name'],
-            category=template.get('category', 'guest'),
-            node_type=template.get('template_type'),
-            builtin=template.get('builtin', False),
-            compute_id=template.get('compute_id', 'local'),
-            symbol=template.get('symbol'),
-            usage=template.get('usage', '')  # Includes credentials/setup instructions
+            template_id=template["template_id"],
+            name=template["name"],
+            category=template.get("category", "guest"),
+            node_type=template.get("template_type"),
+            builtin=template.get("builtin", False),
+            compute_id=template.get("compute_id", "local"),
+            symbol=template.get("symbol"),
+            usage=template.get("usage", ""),  # Includes credentials/setup instructions
         )
 
-        return json.dumps(template_info.model_dump(), indent=2)
+        return json.dumps(template_info.to_detail_view(), indent=2)
     except Exception as e:
         return json.dumps({
             "error": "Failed to get template",
