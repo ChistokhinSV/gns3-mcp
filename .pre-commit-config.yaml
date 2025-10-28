@@ -39,16 +39,6 @@ repos:
         types: [python]
         stages: [pre-commit]
 
-  # Generate SVG diagrams from PlantUML
-  - repo: local
-    hooks:
-      - id: plantuml-svg
-        name: Generate SVG from PlantUML
-        entry: bash -c 'for f in mcp-server/docs/diagrams/*.puml; do java -jar "$(which plantuml.jar)" -tsvg "$f"; done'
-        language: system
-        pass_filenames: false
-        files: '^mcp-server/docs/diagrams/.*\.puml$'
-
   # Build desktop extension
   - repo: local
     hooks:
