@@ -5,6 +5,38 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.0] - 2025-10-28 - Dependency Management & Claude Desktop Fix
+
+### Fixed
+- **Claude Desktop Extension Loading**: Fixed "fastmcp not found" error
+  - **Root Cause**: main.py didn't add lib/ to sys.path before imports
+  - **Issue**: Claude Desktop wasn't applying PYTHONPATH from manifest.json
+  - **Fix**: Added sys.path.insert() at top of main.py to load bundled dependencies
+  - **Impact**: Extension now works in Claude Desktop without global Python packages
+  - **Technical**: Uses `Path(__file__).parent` to dynamically locate lib/ folder
+
+### Added
+- **Pre-commit Hook for Dependency Management**: Auto-clean and reinstall lib/ when requirements.txt changes
+  - **New Hook**: `update-lib` - Cleans lib/ folder completely and reinstalls production dependencies
+  - **Enhanced Hook**: `build-mcpb` - Now also triggers on requirements.txt changes
+  - **Benefit**: Prevents stale packages, duplicate versions, dev dependency bloat
+  - **Workflow**: Edit requirements.txt → commit → hook auto-updates lib/ and rebuilds extension
+  - **Implementation**: PowerShell Remove-Item + pip install --target=lib
+
+### Changed
+- **Dependencies Cleanup**: Removed all duplicate package versions from lib/ folder
+  - Removed duplicates: mcp (1.18.0), python_dotenv (1.1.1), referencing (0.37.0), starlette (0.48.0)
+  - Removed dev dependencies: black, coverage, pytest, mypy, etc.
+  - Result: Clean lib/ with only 70 production packages
+
+### Technical Details
+- **Files Modified**:
+  - `server/main.py`: Added sys.path setup before imports (lines 6-18)
+  - `.pre-commit-config.yaml`: Added update-lib hook, enhanced build-mcpb trigger
+  - `CLAUDE.md`: Updated pre-commit hooks documentation
+- **Extension Size**: 19.2MB (production deps only)
+- **Python Path**: Dynamically resolves `__dirname/lib` and `__dirname/server`
+
 ## [0.34.0] - 2025-10-28 - Console State Tracking & SSH Session Cleanup
 
 ### Added

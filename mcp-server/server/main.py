@@ -3,6 +3,21 @@
 GNS3 lab automation with AI agent
 """
 
+# Add lib directory to Python path for bundled dependencies (.mcpb package)
+# ruff: noqa: E402 - Module imports must come after sys.path setup
+import sys
+from pathlib import Path
+
+# Get the directory containing this script (server/)
+server_dir = Path(__file__).parent.resolve()
+# Get the parent directory (mcp-server/)
+root_dir = server_dir.parent
+# Add lib/ and server/ to path
+lib_dir = root_dir / "lib"
+if lib_dir.exists():
+    sys.path.insert(0, str(lib_dir))
+sys.path.insert(0, str(server_dir))
+
 import argparse
 import asyncio
 import json
