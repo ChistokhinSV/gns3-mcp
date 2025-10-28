@@ -4,7 +4,11 @@ Provides tools for listing, creating, modifying, and deleting GNS3 nodes.
 """
 import asyncio
 import json
+import logging
+import os
 from typing import TYPE_CHECKING, Any, Dict, Optional
+
+import httpx
 
 from error_utils import (
     create_error_response,
@@ -18,6 +22,12 @@ from models import ErrorCode, NodeInfo, NodeSummary
 
 if TYPE_CHECKING:
     from main import AppContext
+
+logger = logging.getLogger(__name__)
+
+# SSH Proxy API URL (defaults to GNS3 host IP)
+_gns3_host = os.getenv("GNS3_HOST", "localhost")
+SSH_PROXY_URL = os.getenv("SSH_PROXY_URL", f"http://{_gns3_host}:8022")
 
 
 async def list_nodes_impl(app: "AppContext") -> str:
@@ -465,8 +475,69 @@ async def create_node_impl(app: "AppContext", template_name: str, x: int, y: int
         )
 
 
+async def _cleanup_ssh_sessions_for_node(app: "AppContext", node_name: str) -> None:
+    """Clean up SSH sessions for a node on all registered proxies (v0.34.0)
+
+    Called automatically when a node is deleted. Attempts to disconnect SSH sessions
+    on all proxies (host + lab proxies) and cleans up proxy mappings.
+
+    Args:
+        app: Application context
+        node_name: Name of the deleted node
+
+    Note:
+        Errors are logged but not raised - session cleanup should not block node deletion.
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            # Get all registered proxies
+            all_proxies = []
+
+            # Always add host proxy
+            all_proxies.append({
+                "proxy_id": "host",
+                "url": SSH_PROXY_URL
+            })
+
+            # Try to get lab proxies from registry
+            try:
+                response = await client.get(f"{SSH_PROXY_URL}/proxy/registry")
+                if response.status_code == 200:
+                    data = response.json()
+                    lab_proxies = data.get("proxies", [])
+                    all_proxies.extend(lab_proxies)
+            except Exception as e:
+                logger.debug(f"Could not fetch lab proxies: {e}")
+
+            # Try to delete SSH session on each proxy
+            for proxy in all_proxies:
+                proxy_url = proxy.get("url")
+                if not proxy_url:
+                    continue
+
+                try:
+                    response = await client.delete(
+                        f"{proxy_url}/ssh/session/{node_name}",
+                        timeout=5.0
+                    )
+                    if response.status_code in (200, 404):
+                        logger.debug(f"Cleaned up SSH session for {node_name} on proxy {proxy.get('proxy_id')}")
+                except Exception as e:
+                    # Log but don't fail - session cleanup is best-effort
+                    logger.debug(f"Could not clean up SSH session for {node_name} on proxy {proxy.get('proxy_id')}: {e}")
+
+            # Clean up proxy mapping
+            app.ssh_proxy_mapping.pop(node_name, None)
+
+        except Exception as e:
+            # Log but don't raise - session cleanup should not block node deletion
+            logger.warning(f"SSH session cleanup failed for node {node_name}: {e}")
+
+
 async def delete_node_impl(app: "AppContext", node_name: str) -> str:
     """Delete a node from the current project
+
+    Also cleans up SSH sessions on all registered proxies.
 
     Args:
         node_name: Name of the node to delete
@@ -487,6 +558,9 @@ async def delete_node_impl(app: "AppContext", node_name: str) -> str:
             )
 
         await app.gns3.delete_node(app.current_project_id, node['node_id'])
+
+        # Clean up SSH sessions on all registered proxies (v0.34.0)
+        await _cleanup_ssh_sessions_for_node(app, node_name)
 
         return json.dumps({"message": f"Node '{node_name}' deleted successfully"}, indent=2)
 

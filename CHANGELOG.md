@@ -5,6 +5,54 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.34.0] - 2025-10-28 - Console State Tracking & SSH Session Cleanup
+
+### Added
+- **Console State Tracking**: Require reading console before sending commands
+  - **New Field**: Added `accessed_terminal` flag to `ConsoleSession` dataclass
+  - **Validation**: All send operations (`console_send`, `console_send_and_wait`, `console_keystroke`) now check if terminal has been accessed
+  - **Error Message**: Clear guidance to read console first to understand current state (prompt, login screen, etc.)
+  - **Rationale**: Prevents blind command sending, ensures users understand terminal state before interaction
+  - **Impact**: Better automation workflows, fewer errors from sending commands at wrong prompt
+- **SSH Session Cleanup on Node Deletion**: Automatically clean up SSH sessions when deleting nodes
+  - **Scope**: Cleans up sessions on ALL registered proxies (host + lab proxies)
+  - **Implementation**: New `_cleanup_ssh_sessions_for_node()` helper function
+  - **Behavior**: Best-effort cleanup, errors logged but don't block node deletion
+  - **Benefit**: Prevents orphaned SSH sessions, automatic resource cleanup
+
+### Changed
+- **Console Manager**: Added `has_accessed_terminal()` and `has_accessed_terminal_by_node()` methods
+- **Console Tools**: Enhanced send operations with state validation
+- **Node Tools**: Added httpx, logging, os imports for SSH session cleanup
+
+### Technical Details
+- **Files Modified**:
+  - `console_manager.py`: ConsoleSession dataclass, access tracking methods
+  - `console_tools.py`: Validation in send_console_impl, send_and_wait_console_impl, send_keystroke_impl
+  - `node_tools.py`: SSH session cleanup in delete_node_impl
+- **Dependencies**: No new dependencies (httpx already in use)
+
+## [0.30.0] - 2025-10-28 - Bundle Tabulate Library & Auto-Rename Fix
+
+### Fixed
+- **Missing Tabulate Module**: Bundled tabulate library in extension package
+  - **Error**: `ValueError: Error reading resource projects://: No module named 'tabulate'`
+  - **Cause**: Tabulate was in requirements.txt but not installed to lib/ folder
+  - **Fix**: Installed tabulate to lib/ and rebuilt extension (19.3MB, 2472 files)
+  - **Impact**: Table mode resources now work correctly
+- **Auto-Rename Workaround**: Handle GNS3 API ignoring custom node names
+  - **Issue**: Leading/trailing whitespace in node_name parameter causes API to ignore custom name
+  - **Root Cause**: MCP client may send parameters with whitespace, GNS3 API silently ignores names with whitespace
+  - **Fix**: Strip whitespace from node_name parameter before sending to API
+  - **Workaround**: If API still ignores name, automatically rename node after creation
+  - **Status**: Whitespace stripping implemented, auto-rename as fallback
+
+### Technical Details
+- **Files Modified**:
+  - `mcp-server/lib/`: Added tabulate library (93.1KB)
+  - `node_tools.py`: Added `.strip()` to node_name, auto-rename logic
+- **Extension Size**: 19.3MB (2472 files)
+
 ## [0.33.5] - 2025-10-28 - Fix Diagram Resource (ctx.meta Error)
 
 ### Fixed
