@@ -5,6 +5,25 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.4] - 2025-10-28 - Remove Confusing Proxy Status Column
+
+### Changed
+- **Proxy Registry Resource**: Removed "status" column from output
+  - **Before**: Showed "active" for host proxy, blank for internal proxies
+  - **After**: Only shows: proxy_id, hostname, type, url
+  - **Rationale**:
+    - Status was redundant (proxies in registry are inherently active)
+    - Blank status for internal proxies looked like an error
+    - Cleaner, less confusing output
+  - **Example**:
+    ```
+    proxy_id                              hostname    type           url
+    ------------------------------------  ----------  -------------  ------------------------
+    host                                  Host        host           http://192.168.1.20:8022
+    3817f265-9aa4-4583-b1b4-2d0679790a08  B-PROXY     gns3_internal  http://localhost:5010
+    37b93d92-9b04-45d4-a9ed-b834560d9a64  A-PROXY     gns3_internal  http://localhost:5004
+    ```
+
 ## [0.33.3] - 2025-10-28 - Clean create_node Output
 
 ### Changed

@@ -425,7 +425,6 @@ async def get_proxy_registry_impl(app: "AppContext") -> str:
                 "hostname": "Host",
                 "url": SSH_PROXY_URL,
                 "type": "host",
-                "status": "active",
             }
 
             # Try to get lab proxies from registry
@@ -446,7 +445,7 @@ async def get_proxy_registry_impl(app: "AppContext") -> str:
             all_proxies = [host_proxy] + lab_proxies
 
             return format_table(
-                all_proxies, columns=["proxy_id", "hostname", "type", "url", "status"]
+                all_proxies, columns=["proxy_id", "hostname", "type", "url"]
             )
 
         except Exception as e:
@@ -456,9 +455,8 @@ async def get_proxy_registry_impl(app: "AppContext") -> str:
                 "hostname": "Host",
                 "url": SSH_PROXY_URL,
                 "type": "host",
-                "status": "active",
             }
-            return format_table([host_proxy], columns=["proxy_id", "hostname", "type", "url", "status"])
+            return format_table([host_proxy], columns=["proxy_id", "hostname", "type", "url"])
 
 
 async def list_proxy_sessions_impl(app: "AppContext") -> str:
