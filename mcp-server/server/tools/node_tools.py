@@ -381,13 +381,31 @@ async def create_node_impl(app: "AppContext", template_name: str, x: int, y: int
 
         payload = {"x": x, "y": y, "compute_id": compute_id}
         if node_name:
-            payload["name"] = node_name
+            payload["name"] = node_name.strip()  # Strip whitespace
         if properties:
             payload["properties"] = properties
 
         result = await app.gns3.create_node_from_template(
             app.current_project_id, template['template_id'], payload
         )
+
+        # Workaround: If custom name was provided but API ignored it, rename the node
+        if node_name:
+            requested_name = node_name.strip()
+            actual_name = result.get('name', '')
+
+            if actual_name != requested_name:
+                # Node was created with wrong name, rename it
+                # Stateless devices (switches, hubs, etc.) can be renamed without stopping
+                rename_result = await set_node_impl(
+                    app=app,
+                    node_name=actual_name,  # Current (wrong) name
+                    name=requested_name      # Desired name
+                )
+
+                # Update result with corrected name
+                result['name'] = requested_name
+                result['label']['text'] = requested_name
 
         return json.dumps({"message": "Node created successfully", "node": result}, indent=2)
 
