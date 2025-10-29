@@ -1,5 +1,5 @@
-# GNS3 MCP HTTP Server - Service Installation Script
-# Run this script as Administrator to install the Windows service
+# GNS3 MCP HTTP Server - Automated Service Installation Script
+# Run this script as Administrator to install and start the Windows service
 
 $ErrorActionPreference = "Stop"
 
@@ -103,16 +103,6 @@ if (-not (Test-Path $EnvPath)) {
 Write-Host "  .env file validated" -ForegroundColor Green
 Write-Host ""
 
-# Test if start_mcp_http.py can be executed
-Write-Host "Testing wrapper script..." -ForegroundColor Cyan
-$TestResult = & $PythonExe $ScriptPath 2>&1 | Select-Object -First 5
-if ($LASTEXITCODE -ne 0 -and $TestResult -notmatch "ERROR: .env") {
-    Write-Host "  Pre-flight test passed (script validated)" -ForegroundColor Green
-} else {
-    Write-Host "  WARNING: Script test returned error, but continuing..." -ForegroundColor Yellow
-}
-Write-Host ""
-
 # Check if service already exists
 $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existingService) {
@@ -184,38 +174,28 @@ Write-Host "  Script:          $ScriptPath"
 Write-Host "  Log File:        $LogPath"
 Write-Host "  HTTP Endpoint:   http://127.0.0.1:8100/mcp/"
 Write-Host ""
-Write-Host "Management Commands:" -ForegroundColor Yellow
-Write-Host "  Start:   nssm start $ServiceName"
-Write-Host "  Stop:    nssm stop $ServiceName"
-Write-Host "  Restart: nssm restart $ServiceName"
-Write-Host "  Status:  nssm status $ServiceName"
-Write-Host "  Remove:  nssm remove $ServiceName confirm"
-Write-Host ""
 
-# Ask if user wants to start the service now
-$response = Read-Host "Start the service now? (Y/n)"
-if ($response -eq "" -or $response -eq "Y" -or $response -eq "y") {
-    Write-Host "Starting service..." -ForegroundColor Green
-    nssm start $ServiceName
-    Start-Sleep -Seconds 3
+# Auto-start the service
+Write-Host "Starting service..." -ForegroundColor Green
+nssm start $ServiceName
+Start-Sleep -Seconds 3
 
-    $status = nssm status $ServiceName
-    if ($status -match "SERVICE_RUNNING") {
-        Write-Host "Service started successfully!" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "Check service health:" -ForegroundColor Cyan
-        Write-Host "  curl http://127.0.0.1:8100/health"
-        Write-Host ""
-        Write-Host "View logs:" -ForegroundColor Cyan
-        Write-Host "  Get-Content '$LogPath' -Tail 50 -Wait"
-    } else {
-        Write-Host "WARNING: Service may not have started correctly" -ForegroundColor Yellow
-        Write-Host "Status: $status" -ForegroundColor Yellow
-        Write-Host "Check logs at: $LogPath" -ForegroundColor Yellow
-    }
+$status = nssm status $ServiceName
+if ($status -match "SERVICE_RUNNING") {
+    Write-Host "Service started successfully!" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Management Commands:" -ForegroundColor Yellow
+    Write-Host "  Stop:    nssm stop $ServiceName"
+    Write-Host "  Restart: nssm restart $ServiceName"
+    Write-Host "  Status:  nssm status $ServiceName"
+    Write-Host "  Remove:  nssm remove $ServiceName confirm"
+    Write-Host ""
+    Write-Host "View logs:" -ForegroundColor Cyan
+    Write-Host "  Get-Content '$LogPath' -Tail 50 -Wait"
 } else {
-    Write-Host "Service installed but not started" -ForegroundColor Yellow
-    Write-Host "Start manually with: nssm start $ServiceName" -ForegroundColor Cyan
+    Write-Host "WARNING: Service may not have started correctly" -ForegroundColor Yellow
+    Write-Host "Status: $status" -ForegroundColor Yellow
+    Write-Host "Check logs at: $LogPath" -ForegroundColor Yellow
 }
 
 Write-Host ""

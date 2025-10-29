@@ -5,6 +5,59 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.0] - 2025-10-29 - Windows Service Reliability & Code Quality
+
+### Fixed
+- **Windows Service Wrapper Script** (`start_mcp_http.py`): Replaced dangerous `exec()` pattern with proper `runpy.run_path()`
+  - **Old Pattern**: Read main.py as text and executed with `exec(code, globals)`
+  - **New Pattern**: Use Python's standard `runpy.run_path()` for safe module execution
+  - **Benefits**: Better debugging, proper stack traces, cleaner code flow
+- **Module Loading**: Fixed `lib/` folder not being added to sys.path before importing dotenv
+  - **Issue**: Script failed when python-dotenv not available globally
+  - **Fix**: Add both `lib/` and `server/` to sys.path before any imports (line 29-30)
+
+### Added
+- **.env Validation**: Comprehensive validation with helpful error messages
+  - Checks if .env exists before loading
+  - Shows exact file path and required variables if missing
+  - Clear error messages for missing USER/PASSWORD credentials
+- **Version Logging**: Wrapper now logs version, Python path, endpoints at startup
+  - Shows GNS3 MCP HTTP Server version (v0.37.0)
+  - Displays Python executable being used
+  - Logs HTTP endpoint and GNS3 server connection details
+
+### Changed
+- **install-service.ps1**: Auto-detect Python installation instead of hardcoded path
+  - **Search Order**: 1) Project venv, 2) System Python (PATH), 3) py launcher
+  - **Benefits**: Works across different Python installations, survives Python upgrades
+  - Shows detected Python version during installation
+- **install-service.ps1**: Add .env validation before service installation
+  - Prevents installing service that will immediately fail
+  - Shows helpful message with required .env variables
+- **Paths**: Made all paths dynamic using `$ScriptDir` instead of hardcoded
+  - Installation works from any location
+  - No manual path editing required
+
+### Technical Details
+- **Files Modified**:
+  - `mcp-server/start_mcp_http.py`: Refactored with runpy, added validations, improved logging
+  - `install-service.ps1`: Auto-detect Python, validate .env, dynamic paths
+  - `run-gns3-mcp.bat`: Created batch wrapper for paths with spaces (Windows service compatibility)
+- **Dependencies**: Still uses bundled `lib/` folder first, maintains .mcpb compatibility
+- **Manual Service Install**: Due to path quoting complexities, manual NSSM configuration may be needed
+
+### Known Issues
+- **Windows Service Installation**: NSSM parameter quoting issues with paths containing spaces
+  - Workaround: Use batch file wrapper (`C:\HOME\run-gns3-mcp.bat`)
+  - Alternative: Manual NSSM configuration via `configure-service.ps1`
+- **Antivirus**: Some security software may block service installation commands
+  - Solution: Temporarily disable AV or add exception for NSSM/PowerShell scripts
+
+### Migration from v0.36.0
+- Service recreation recommended but not required
+- If service works, no action needed
+- If recreating: Use updated `install-service-auto.ps1` or manual `configure-service.ps1`
+
 ## [0.36.0] - 2025-10-28 - **CRITICAL FIX** - Tool Name Validation
 
 ### Fixed
