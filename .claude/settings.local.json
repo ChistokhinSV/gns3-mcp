@@ -23,7 +23,15 @@
       "Bash(docker image inspect:*)",
       "Bash(docker manifest inspect:*)",
       "Bash(docker image save:*)",
-      "Bash(tar:*)"
+      "Bash(tar:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(nssm get:*)",
+      "Bash(cat:*)",
+      "Bash(timeout 3 python:*)",
+      "Bash(nssm status:*)",
+      "Bash(cmd /c \"timeout /t 3 /nobreak >nul & run-gns3-mcp.bat\")",
+      "Bash(timeout:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"install-service-batch-wrapper.ps1\")"
     ],
     "deny": [],
     "ask": []
