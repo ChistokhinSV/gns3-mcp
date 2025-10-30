@@ -60,3 +60,5 @@ gns3-project/.coverage
 
 # winsw
 GNS3-MCP-HTTP.exe
+.git.bfg-report/
+
