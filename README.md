@@ -2,7 +2,7 @@
 
 Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS3 projects, nodes, and device consoles through Claude Desktop or any MCP-compatible client. Includes SSH automation via Netmiko for advanced network device management.
 
-**Current Version**: v0.12.0 (SSH Proxy Service)
+**Current Version**: v0.38.0 (Non-Blocking Authentication)
 
 ## 📐 Architecture Documentation
 
@@ -14,6 +14,36 @@ Comprehensive architecture documentation is available in the [docs/architecture]
 - **[Data Flow Documentation](docs/architecture/05-tool-invocation-flow.md)** - Request/response flow through system layers
 
 **Architecture Grade**: B+ (85/100) - Clean layered architecture with comprehensive type safety
+
+## What's New in v0.38.0
+
+Version 0.38.0 fixes critical startup delays and improves reliability with instant server startup:
+
+### Instant Server Startup (3 Seconds)
+- **No More Blocking**: Server starts immediately regardless of GNS3 availability (was 15-20 seconds)
+- **Background Authentication**: Non-blocking auth with exponential backoff (5s → 10s → 30s → 60s → 300s max)
+- **Always Available**: All 29 tools/resources available even when GNS3 disconnected
+- **Fast Failure**: API operations fail quickly (6s max) with clear error messages
+
+### 2 New Connection Management Tools
+- **check_gns3_connection()** - Check connection status, error details, last attempt time
+- **retry_gns3_connection()** - Force immediate reconnection (bypasses backoff timer)
+
+### Unified Server Management (server.cmd)
+Single command replaces 5+ installation scripts:
+- `server.cmd` - Start server (auto-creates/populates venv)
+- `server.cmd install` - Install Windows service via NSSM
+- `server.cmd uninstall` - Remove Windows service
+- `server.cmd reinstall` - Reinstall service
+- `server.cmd status` - Check service status
+
+### Connection Status Tracking
+- `is_connected` - Boolean connection state
+- `connection_error` - Detailed error message (timeout, no route, etc.)
+- `last_auth_attempt` - Timestamp of last attempt
+- Auto-recovery when GNS3 becomes available
+
+See [CLAUDE.md](CLAUDE.md) for complete v0.38.0 release notes.
 
 ## What's New in v0.12.0
 

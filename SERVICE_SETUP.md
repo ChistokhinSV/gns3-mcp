@@ -81,18 +81,27 @@ LOG_LEVEL=INFO
 
 **Run as Administrator:**
 
-```powershell
+```cmd
 cd "C:\HOME\1. Scripts\008. GNS3 MCP"
-.\install-service.ps1
+server.cmd install
 ```
 
-The script will:
-- ✓ Check prerequisites (NSSM, Python, script files)
+The unified `server.cmd` tool will:
+- ✓ Auto-create/populate venv if needed
+- ✓ Install Python dependencies
+- ✓ Check prerequisites (NSSM, Python, .env file)
 - ✓ Remove existing service if present
-- ✓ Install service with proper configuration
-- ✓ Configure auto-restart on failure
-- ✓ Set up log rotation (10MB max)
-- ✓ Optionally start the service
+- ✓ Install service with proper NSSM configuration
+- ✓ Configure auto-restart on failure (5-second delay)
+- ✓ Set up log rotation (10MB max size)
+- ✓ Start the service automatically
+
+**Alternative Commands:**
+```cmd
+server.cmd uninstall   # Remove service
+server.cmd reinstall   # Reinstall service
+server.cmd status      # Check service status
+server.cmd             # Start server directly (no service)
 
 ### 4. Verify Service
 
@@ -156,6 +165,13 @@ nssm restart GNS3-MCP-HTTP
 ```
 
 ### Check Status
+
+```cmd
+# Quick status check with server.cmd
+server.cmd status
+```
+
+Or use NSSM directly:
 
 ```powershell
 # Service status
@@ -278,14 +294,14 @@ curl http://127.0.0.1:8100/mcp/
 
 ## Uninstallation
 
-**Run as Administrator:**
+**Easy uninstall with server.cmd:**
 
-```powershell
+```cmd
 cd "C:\HOME\1. Scripts\008. GNS3 MCP"
-.\uninstall-service.ps1
+server.cmd uninstall
 ```
 
-Or manually:
+Or manually with NSSM:
 
 ```powershell
 # Stop service
@@ -300,15 +316,15 @@ nssm remove GNS3-MCP-HTTP confirm
 ```
 C:\HOME\1. Scripts\008. GNS3 MCP\
 ├── mcp-server\
-│   ├── start_mcp_http.py          # HTTP server wrapper
+│   ├── start_mcp_http.py          # HTTP server wrapper (v0.38.0)
 │   ├── start_mcp.py                # stdio wrapper (for Claude Code stdio mode)
 │   └── server\
 │       └── main.py                 # FastMCP server implementation
+├── venv\                           # Virtual environment (auto-created)
 ├── .env                            # Configuration (gitignored)
 ├── .mcp.json                       # Claude Code MCP config
 ├── mcp-http-server.log            # Service logs
-├── install-service.ps1             # Service installation script
-├── uninstall-service.ps1           # Service removal script
+├── server.cmd                      # Unified server management tool (v0.38.0)
 └── SERVICE_SETUP.md                # This file
 ```
 
