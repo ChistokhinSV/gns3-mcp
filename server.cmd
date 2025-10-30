@@ -31,15 +31,29 @@ REM Parse command
 set "COMMAND=%~1"
 if "%COMMAND%"=="" set "COMMAND=start"
 
-if /i "%COMMAND%"=="install" goto :install
-if /i "%COMMAND%"=="uninstall" goto :uninstall
-if /i "%COMMAND%"=="reinstall" goto :reinstall
+REM Check for admin privileges if running install/uninstall/reinstall
+if /i "%COMMAND%"=="install" goto :check_admin
+if /i "%COMMAND%"=="uninstall" goto :check_admin
+if /i "%COMMAND%"=="reinstall" goto :check_admin
 if /i "%COMMAND%"=="status" goto :status
 if /i "%COMMAND%"=="start" goto :start
 
 echo Unknown command: %COMMAND%
 echo Usage: server.cmd [install^|uninstall^|reinstall^|status]
 exit /b 1
+
+:check_admin
+REM Check if running as administrator
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Requesting administrator privileges...
+    powershell -Command "Start-Process -FilePath '%~f0' -ArgumentList '%COMMAND%' -Verb RunAs -Wait"
+    exit /b %errorlevel%
+)
+REM Running as admin, proceed to command
+if /i "%COMMAND%"=="install" goto :install
+if /i "%COMMAND%"=="uninstall" goto :uninstall
+if /i "%COMMAND%"=="reinstall" goto :reinstall
 
 :start
 echo === GNS3 MCP HTTP Server ===
