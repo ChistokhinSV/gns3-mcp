@@ -19,6 +19,71 @@ Network lab automation server with console access and SSH capabilities.
 4. read_console_output("R1", mode="last_page")  # Check prompt
 ```
 
+## Bulk Node Operations (v0.40.0)
+
+**Wildcard patterns** enable operations on multiple nodes simultaneously.
+
+**Supported Patterns**:
+- `"*"` - All nodes in project
+- `"Router*"` - Prefix match (Router1, Router2, RouterCore)
+- `"*-Core"` - Suffix match (Router-Core, Switch-Core)
+- `"R[123]"` - Character class (R1, R2, R3)
+- `'["R1", "R2"]'` - JSON array of specific nodes
+
+**Execution Modes**:
+- `parallel=True` (default): Concurrent execution for start/stop/suspend (fastest)
+- `parallel=False`: Sequential execution with progress notifications
+
+**Response Format**:
+- Single node: Returns status message (backward compatible)
+- Multiple nodes: Returns BatchOperationResult with per-node success/failure
+
+**Examples**:
+```
+# Start all nodes (parallel)
+set_node_properties("*", action="start")
+
+# Stop all routers (parallel)
+set_node_properties("Router*", action="stop")
+
+# Start specific nodes (sequential with progress)
+set_node_properties('["R1", "R2", "R3"]', action="start", parallel=False)
+
+# Position all switches
+set_node_properties("Switch*", x=100, y=200)
+
+# Lock all core devices
+set_node_properties("*-Core", locked=True)
+```
+
+**Batch Result Structure**:
+```json
+{
+  "operation": "set_node_properties (start)",
+  "status": "success",
+  "summary": {
+    "total_items": 5,
+    "succeeded": 4,
+    "failed": 1,
+    "elapsed_seconds": 12.3
+  },
+  "succeeded_items": [
+    {"item": "Router1", "details": {"changes": ["Started (ready after 15s)"]}},
+    {"item": "Router2", "details": {"changes": ["Started (ready after 20s)"]}}
+  ],
+  "failed_items": [
+    {"item": "Router3", "error": "Node not found", "suggestion": "Check node name"}
+  ]
+}
+```
+
+**Best Practices**:
+- Use wildcard patterns for lab-wide operations (start all, stop all)
+- Use parallel mode for faster execution when order doesn't matter
+- Use sequential mode when you need to see individual node progress
+- Check failed_items in batch results to identify and retry failures
+- For large labs (10+ nodes), expect 1-2 minutes for parallel starts
+
 ## Console Buffer Management
 
 Console buffers accumulate **all output** since connection establishment.
@@ -204,9 +269,17 @@ Use MCP resources to discover lab topology and state:
 **Projects**: `projects://` - List all projects
 **Nodes**: `nodes://{project_id}/` - List nodes in project
 **Links**: `links://{project_id}/` - Network topology
+**Topology Report** (v0.40.0): `projects://{project_id}/topology_report` - Unified report with nodes, links, statistics
 **Templates**: `templates://` - Available node templates
 **Console Sessions**: `sessions://console/` - Active console connections
 **SSH Sessions**: `sessions://ssh/` - Active SSH connections
 **Proxies**: `proxies://` - Lab proxy registry
+
+**Topology Report** (v0.40.0) provides comprehensive overview in single call:
+- Node statistics (types, statuses, connection counts)
+- Link topology with port details
+- Table format for readability
+- JSON data for programmatic access
+- Replaces 3+ separate tool calls (list_projects, list_nodes, get_links)
 
 Resources provide read-only views of current state. Use tools to modify state.

@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.39.0",
+  "version": "0.40.0",
   "description": "GNS3 lab automation with AI agent",
-  "long_description": "GNS3 v3 lab automation MCP server. Can create/delete/modify nodes, drawings, connect/disconnect nodes, configure them with console and ssh proxy access",
+  "long_description": "GNS3 v3 lab automation MCP server. Can create/delete/modify nodes, drawings, connect/disconnect nodes, configure them with console and ssh proxy access. v0.40.0: Wildcard bulk operations, topology report, structured exceptions.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -79,7 +79,7 @@
     },
     {
       "name": "set_node_properties",
-      "description": "Configure node properties and/or control state"
+      "description": "Configure node properties and/or control state. v0.40.0: Supports wildcard patterns ('*', 'Router*'), JSON arrays, and parallel execution for bulk operations"
     },
     {
       "name": "create_node",

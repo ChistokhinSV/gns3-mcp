@@ -297,6 +297,11 @@ class ResourceManager:
         from .project_resources import get_project_readme_impl
         return await get_project_readme_impl(self.app, project_id)
 
+    async def get_topology_report(self, project_id: str) -> str:
+        """Get unified topology report with nodes, links, and statistics (v0.40.0)"""
+        from .project_resources import get_topology_report_impl
+        return await get_topology_report_impl(self.app, project_id)
+
     async def get_template(self, template_id: str) -> str:
         """Get template details with usage notes"""
         from .project_resources import get_template_impl

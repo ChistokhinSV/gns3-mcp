@@ -420,6 +420,17 @@ async def resource_project_readme(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_project_readme(project_id)
 
+@mcp.resource("projects://{project_id}/topology_report",
+    name="Topology Report",
+    title="Unified topology report with nodes and links",
+    description="v0.40.0: Comprehensive topology report showing nodes, links, statistics in table format with JSON data. Single call replaces multiple queries.",
+    mime_type="text/plain"
+)
+async def resource_topology_report(ctx: Context, project_id: str) -> str:
+    """Get unified topology report"""
+    app: AppContext = ctx.request_context.lifespan_context
+    return await app.resource_manager.get_topology_report(project_id)
+
 @mcp.resource("projects://{project_id}/sessions/console/",
     name="Project console sessions",
     title="Active console sessions for project",
@@ -964,12 +975,12 @@ async def close_project(ctx: Context) -> str:
 
 @mcp.tool(
     name="set_node_properties",
-    tags={"node", "topology", "modifies-state", "idempotent"},
+    tags={"node", "topology", "modifies-state", "bulk", "idempotent"},
     annotations={"idempotent": True}
 )
 async def set_node(
     ctx: Context,
-    node_name: Annotated[str, "Name of the node to modify"],
+    node_name: Annotated[str, "Node name, wildcard pattern ('*', 'Router*', 'R[123]'), or JSON array ('[\"R1\",\"R2\"]')"],
     action: Annotated[str | None, "Node action: 'start' (boot node), 'stop' (shutdown), 'suspend' (pause), 'reload' (reboot), 'restart' (stop then start)"] = None,
     x: Annotated[int | None, "X coordinate (top-left corner of node icon)"] = None,
     y: Annotated[int | None, "Y coordinate (top-left corner of node icon)"] = None,
@@ -981,9 +992,20 @@ async def set_node(
     cpus: Annotated[int | None, "Number of CPUs (QEMU nodes only)"] = None,
     hdd_disk_image: Annotated[str | None, "HDD disk image path (QEMU nodes only)"] = None,
     adapters: Annotated[int | None, "Network adapters count (QEMU nodes only)"] = None,
-    console_type: Annotated[str | None, "Console type: telnet/vnc/spice"] = None
+    console_type: Annotated[str | None, "Console type: telnet/vnc/spice"] = None,
+    parallel: Annotated[bool, "Execute operations concurrently (default: True for start/stop/suspend)"] = True
 ) -> str:
     """Configure node properties and/or control node state
+
+    v0.40.0: Enhanced with wildcard and bulk operation support.
+
+    Wildcard Patterns:
+    - Single node: "Router1"
+    - All nodes: "*"
+    - Prefix match: "Router*" (matches Router1, Router2, RouterCore)
+    - Suffix match: "*-Core" (matches Router-Core, Switch-Core)
+    - Character class: "R[123]" (matches R1, R2, R3)
+    - JSON array: '["Router1", "Router2", "Switch1"]'
 
     Validation Rules:
     - name parameter requires node to be stopped
@@ -992,13 +1014,29 @@ async def set_node(
     - action values: start, stop, suspend, reload, restart
     - restart action: stops node (with retry logic), waits for confirmed stop, then starts
 
-    Returns: Status message describing what was done
+    Returns:
+        Single node: Status message (backward compatible)
+        Multiple nodes: BatchOperationResult JSON with per-node success/failure
+
+    Examples:
+        # Start all nodes
+        set_node_properties("*", action="start")
+
+        # Stop all routers
+        set_node_properties("Router*", action="stop")
+
+        # Start specific nodes
+        set_node_properties('["R1", "R2", "R3"]', action="start")
+
+        # Position all switches
+        set_node_properties("Switch*", x=100, y=200)
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await set_node_impl(
         app, node_name, action, x, y, z, locked, ports,
         name, ram, cpus, hdd_disk_image, adapters, console_type,
-        ctx=ctx  # v0.39.0: Pass Context for progress notifications
+        ctx=ctx,  # v0.39.0: Pass Context for progress notifications
+        parallel=parallel  # v0.40.0: Parallel execution support
     )
 
 

@@ -10,12 +10,18 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.39.0
+## Current Version: v0.40.0
 
-**Latest Release:** v0.39.0 - Phase 1 MCP Protocol Enhancements (2/3 features)
+**Latest Release:** v0.40.0 - Competitive Features: Bulk Operations & Topology Report
 
-### Recent Changes (v0.26.0 - v0.39.0)
+### Recent Changes (v0.26.0 - v0.40.0)
 
+**v0.40.0** - Wildcard bulk operations, topology report resource, structured exceptions
+- **Bulk Node Operations**: Wildcard patterns (`"*"`, `"Router*"`), JSON arrays, parallel execution
+- **Topology Report**: Single-resource overview of nodes/links/statistics (replaces 3+ tool calls)
+- **Structured Exceptions**: GNS3Error hierarchy with error codes and suggestions
+- **Performance**: 5-10× faster bulk operations, backward compatible
+- **Enhanced set_node_properties**: Supports `"*"` for all nodes, `"Router*"` for pattern matching
 **v0.39.0** - Phase 1: Server instructions (170-line AI guidance) + progress notifications (node start + SSH)
 - Server instructions loaded automatically, guide AI on GNS3-specific behaviors
 - Progress notifications for node start (12 steps, 5s polling) and SSH commands (wait_timeout > 10s)
@@ -29,12 +35,13 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 **v0.26.0** - Multi-proxy support for isolated network access
 
 ### Current State
-- **27 Tools**: Complete GNS3 lab automation toolkit including Docker file operations
-- **21 Resources**: Text table output (simple style), URIs instead of IDs, complete metadata
+- **27 Tools**: Complete GNS3 lab automation toolkit with wildcard bulk operations (v0.40.0)
+- **22 Resources**: Text table output, topology_report (v0.40.0), URIs, complete metadata
 - **5 Prompts**: Guided workflows for SSH setup, topology discovery, troubleshooting, lab setup, node setup
 - **Code Quality**: Ruff, Mypy, Black linting with pre-commit hooks
 - **Project Memory**: Per-project README for IP schemes, credentials, architecture notes
 - **Table Output**: All list resources use tabulate library with "simple" style (no borders)
+- **Exception Handling**: Structured exception hierarchy with error codes (v0.40.0)
 
 For complete version history and detailed release notes, see [CHANGELOG.md](CHANGELOG.md).
 

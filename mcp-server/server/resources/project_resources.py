@@ -611,3 +611,244 @@ async def get_project_readme_impl(app: "AppContext", project_id: str):
             "project_id": project_id,
             "details": str(e)
         }, indent=2)
+
+
+async def get_topology_report_impl(app: "AppContext", project_id: str):
+    """Resource handler for projects://{id}/topology_report
+
+    v0.40.0: Unified topology report with nodes, links, and statistics.
+
+    Returns structured report showing:
+    - Project information
+    - Node statistics (types, statuses)
+    - Link statistics
+    - Table format for readability
+    - JSON format for parsing
+
+    Resource URI: projects://{project_id}/topology_report
+    """
+    try:
+        import asyncio
+
+        # Verify project exists and fetch all data concurrently
+        projects_task = app.gns3.get_projects()
+        nodes_task = app.gns3.get_nodes(project_id)
+        links_task = app.gns3.get_links(project_id)
+
+        projects, nodes, links = await asyncio.gather(
+            projects_task, nodes_task, links_task
+        )
+
+        project = next((p for p in projects if p['project_id'] == project_id), None)
+
+        if not project:
+            return json.dumps({
+                "error": "Project not found",
+                "project_id": project_id
+            }, indent=2)
+
+        # Calculate statistics
+        total_nodes = len(nodes)
+        total_links = len(links)
+
+        # Count nodes by status
+        status_counts = {}
+        for node in nodes:
+            status = node.get('status', 'unknown')
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        # Count nodes by type
+        type_counts = {}
+        for node in nodes:
+            node_type = node.get('node_type', 'unknown')
+            type_counts[node_type] = type_counts.get(node_type, 0) + 1
+
+        # Build node connection map
+        node_connections = {node['name']: [] for node in nodes}
+        node_lookup = {n['node_id']: n for n in nodes}
+
+        for link in links:
+            nodes_data = link.get('nodes', [])
+            if len(nodes_data) >= 2:
+                node_a_id = nodes_data[0].get('node_id')
+                node_b_id = nodes_data[1].get('node_id')
+
+                node_a = node_lookup.get(node_a_id)
+                node_b = node_lookup.get(node_b_id)
+
+                if node_a and node_b:
+                    # Get port info
+                    port_a_num = nodes_data[0].get('port_number', 0)
+                    port_b_num = nodes_data[1].get('port_number', 0)
+                    adapter_a_num = nodes_data[0].get('adapter_number', 0)
+                    adapter_b_num = nodes_data[1].get('adapter_number', 0)
+
+                    # Find port names
+                    port_a_name = f"eth{adapter_a_num}/{port_a_num}"
+                    port_b_name = f"eth{adapter_b_num}/{port_b_num}"
+
+                    if node_a.get('ports'):
+                        for port in node_a['ports']:
+                            if (port.get('adapter_number') == adapter_a_num and
+                                port.get('port_number') == port_a_num):
+                                port_a_name = port.get('name', port_a_name)
+                                break
+
+                    if node_b.get('ports'):
+                        for port in node_b['ports']:
+                            if (port.get('adapter_number') == adapter_b_num and
+                                port.get('port_number') == port_b_num):
+                                port_b_name = port.get('name', port_b_name)
+                                break
+
+                    # Add connection records
+                    node_connections[node_a['name']].append({
+                        "port": port_a_name,
+                        "dest_node": node_b['name'],
+                        "dest_port": port_b_name
+                    })
+                    node_connections[node_b['name']].append({
+                        "port": port_b_name,
+                        "dest_node": node_a['name'],
+                        "dest_port": port_a_name
+                    })
+
+        # Build table output
+        report_lines = []
+        report_lines.append(f"TOPOLOGY REPORT - {project['name']}")
+        report_lines.append("=" * 80)
+        report_lines.append("")
+
+        # Statistics section
+        report_lines.append(f"PROJECT: {project['name']}")
+        report_lines.append(f"Status: {project.get('status', 'unknown')}")
+        report_lines.append(f"Total Nodes: {total_nodes}")
+        report_lines.append(f"Total Links: {total_links}")
+        report_lines.append("")
+
+        # Status breakdown
+        if status_counts:
+            report_lines.append("NODE STATUS:")
+            for status, count in sorted(status_counts.items()):
+                report_lines.append(f"  {status}: {count}")
+            report_lines.append("")
+
+        # Type breakdown
+        if type_counts:
+            report_lines.append("NODE TYPES:")
+            for node_type, count in sorted(type_counts.items()):
+                report_lines.append(f"  {node_type}: {count}")
+            report_lines.append("")
+
+        # Nodes table
+        report_lines.append("NODES")
+        report_lines.append("-" * 80)
+        node_table_data = []
+        for node in sorted(nodes, key=lambda n: n['name']):
+            conn_count = len(node_connections[node['name']])
+            node_table_data.append([
+                node['name'],
+                node.get('node_type', 'unknown'),
+                node.get('status', 'unknown'),
+                f"{conn_count} links"
+            ])
+
+        if node_table_data:
+            report_lines.append(tabulate(
+                node_table_data,
+                headers=["Node Name", "Type", "Status", "Connections"],
+                tablefmt="simple"
+            ))
+        else:
+            report_lines.append("No nodes in project")
+        report_lines.append("")
+
+        # Links table
+        report_lines.append("LINKS")
+        report_lines.append("-" * 80)
+        link_table_data = []
+        for link in links:
+            nodes_data = link.get('nodes', [])
+            if len(nodes_data) >= 2:
+                node_a_id = nodes_data[0].get('node_id')
+                node_b_id = nodes_data[1].get('node_id')
+                node_a = node_lookup.get(node_a_id)
+                node_b = node_lookup.get(node_b_id)
+
+                if node_a and node_b:
+                    port_a_num = nodes_data[0].get('port_number', 0)
+                    port_b_num = nodes_data[1].get('port_number', 0)
+                    adapter_a_num = nodes_data[0].get('adapter_number', 0)
+                    adapter_b_num = nodes_data[1].get('adapter_number', 0)
+
+                    port_a_name = f"eth{adapter_a_num}/{port_a_num}"
+                    port_b_name = f"eth{adapter_b_num}/{port_b_num}"
+
+                    link_table_data.append([
+                        node_a['name'],
+                        port_a_name,
+                        "→",
+                        node_b['name'],
+                        port_b_name
+                    ])
+
+        if link_table_data:
+            report_lines.append(tabulate(
+                link_table_data,
+                headers=["Source", "Port", "", "Destination", "Port"],
+                tablefmt="simple"
+            ))
+        else:
+            report_lines.append("No links in project")
+        report_lines.append("")
+
+        # Build JSON output
+        json_data = {
+            "project": {
+                "name": project.get('name'),
+                "project_id": project_id,
+                "status": project.get('status'),
+                "path": project.get('path')
+            },
+            "statistics": {
+                "total_nodes": total_nodes,
+                "total_links": total_links,
+                "status_breakdown": status_counts,
+                "type_breakdown": type_counts
+            },
+            "nodes": [
+                {
+                    "name": node['name'],
+                    "node_id": node['node_id'],
+                    "type": node.get('node_type'),
+                    "status": node.get('status'),
+                    "connections": node_connections[node['name']]
+                }
+                for node in sorted(nodes, key=lambda n: n['name'])
+            ],
+            "links": [
+                {
+                    "link_id": link['link_id'],
+                    "link_type": link.get('link_type', 'ethernet'),
+                    "source_node": node_lookup[link['nodes'][0]['node_id']]['name'] if len(link.get('nodes', [])) >= 1 and link['nodes'][0]['node_id'] in node_lookup else 'unknown',
+                    "dest_node": node_lookup[link['nodes'][1]['node_id']]['name'] if len(link.get('nodes', [])) >= 2 and link['nodes'][1]['node_id'] in node_lookup else 'unknown'
+                }
+                for link in links
+                if len(link.get('nodes', [])) >= 2
+            ]
+        }
+
+        # Combine table and JSON
+        table_output = "\n".join(report_lines)
+        report_lines.append("JSON DATA:")
+        report_lines.append("-" * 80)
+        report_lines.append(json.dumps(json_data, indent=2))
+
+        return "\n".join(report_lines)
+
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to generate topology report",
+            "project_id": project_id,
+            "details": str(e)
+        }, indent=2)

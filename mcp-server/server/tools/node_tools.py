@@ -6,7 +6,9 @@ import asyncio
 import json
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Dict, Optional
+import re
+import time
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import httpx
 from error_utils import (
@@ -28,6 +30,152 @@ logger = logging.getLogger(__name__)
 # SSH Proxy API URL (defaults to GNS3 host IP)
 _gns3_host = os.getenv("GNS3_HOST", "localhost")
 SSH_PROXY_URL = os.getenv("SSH_PROXY_URL", f"http://{_gns3_host}:8022")
+
+
+# v0.40.0: Wildcard and bulk operations support
+
+class BatchOperationResult:
+    """Track results of batch operations with per-item success/failure/skip tracking.
+
+    Used for bulk node operations to provide detailed feedback on each item.
+    """
+
+    def __init__(self, operation_name: str):
+        self.operation_name = operation_name
+        self.succeeded: List[Dict[str, Any]] = []
+        self.failed: List[Dict[str, Any]] = []
+        self.skipped: List[Dict[str, Any]] = []
+        self.warnings: List[str] = []
+        self.start_time = time.time()
+
+    def add_success(self, item: str, details: Optional[Dict] = None):
+        """Record successful operation on item."""
+        self.succeeded.append({"item": item, "details": details or {}})
+
+    def add_failure(self, item: str, error: str, suggestion: Optional[str] = None):
+        """Record failed operation on item."""
+        self.failed.append({
+            "item": item,
+            "error": error,
+            "suggestion": suggestion or "Check item configuration and try again"
+        })
+
+    def add_skip(self, item: str, reason: str):
+        """Record skipped item."""
+        self.skipped.append({"item": item, "reason": reason})
+
+    def add_warning(self, warning: str):
+        """Add warning message."""
+        self.warnings.append(warning)
+
+    def to_json(self) -> str:
+        """Convert to JSON string with summary and details."""
+        elapsed = time.time() - self.start_time
+        total = len(self.succeeded) + len(self.failed) + len(self.skipped)
+
+        # Determine overall status
+        if not self.failed and not self.skipped:
+            status = "success"
+        elif self.succeeded and self.failed:
+            status = "partial_success"
+        elif not self.succeeded and self.failed:
+            status = "failure"
+        else:
+            status = "success"  # Only skipped items
+
+        return json.dumps({
+            "operation": self.operation_name,
+            "status": status,
+            "summary": {
+                "total_items": total,
+                "succeeded": len(self.succeeded),
+                "failed": len(self.failed),
+                "skipped": len(self.skipped),
+                "elapsed_seconds": round(elapsed, 2)
+            },
+            "succeeded_items": self.succeeded,
+            "failed_items": self.failed,
+            "skipped_items": self.skipped,
+            "warnings": self.warnings
+        }, indent=2)
+
+
+def match_node_pattern(pattern: str, node_name: str) -> bool:
+    """Check if node name matches wildcard pattern.
+
+    Supports:
+    - Exact match: "Router1"
+    - Wildcard all: "*"
+    - Prefix match: "Router*" (matches Router1, Router2, RouterCore)
+    - Suffix match: "*-Core" (matches Router-Core, Switch-Core)
+    - Contains match: "*Router*" (matches MyRouter1, TestRouter)
+    - Character class: "R[123]" (matches R1, R2, R3)
+
+    Args:
+        pattern: Wildcard pattern
+        node_name: Node name to test
+
+    Returns:
+        True if node name matches pattern
+    """
+    # Wildcard all
+    if pattern == "*":
+        return True
+
+    # Convert shell-style wildcard to regex
+    # Escape special regex characters except * and []
+    regex_pattern = re.escape(pattern)
+    # Replace escaped \* with .*
+    regex_pattern = regex_pattern.replace(r'\*', '.*')
+    # Unescape [] for character classes
+    regex_pattern = regex_pattern.replace(r'\[', '[').replace(r'\]', ']')
+
+    # Match full string
+    regex_pattern = f'^{regex_pattern}$'
+
+    return bool(re.match(regex_pattern, node_name, re.IGNORECASE))
+
+
+def resolve_node_names(node_spec: str, all_nodes: List[Dict[str, Any]]) -> List[str]:
+    """Resolve node specification to list of node names.
+
+    Supports:
+    - Single node: "Router1"
+    - Wildcard all: "*"
+    - Pattern match: "Router*", "*-Core", "R[123]"
+    - JSON array: '["Router1", "Router2", "Switch1"]'
+
+    Args:
+        node_spec: Node specification (name, pattern, or JSON array)
+        all_nodes: List of all nodes in project
+
+    Returns:
+        List of matching node names (empty if no matches)
+    """
+    # Try parsing as JSON array
+    try:
+        parsed = json.loads(node_spec)
+        if isinstance(parsed, list):
+            # Return only nodes that exist
+            all_node_names = {n['name'] for n in all_nodes}
+            return [name for name in parsed if name in all_node_names]
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Wildcard or pattern matching
+    if '*' in node_spec or '[' in node_spec:
+        matching_nodes = [
+            n['name'] for n in all_nodes
+            if match_node_pattern(node_spec, n['name'])
+        ]
+        return matching_nodes
+
+    # Single node name (exact match, case-sensitive)
+    if any(n['name'] == node_spec for n in all_nodes):
+        return [node_spec]
+
+    # No matches
+    return []
 
 
 async def list_nodes_impl(app: "AppContext") -> str:
@@ -130,65 +278,34 @@ async def get_node_details_impl(app: "AppContext", node_name: str) -> str:
         )
 
 
-async def set_node_impl(app: "AppContext",
-                        node_name: str,
-                        action: Optional[str] = None,
-                        x: Optional[int] = None,
-                        y: Optional[int] = None,
-                        z: Optional[int] = None,
-                        locked: Optional[bool] = None,
-                        ports: Optional[int] = None,
-                        name: Optional[str] = None,
-                        ram: Optional[int] = None,
-                        cpus: Optional[int] = None,
-                        hdd_disk_image: Optional[str] = None,
-                        adapters: Optional[int] = None,
-                        console_type: Optional[str] = None,
-                        ctx: Optional[Context] = None) -> str:
-    """Configure node properties and/or control node state
+async def _set_single_node_impl(
+        app: "AppContext",
+        node: Dict[str, Any],
+        action: Optional[str] = None,
+        x: Optional[int] = None,
+        y: Optional[int] = None,
+        z: Optional[int] = None,
+        locked: Optional[bool] = None,
+        ports: Optional[int] = None,
+        name: Optional[str] = None,
+        ram: Optional[int] = None,
+        cpus: Optional[int] = None,
+        hdd_disk_image: Optional[str] = None,
+        adapters: Optional[int] = None,
+        console_type: Optional[str] = None,
+        ctx: Optional[Context] = None
+) -> List[str]:
+    """Perform set_node operation on a single node.
 
-    Validation Rules:
-    - name parameter requires node to be stopped (except for stateless devices)
-    - Stateless devices can be renamed while running: ethernet_switch, ethernet_hub,
-      atm_switch, frame_relay_switch, cloud, nat
-    - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU nodes only
-    - ports parameter applies to ethernet_switch nodes only
-    - action values: start, stop, suspend, reload, restart
-    - restart action: stops node (with retry logic), waits for confirmed stop, then starts
-
-    Args:
-        node_name: Name of the node to modify
-        action: Action to perform (start/stop/suspend/reload/restart)
-        x: X coordinate (top-left corner of node icon)
-        y: Y coordinate (top-left corner of node icon)
-        z: Z-order (layer) for overlapping nodes
-        locked: Lock node position (prevents accidental moves in GUI)
-        ports: Number of ports (ethernet_switch nodes only)
-        name: New name for the node (requires stop for QEMU/Docker, not for stateless devices)
-        ram: RAM in MB (QEMU nodes only)
-        cpus: Number of CPUs (QEMU nodes only)
-        hdd_disk_image: Path to HDD disk image (QEMU nodes only)
-        adapters: Number of network adapters (QEMU nodes only)
-        console_type: Console type - telnet, vnc, spice, etc.
+    Internal helper function extracted from set_node_impl to support bulk operations.
 
     Returns:
-        Status message describing what was done
+        List of result messages (not JSON)
+
+    Raises:
+        Exception on failures (caught by caller)
     """
-    if not app.current_project_id:
-        return project_not_found_error()
-
-    # Find node
-    nodes = await app.gns3.get_nodes(app.current_project_id)
-    node = next((n for n in nodes if n['name'] == node_name), None)
-
-    if not node:
-        available_nodes = [n['name'] for n in nodes]
-        return node_not_found_error(
-            node_name=node_name,
-            project_id=app.current_project_id,
-            available_nodes=available_nodes
-        )
-
+    node_name = node['name']
     node_id = node['node_id']
     node_status = node.get('status', 'unknown')
     node_type = node.get('node_type', '')
@@ -208,14 +325,9 @@ async def set_node_impl(app: "AppContext",
             requires_stopped.append('name')
 
     if requires_stopped and node_status != 'stopped':
-        properties_str = ', '.join(requires_stopped)
-        return node_running_error(
-            node_name=node_name,
-            operation=f"change properties: {properties_str}"
-        )
+        raise ValueError(f"Node must be stopped to change: {', '.join(requires_stopped)}")
 
     # Handle property updates
-    # Separate top-level properties from hardware properties
     update_payload = {}
     hardware_props = {}
 
@@ -231,7 +343,7 @@ async def set_node_impl(app: "AppContext",
     if name is not None:
         update_payload['name'] = name
 
-    # Hardware properties (nested in 'properties' object for QEMU nodes)
+    # Hardware properties
     if ram is not None:
         hardware_props['ram'] = ram
     if cpus is not None:
@@ -258,147 +370,266 @@ async def set_node_impl(app: "AppContext",
     if hardware_props and node['node_type'] == 'qemu':
         update_payload['properties'] = hardware_props
     elif hardware_props:
-        # For non-QEMU nodes, merge directly
         update_payload.update(hardware_props)
 
     if update_payload:
-        try:
-            await app.gns3.update_node(app.current_project_id, node_id, update_payload)
+        await app.gns3.update_node(app.current_project_id, node_id, update_payload)
 
-            # Build change summary
-            changes = []
-            if name is not None:
-                changes.append(f"name={name}")
-            if x is not None or y is not None or z is not None:
-                pos_parts = []
-                if x is not None: pos_parts.append(f"x={x}")
-                if y is not None: pos_parts.append(f"y={y}")
-                if z is not None: pos_parts.append(f"z={z}")
-                changes.append(", ".join(pos_parts))
-            if locked is not None:
-                changes.append(f"locked={locked}")
-            for k, v in hardware_props.items():
-                if k != 'ports_mapping':
-                    changes.append(f"{k}={v}")
-            if 'ports_mapping' in hardware_props:
-                changes.append(f"ports={ports}")
+        # Build change summary
+        changes = []
+        if name is not None:
+            changes.append(f"name={name}")
+        if x is not None or y is not None or z is not None:
+            pos_parts = []
+            if x is not None: pos_parts.append(f"x={x}")
+            if y is not None: pos_parts.append(f"y={y}")
+            if z is not None: pos_parts.append(f"z={z}")
+            changes.append(", ".join(pos_parts))
+        if locked is not None:
+            changes.append(f"locked={locked}")
+        for k, v in hardware_props.items():
+            if k != 'ports_mapping':
+                changes.append(f"{k}={v}")
+        if 'ports_mapping' in hardware_props:
+            changes.append(f"ports={ports}")
 
-            results.append(f"Updated: {', '.join(changes)}")
-        except Exception as e:
-            return create_error_response(
-                error=f"Failed to update properties for node '{node_name}'",
-                error_code=ErrorCode.OPERATION_FAILED.value,
-                details=str(e),
-                suggested_action="Check that the property values are valid for this node type and GNS3 server is accessible",
-                context={"node_name": node_name, "update_payload": update_payload, "exception": str(e)}
-            )
+        results.append(f"Updated: {', '.join(changes)}")
 
     # Handle action
     if action:
-        action = action.lower()
-        try:
-            if action == 'start':
-                # Send start command
-                await app.gns3.start_node(app.current_project_id, node_id)
+        action_lower = action.lower()
 
-                # Poll for startup completion with progress notifications (v0.39.0)
-                max_steps = 12  # 60 seconds / 5 seconds per check
-                for step in range(max_steps):
-                    # Report progress if context available
-                    if ctx:
-                        await ctx.report_progress(
-                            progress=step,
-                            total=max_steps,
-                            message=f"Starting node... (step {step + 1}/{max_steps})"
-                        )
+        if action_lower == 'start':
+            await app.gns3.start_node(app.current_project_id, node_id)
 
-                    # Check current node status
-                    nodes = await app.gns3.get_nodes(app.current_project_id)
-                    current_node = next((n for n in nodes if n['node_id'] == node_id), None)
+            # Poll for startup completion with progress notifications (v0.39.0)
+            max_steps = 12
+            for step in range(max_steps):
+                if ctx:
+                    await ctx.report_progress(
+                        progress=step,
+                        total=max_steps,
+                        message=f"Starting {node_name}... (step {step + 1}/{max_steps})"
+                    )
 
-                    if current_node:
-                        status = current_node.get('status', 'unknown')
-                        if status == 'started':
-                            # Report completion
-                            if ctx:
-                                await ctx.report_progress(
-                                    progress=max_steps,
-                                    total=max_steps,
-                                    message="Node started successfully"
-                                )
-                            results.append(f"Started {node_name} (ready after {(step + 1) * 5}s)")
-                            break
+                nodes = await app.gns3.get_nodes(app.current_project_id)
+                current_node = next((n for n in nodes if n['node_id'] == node_id), None)
 
-                    # Wait before next check (except on last iteration)
-                    if step < max_steps - 1:
-                        await asyncio.sleep(5)
-                else:
-                    # Reached max steps without "started" status
+                if current_node and current_node.get('status') == 'started':
                     if ctx:
                         await ctx.report_progress(
                             progress=max_steps,
                             total=max_steps,
-                            message="Node start command sent (status pending)"
+                            message=f"{node_name} started successfully"
                         )
-                    results.append(f"Started {node_name} (startup in progress, may need more time)")
+                    results.append(f"Started (ready after {(step + 1) * 5}s)")
+                    break
 
-            elif action == 'stop':
-                await app.gns3.stop_node(app.current_project_id, node_id)
-                results.append(f"Stopped {node_name}")
-
-            elif action == 'suspend':
-                await app.gns3.suspend_node(app.current_project_id, node_id)
-                results.append(f"Suspended {node_name}")
-
-            elif action == 'reload':
-                await app.gns3.reload_node(app.current_project_id, node_id)
-                results.append(f"Reloaded {node_name}")
-
-            elif action == 'restart':
-                # Stop node
-                await app.gns3.stop_node(app.current_project_id, node_id)
-                results.append(f"Stopped {node_name}")
-
-                # Wait for node to stop with retries
-                stopped = False
-                for attempt in range(3):
+                if step < max_steps - 1:
                     await asyncio.sleep(5)
-                    nodes = await app.gns3.get_nodes(app.current_project_id)
-                    current_node = next((n for n in nodes if n['node_id'] == node_id), None)
-                    if current_node and current_node['status'] == 'stopped':
-                        stopped = True
-                        break
-                    results.append(f"Retry {attempt + 1}/3: Waiting for stop...")
-
-                if not stopped:
-                    results.append("Warning: Node may not have stopped completely")
-
-                # Start node
-                await app.gns3.start_node(app.current_project_id, node_id)
-                results.append(f"Started {node_name}")
-
             else:
-                return validation_error(
-                    message=f"Invalid action '{action}'",
-                    parameter="action",
-                    value=action,
-                    valid_values=["start", "stop", "suspend", "reload", "restart"]
-                )
+                results.append("Started (startup in progress)")
 
-        except Exception as e:
-            return create_error_response(
-                error=f"Failed to execute action '{action}' on node '{node_name}'",
-                error_code=ErrorCode.OPERATION_FAILED.value,
-                details=str(e),
-                suggested_action="Check node state and GNS3 server logs for details",
-                context={"node_name": node_name, "action": action, "exception": str(e)}
+        elif action_lower == 'stop':
+            await app.gns3.stop_node(app.current_project_id, node_id)
+            results.append("Stopped")
+
+        elif action_lower == 'suspend':
+            await app.gns3.suspend_node(app.current_project_id, node_id)
+            results.append("Suspended")
+
+        elif action_lower == 'reload':
+            await app.gns3.reload_node(app.current_project_id, node_id)
+            results.append("Reloaded")
+
+        elif action_lower == 'restart':
+            await app.gns3.stop_node(app.current_project_id, node_id)
+            results.append("Stopped")
+
+            # Wait for stop confirmation
+            stopped = False
+            for attempt in range(3):
+                await asyncio.sleep(5)
+                nodes = await app.gns3.get_nodes(app.current_project_id)
+                current_node = next((n for n in nodes if n['node_id'] == node_id), None)
+                if current_node and current_node['status'] == 'stopped':
+                    stopped = True
+                    break
+
+            if not stopped:
+                results.append("Warning: Node may not have stopped completely")
+
+            await app.gns3.start_node(app.current_project_id, node_id)
+            results.append("Started")
+
+        else:
+            raise ValueError(f"Invalid action '{action}'. Valid: start, stop, suspend, reload, restart")
+
+    return results
+
+
+async def set_node_impl(app: "AppContext",
+                        node_name: str,
+                        action: Optional[str] = None,
+                        x: Optional[int] = None,
+                        y: Optional[int] = None,
+                        z: Optional[int] = None,
+                        locked: Optional[bool] = None,
+                        ports: Optional[int] = None,
+                        name: Optional[str] = None,
+                        ram: Optional[int] = None,
+                        cpus: Optional[int] = None,
+                        hdd_disk_image: Optional[str] = None,
+                        adapters: Optional[int] = None,
+                        console_type: Optional[str] = None,
+                        ctx: Optional[Context] = None,
+                        parallel: bool = True) -> str:
+    """Configure node properties and/or control node state.
+
+    v0.40.0: Enhanced with wildcard and bulk operation support.
+
+    Wildcard Patterns:
+    - Single node: "Router1"
+    - All nodes: "*"
+    - Prefix match: "Router*" (matches Router1, Router2, RouterCore)
+    - Suffix match: "*-Core" (matches Router-Core, Switch-Core)
+    - Character class: "R[123]" (matches R1, R2, R3)
+    - JSON array: '["Router1", "Router2", "Switch1"]'
+
+    Validation Rules:
+    - name parameter requires node to be stopped (except for stateless devices)
+    - Stateless devices can be renamed while running: ethernet_switch, ethernet_hub,
+      atm_switch, frame_relay_switch, cloud, nat
+    - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU nodes only
+    - ports parameter applies to ethernet_switch nodes only
+    - action values: start, stop, suspend, reload, restart
+    - restart action: stops node (with retry logic), waits for confirmed stop, then starts
+
+    Args:
+        node_name: Node name, wildcard pattern, or JSON array of names
+        action: Action to perform (start/stop/suspend/reload/restart)
+        x: X coordinate (top-left corner of node icon)
+        y: Y coordinate (top-left corner of node icon)
+        z: Z-order (layer) for overlapping nodes
+        locked: Lock node position (prevents accidental moves in GUI)
+        ports: Number of ports (ethernet_switch nodes only)
+        name: New name for the node (requires stop for QEMU/Docker)
+        ram: RAM in MB (QEMU nodes only)
+        cpus: Number of CPUs (QEMU nodes only)
+        hdd_disk_image: Path to HDD disk image (QEMU nodes only)
+        adapters: Number of network adapters (QEMU nodes only)
+        console_type: Console type - telnet, vnc, spice, etc.
+        parallel: Execute operations concurrently (default: True for start/stop actions)
+
+    Returns:
+        For single node: Status message (backward compatible)
+        For multiple nodes: BatchOperationResult JSON with per-node results
+    """
+    if not app.current_project_id:
+        return project_not_found_error()
+
+    # Get all nodes
+    nodes = await app.gns3.get_nodes(app.current_project_id)
+
+    # Resolve node names
+    resolved_names = resolve_node_names(node_name, nodes)
+
+    # Handle no matches
+    if not resolved_names:
+        available_nodes = [n['name'] for n in nodes]
+        return node_not_found_error(
+            node_name=node_name,
+            project_id=app.current_project_id,
+            available_nodes=available_nodes
+        )
+
+    # Single node - backward compatible response
+    if len(resolved_names) == 1 and not ('*' in node_name or '[' in node_name):
+        node = next((n for n in nodes if n['name'] == resolved_names[0]), None)
+        if not node:
+            return node_not_found_error(
+                node_name=resolved_names[0],
+                project_id=app.current_project_id,
+                available_nodes=[n['name'] for n in nodes]
             )
 
-    if not results:
-        return json.dumps({"message": f"No changes made to {node_name}"}, indent=2)
+        try:
+            results = await _set_single_node_impl(
+                app, node, action, x, y, z, locked, ports,
+                name, ram, cpus, hdd_disk_image, adapters, console_type, ctx
+            )
 
-    # Return success with list of changes
-    return json.dumps({"message": "Node updated successfully", "changes": results}, indent=2)
+            if not results:
+                return json.dumps({"message": f"No changes made to {resolved_names[0]}"}, indent=2)
+
+            return json.dumps({"message": "Node updated successfully", "changes": results}, indent=2)
+
+        except ValueError as e:
+            return validation_error(
+                message=str(e),
+                parameter="node_state"
+            )
+        except Exception as e:
+            return create_error_response(
+                error=f"Failed to update node '{resolved_names[0]}'",
+                error_code=ErrorCode.OPERATION_FAILED.value,
+                details=str(e),
+                suggested_action="Check node state and GNS3 server logs",
+                context={"node_name": resolved_names[0], "exception": str(e)}
+            )
+
+    # Multiple nodes - bulk operation with BatchOperationResult
+    result = BatchOperationResult(f"set_node_properties ({action or 'update'})")
+
+    # Filter nodes to process
+    nodes_to_process = [n for n in nodes if n['name'] in resolved_names]
+
+    # Determine if parallel execution makes sense
+    use_parallel = parallel and action and action.lower() in ['start', 'stop', 'suspend']
+
+    if use_parallel:
+        # Parallel execution
+        tasks = []
+        for node in nodes_to_process:
+            tasks.append(_set_single_node_impl(
+                app, node, action, x, y, z, locked, ports,
+                name, ram, cpus, hdd_disk_image, adapters, console_type, None  # No ctx for parallel
+            ))
+
+        results_list = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for node, res in zip(nodes_to_process, results_list):
+            if isinstance(res, Exception):
+                result.add_failure(
+                    node['name'],
+                    str(res),
+                    suggestion="Check node state and permissions"
+                )
+            else:
+                result.add_success(node['name'], {"changes": res})
+    else:
+        # Sequential execution
+        for node in nodes_to_process:
+            try:
+                node_results = await _set_single_node_impl(
+                    app, node, action, x, y, z, locked, ports,
+                    name, ram, cpus, hdd_disk_image, adapters, console_type, ctx
+                )
+                result.add_success(node['name'], {"changes": node_results})
+            except ValueError as e:
+                result.add_failure(
+                    node['name'],
+                    str(e),
+                    suggestion="Check validation requirements"
+                )
+            except Exception as e:
+                result.add_failure(
+                    node['name'],
+                    str(e),
+                    suggestion="Check GNS3 server logs"
+                )
+
+    return result.to_json()
 
 
 async def create_node_impl(app: "AppContext", template_name: str, x: int, y: int,
