@@ -85,6 +85,14 @@ except Exception as e:
     VERSION = f"{0}.{20}.{0}"
     print(f"Warning: Could not read version from manifest.json: {e}")
 
+# Read server instructions for AI guidance (v0.39.0)
+INSTRUCTIONS_PATH = Path(__file__).parent / "instructions.md"
+try:
+    SERVER_INSTRUCTIONS = INSTRUCTIONS_PATH.read_text(encoding="utf-8") if INSTRUCTIONS_PATH.exists() else None
+except Exception as e:
+    SERVER_INSTRUCTIONS = None
+    print(f"Warning: Could not read instructions.md: {e}")
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -316,10 +324,11 @@ async def validate_current_project(app: AppContext) -> Optional[str]:
         ).model_dump(), indent=2)
 
 
-# Create MCP server
+# Create MCP server (v0.39.0: Added instructions for AI guidance)
 mcp = FastMCP(
     "GNS3 Lab Controller",
-    lifespan=app_lifespan
+    lifespan=app_lifespan,
+    instructions=SERVER_INSTRUCTIONS
 )
 
 
@@ -2257,6 +2266,93 @@ async def ssh_batch(
 # #         Completion(value=ttype, label=ttype, description=desc)
 # #         for ttype, desc in matching
 # #     ]
+
+
+# ============================================================================
+# MCP Completions - Argument Auto-Complete (v0.39.0)
+# ============================================================================
+
+@mcp.completion()
+async def handle_completion(ctx: Context, ref: Any, argument: Any) -> List[str]:
+    """Provide argument completions for tools
+
+    Supports completion for:
+    - node_name: Node names from current project
+    - project_name: Available project names
+    - device_type: Supported device types for SSH
+    - template_name: Available templates
+    - drawing_type: Drawing object types
+    - mode: Console read modes
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    try:
+        argument_name = argument.name
+        argument_value = argument.value
+
+        # Node name completion
+        if argument_name == "node_name":
+            if not app.current_project_id:
+                return []
+
+            try:
+                nodes = await app.gns3.get_nodes(app.current_project_id)
+                names = [n["name"] for n in nodes]
+                return [n for n in names if n.lower().startswith(argument_value.lower())]
+            except Exception as e:
+                logger.warning(f"Node completion failed: {e}")
+                return []
+
+        # Project name completion
+        if argument_name == "project_name":
+            try:
+                projects = await app.gns3.get_projects()
+                names = [p["name"] for p in projects]
+                return [n for n in names if n.lower().startswith(argument_value.lower())]
+            except Exception as e:
+                logger.warning(f"Project completion failed: {e}")
+                return []
+
+        # Device type completion for SSH configuration
+        if argument_name == "device_type":
+            types = [
+                "cisco_ios", "cisco_nxos", "cisco_xe",
+                "arista_eos", "juniper_junos",
+                "mikrotik_routeros", "mikrotik_switchos",
+                "linux", "alpine"
+            ]
+            return [t for t in types if t.startswith(argument_value.lower())]
+
+        # Template name completion
+        if argument_name == "template_name":
+            try:
+                templates = await app.gns3.get_templates()
+                names = [t["name"] for t in templates]
+                return [n for n in names if n.lower().startswith(argument_value.lower())]
+            except Exception as e:
+                logger.warning(f"Template completion failed: {e}")
+                return []
+
+        # Drawing type completion
+        if argument_name == "drawing_type":
+            types = ["rectangle", "ellipse", "line", "text"]
+            return [t for t in types if t.startswith(argument_value.lower())]
+
+        # Console mode completion
+        if argument_name == "mode":
+            modes = ["diff", "last_page", "num_pages", "all"]
+            return [m for m in modes if m.startswith(argument_value.lower())]
+
+        # Action completion for set_node_properties
+        if argument_name == "action":
+            actions = ["start", "stop", "suspend", "reload", "restart"]
+            return [a for a in actions if a.startswith(argument_value.lower())]
+
+        return []
+
+    except Exception as e:
+        logger.error(f"Completion error: {e}")
+        return []
 
 
 if __name__ == "__main__":

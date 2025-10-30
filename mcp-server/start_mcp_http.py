@@ -76,7 +76,7 @@ if not username or not password:
     logger.error(f".env location: {env_path}")
     sys.exit(1)
 
-logger.info(f"GNS3 MCP HTTP Server v0.38.0")
+logger.info(f"GNS3 MCP HTTP Server v0.39.0")
 logger.info(f"Python: {sys.version.split()[0]} ({sys.executable})")
 logger.info(f"HTTP endpoint: http://{http_host}:{http_port}/mcp/")
 logger.info(f"GNS3 server: {gns3_host}:{gns3_port}")
