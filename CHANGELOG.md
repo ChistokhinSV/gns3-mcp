@@ -5,7 +5,7 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.39.0] - 2025-10-30 - Phase 1: MCP Protocol Enhancements
+## [0.39.0] - 2025-10-30 - Phase 1: MCP Protocol Enhancements (2/3 features)
 
 ### Added
 - **Server Instructions** (`instructions.md`): 170-line AI guidance document for GNS3-specific behaviors
@@ -16,15 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Device-specific behaviors (Cisco IOS, NX-OS, MikroTik, Juniper, Arista, Linux)
   - Long-running operation patterns and troubleshooting workflows
   - Loaded automatically by FastMCP and provided to AI agents
-- **Argument Completions**: Auto-complete for 7 argument types
-  - `node_name`: Node names from current project (filtered by prefix)
-  - `project_name`: Available project names (filtered by prefix)
-  - `device_type`: Supported device types for SSH (cisco_ios, cisco_nxos, etc.)
-  - `template_name`: Available node templates (filtered by prefix)
-  - `drawing_type`: Drawing object types (rectangle, ellipse, line, text)
-  - `mode`: Console read modes (diff, last_page, all, num_pages)
-  - `action`: Node actions (start, stop, suspend, reload, restart)
-  - Improves user experience with context-aware suggestions
 - **Progress Notifications**: Real-time progress updates for long-running operations
   - **Node Start Progress**: Poll node status every 5 seconds (12 steps over 60s max)
     - Reports progress: "Starting node... (step X/12)"
@@ -41,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **FastMCP Server** (`main.py`):
   - Line 88-94: Load `instructions.md` for AI guidance
   - Line 331: Pass instructions to FastMCP constructor
-  - Lines 2275-2355: Argument completion handler with 7 completion types
+  - Lines 973, 1062, 1677, 1873: Enhanced parameter descriptions with validation hints for key tools
   - Line 998-1002: Pass Context to `set_node_impl()` for progress notifications
   - Lines 2025-2029: Pass Context to SSH impl functions for progress
 - **Node Tools** (`tools/node_tools.py`):
@@ -63,10 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Clarified that progress is available for node start and SSH commands only
 
 ### Technical Details
-- **MCP Protocol Compliance**: Implements Phase 1 MCP protocol best practices
+- **MCP Protocol Compliance**: Implements Phase 1 MCP protocol best practices (2 of 3 features)
   - Server instructions provide context-specific AI guidance
-  - Argument completions improve user experience with suggestions
   - Progress notifications give feedback on long-running operations
+  - Enhanced parameter descriptions provide validation hints as alternative to completions
 - **Architecture**:
   - Progress notifications require Context object from FastMCP requests
   - Background tasks (like authentication) cannot send progress (no request context)
@@ -74,11 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Performance**:
   - Node start polling adds minimal overhead (5s intervals, early exit on success)
   - SSH progress is start/end only (no intermediate polling due to proxy architecture)
-  - Argument completions cache node/project lists from AppContext
 
 ### Files Modified
 - `mcp-server/server/instructions.md` (NEW): 170-line AI guidance document
-- `mcp-server/server/main.py`: Instructions loading, completions handler, Context passing
+- `mcp-server/server/main.py`: Instructions loading, enhanced parameter descriptions, Context passing
 - `mcp-server/server/tools/node_tools.py`: Context parameter, node start progress polling
 - `mcp-server/server/tools/ssh_tools.py`: Context parameter, SSH command progress
 - `mcp-server/manifest.json`: Version 0.39.0
@@ -86,6 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CHANGELOG.md`: This entry
 
 ### Known Limitations
+- **Argument Completions**: Not available in FastMCP Python
+  - FastMCP TypeScript has this feature, Python version does not
+  - GitHub PR #1902 was rejected due to architectural concerns
+  - Issue #1670 proposes implementation but not yet merged
+  - Alternative: Enhanced parameter descriptions provide validation hints
+  - Example: `action` param now shows: "Node action: 'start' (boot node), 'stop' (shutdown)..."
+  - Future: Can be added when FastMCP Python adds official support
 - **SSH Progress**: Only start/end notifications (no intermediate steps)
   - SSH proxy handles command execution internally
   - Future versions could poll job status for fine-grained progress
@@ -101,7 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Progress notifications automatically available when using:
   - `set_node_properties(node_name, action="start")`
   - `execute_ssh_command(node_name, command, wait_timeout > 10)`
-- Argument completions work automatically in supported clients
+- Enhanced parameter descriptions provide guidance on valid values
 - Server instructions automatically loaded and used by AI agents
 
 ## [0.37.0] - 2025-10-29 - Windows Service Reliability & Code Quality

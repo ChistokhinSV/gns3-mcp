@@ -970,7 +970,7 @@ async def close_project(ctx: Context) -> str:
 async def set_node(
     ctx: Context,
     node_name: Annotated[str, "Name of the node to modify"],
-    action: Annotated[str | None, "Action: start/stop/suspend/reload/restart"] = None,
+    action: Annotated[str | None, "Node action: 'start' (boot node), 'stop' (shutdown), 'suspend' (pause), 'reload' (reboot), 'restart' (stop then start)"] = None,
     x: Annotated[int | None, "X coordinate (top-left corner of node icon)"] = None,
     y: Annotated[int | None, "Y coordinate (top-left corner of node icon)"] = None,
     z: Annotated[int | None, "Z-order layer for overlapping nodes"] = None,
@@ -1059,7 +1059,7 @@ async def console_send(
 async def console_read(
     ctx: Context,
     node_name: Annotated[str, "Name of the node"],
-    mode: Annotated[str, "Output mode: diff/last_page/num_pages/all"] = "diff",
+    mode: Annotated[str, "Read mode: 'diff' (only new output since last read), 'last_page' (current screen/prompt), 'num_pages' (paginated view), 'all' (entire buffer)"] = "diff",
     pages: Annotated[int, "Number of pages (only with mode='num_pages')"] = 1,
     pattern: Annotated[str | None, "Regex pattern to filter output"] = None,
     case_insensitive: Annotated[bool, "Case-insensitive matching (grep -i)"] = False,
@@ -1674,7 +1674,7 @@ mcp.tool(
 )
 async def create_drawing(
     ctx: Context,
-    drawing_type: Annotated[str, "Type: 'rectangle', 'ellipse', 'line', or 'text'"],
+    drawing_type: Annotated[str, "Shape type: 'rectangle' (box), 'ellipse' (circle/oval), 'line' (connector), 'text' (label)"],
     x: Annotated[int, "X coordinate (start point for line, top-left for others)"],
     y: Annotated[int, "Y coordinate (start point for line, top-left for others)"],
     z: Annotated[int, "Z-order/layer (default: 0 for shapes, 1 for text)"] = 0,
@@ -1870,7 +1870,7 @@ from tools.ssh_tools import (
 async def ssh_configure(
     ctx: Context,
     node_name: Annotated[str, "GNS3 node name (e.g., 'Router1') OR '@' for local execution"],
-    device_dict: Annotated[dict, "Netmiko config: device_type, host, username, password"],
+    device_dict: Annotated[dict, "Netmiko config with device_type ('cisco_ios', 'cisco_nxos', 'arista_eos', 'juniper_junos', 'mikrotik_routeros', 'linux'), host, username, password"],
     persist: Annotated[bool, "Store credentials for reconnection"] = True,
     force: Annotated[bool, "Force recreation even if healthy session exists"] = False,
     proxy: Annotated[str, "Proxy to route through: 'host' (default) or proxy_id"] = "host",
@@ -2267,93 +2267,6 @@ async def ssh_batch(
 # #         Completion(value=ttype, label=ttype, description=desc)
 # #         for ttype, desc in matching
 # #     ]
-
-
-# ============================================================================
-# MCP Completions - Argument Auto-Complete (v0.39.0)
-# ============================================================================
-
-@mcp.completion()
-async def handle_completion(ctx: Context, ref: Any, argument: Any) -> List[str]:
-    """Provide argument completions for tools
-
-    Supports completion for:
-    - node_name: Node names from current project
-    - project_name: Available project names
-    - device_type: Supported device types for SSH
-    - template_name: Available templates
-    - drawing_type: Drawing object types
-    - mode: Console read modes
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    try:
-        argument_name = argument.name
-        argument_value = argument.value
-
-        # Node name completion
-        if argument_name == "node_name":
-            if not app.current_project_id:
-                return []
-
-            try:
-                nodes = await app.gns3.get_nodes(app.current_project_id)
-                names = [n["name"] for n in nodes]
-                return [n for n in names if n.lower().startswith(argument_value.lower())]
-            except Exception as e:
-                logger.warning(f"Node completion failed: {e}")
-                return []
-
-        # Project name completion
-        if argument_name == "project_name":
-            try:
-                projects = await app.gns3.get_projects()
-                names = [p["name"] for p in projects]
-                return [n for n in names if n.lower().startswith(argument_value.lower())]
-            except Exception as e:
-                logger.warning(f"Project completion failed: {e}")
-                return []
-
-        # Device type completion for SSH configuration
-        if argument_name == "device_type":
-            types = [
-                "cisco_ios", "cisco_nxos", "cisco_xe",
-                "arista_eos", "juniper_junos",
-                "mikrotik_routeros", "mikrotik_switchos",
-                "linux", "alpine"
-            ]
-            return [t for t in types if t.startswith(argument_value.lower())]
-
-        # Template name completion
-        if argument_name == "template_name":
-            try:
-                templates = await app.gns3.get_templates()
-                names = [t["name"] for t in templates]
-                return [n for n in names if n.lower().startswith(argument_value.lower())]
-            except Exception as e:
-                logger.warning(f"Template completion failed: {e}")
-                return []
-
-        # Drawing type completion
-        if argument_name == "drawing_type":
-            types = ["rectangle", "ellipse", "line", "text"]
-            return [t for t in types if t.startswith(argument_value.lower())]
-
-        # Console mode completion
-        if argument_name == "mode":
-            modes = ["diff", "last_page", "num_pages", "all"]
-            return [m for m in modes if m.startswith(argument_value.lower())]
-
-        # Action completion for set_node_properties
-        if argument_name == "action":
-            actions = ["start", "stop", "suspend", "reload", "restart"]
-            return [a for a in actions if a.startswith(argument_value.lower())]
-
-        return []
-
-    except Exception as e:
-        logger.error(f"Completion error: {e}")
-        return []
 
 
 if __name__ == "__main__":

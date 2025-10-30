@@ -10,12 +10,17 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.30.0
+## Current Version: v0.39.0
 
-**Latest Release:** v0.30.0 - Table Mode & Resource Improvements (BREAKING CHANGES)
+**Latest Release:** v0.39.0 - Phase 1 MCP Protocol Enhancements (2/3 features)
 
-### Recent Changes (v0.26.0 - v0.30.0)
+### Recent Changes (v0.26.0 - v0.39.0)
 
+**v0.39.0** - Phase 1: Server instructions (170-line AI guidance) + progress notifications (node start + SSH)
+- Server instructions loaded automatically, guide AI on GNS3-specific behaviors
+- Progress notifications for node start (12 steps, 5s polling) and SSH commands (wait_timeout > 10s)
+- Enhanced parameter descriptions with validation hints (alternative to completions)
+- Note: Argument completions not available (FastMCP Python limitation, TypeScript only)
 **v0.30.0** - **BREAKING**: Table mode output, URIs instead of IDs, proxy type field
 **v0.29.1** - Dual access patterns for sessions (path-based + query-param)
 **v0.29.0** - **BREAKING**: Resource URI scheme changes, complete metadata, linting infrastructure
