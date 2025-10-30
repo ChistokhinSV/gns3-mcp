@@ -47,65 +47,6 @@ Single command replaces 5+ installation scripts:
 
 See [CLAUDE.md](CLAUDE.md) for complete v0.38.0 release notes.
 
-## What's New in v0.12.0
-
-Version 0.12.0 introduces SSH automation capabilities for advanced network device management:
-
-### SSH Proxy Service
-- **Separate Container**: FastAPI service on port 8022 (Python 3.13-slim)
-- **Network Mode Host**: Direct access to GNS3 lab network
-- **Netmiko Integration**: Support for 200+ device types (Cisco, Juniper, Arista, MikroTik, etc.)
-- **Deployment**: Docker container deployed to GNS3 host via SSH
-
-### 9 New SSH Automation Tools
-- **configure_ssh()** - Establish SSH sessions to network devices
-- **ssh_send_command()** - Execute show commands with adaptive async
-- **ssh_send_config_set()** - Send configuration commands
-- **ssh_read_buffer()** - Read continuous command output
-- **ssh_get_history()** - Review command history with search
-- **ssh_get_command_output()** - Get specific job output by ID
-- **ssh_get_status()** - Check SSH session status
-- **ssh_cleanup_sessions()** - Clean orphaned sessions
-- **ssh_get_job_status()** - Poll async job completion
-
-### Key Features
-- **Dual Storage**: Continuous buffer + per-command job history
-- **Adaptive Async**: Commands poll then return job_id for long operations
-- **Error Detection**: Intelligent SSH error classification with helpful suggestions
-- **Long Commands**: Support 15+ minute operations (firmware upgrades, backups)
-- **Audit Trail**: Full command history with timestamps and execution times
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for SSH proxy deployment instructions.
-
-## What's New in v0.11.0
-
-Version 0.11.0 is a major code organization refactoring with comprehensive testing:
-
-### Code Organization
-- **50% LOC Reduction**: main.py reduced from 1,836 to 914 LOC
-- **Tool Extraction**: 19 tools extracted to 6 category modules (project, node, console, link, drawing, template)
-- **Better Maintainability**: Clearer code organization with focused module responsibilities
-- **No Breaking Changes**: All tool interfaces remain unchanged
-
-### Testing Infrastructure
-- **Console Manager Tests**: 38 unit tests achieving 76% coverage on 374 LOC critical async code
-- **Test Coverage**: 134 total tests with 30%+ overall coverage focused on critical paths
-- **Quality Assurance**: All existing tests pass with zero regressions
-
-See [CLAUDE.md](CLAUDE.md) for complete v0.11.0 release notes.
-
-## What's New in v0.6.2
-
-Version 0.6.2 fixes label rendering in topology exports to match the official GNS3 GUI.
-
-### Improvements
-
-- **Fixed Label Positioning**: `export_topology_diagram()` now renders labels exactly as GNS3 GUI does
-- **Auto-Centering**: Labels with x=None properly center above nodes at y=-25
-- **Dynamic Text Anchor**: Text alignment (start/middle/end) automatically set based on label position
-- **Accurate Rendering**: No more incorrect offset additions - uses GNS3-stored positions directly
-
-See [CLAUDE.md - Label Rendering Implementation](CLAUDE.md#label-rendering-implementation-v062) for technical details.
 
 
 ## Features
