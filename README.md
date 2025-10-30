@@ -32,10 +32,12 @@ Version 0.38.0 fixes critical startup delays and improves reliability with insta
 ### Unified Server Management (server.cmd)
 Single command replaces 5+ installation scripts:
 - `server.cmd` - Start server (auto-creates/populates venv)
-- `server.cmd install` - Install Windows service via NSSM
+- `server.cmd install` - Install Windows service via WinSW (auto-downloads if missing)
 - `server.cmd uninstall` - Remove Windows service
 - `server.cmd reinstall` - Reinstall service
 - `server.cmd status` - Check service status
+
+**WinSW Auto-Download**: The script automatically downloads WinSW from GitHub if not present. No manual installation required.
 
 ### Connection Status Tracking
 - `is_connected` - Boolean connection state
@@ -269,6 +271,48 @@ When running in HTTP mode, the server exposes:
 - ⚠️ Consider reverse proxy with TLS for production
 
 ## Installation
+
+### Windows Service (Production Deployment)
+
+Run the MCP HTTP server as a Windows service for production use:
+
+```batch
+REM Install and start service (requires admin privileges)
+server.cmd install
+
+REM Check service status
+server.cmd status
+
+REM Stop service
+server.cmd stop
+
+REM Restart service
+server.cmd restart
+
+REM Uninstall service
+server.cmd uninstall
+```
+
+**Requirements**:
+- **WinSW**: Windows Service Wrapper executable
+  - Auto-downloads from https://github.com/winsw/winsw/releases on first run
+  - For 32-bit systems, edit `server.cmd` and uncomment the x86 URL
+- **GNS3-MCP-HTTP.xml**: Service configuration (included in project)
+- **Administrator privileges**: Required for service installation
+
+**Service Details**:
+- Service Name: `GNS3-MCP-HTTP`
+- Startup Type: Automatic
+- Log Files:
+  - Server log: `mcp-http-server.log`
+  - Wrapper log: `GNS3-MCP-HTTP.wrapper.log`
+  - Error log: `GNS3-MCP-HTTP.err.log`
+
+**Manual WinSW Installation** (if auto-download fails):
+1. Download WinSW from https://github.com/winsw/winsw/releases
+2. Choose `WinSW-x64.exe` (or `WinSW-x86.exe` for 32-bit)
+3. Rename to `GNS3-MCP-HTTP.exe`
+4. Place in project root directory
 
 ### Claude Desktop (stdio mode)
 

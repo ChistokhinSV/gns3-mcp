@@ -14,6 +14,11 @@ REM   status      - Show service status
 
 setlocal enabledelayedexpansion
 
+REM WinSW download URL (change to x86 if needed)
+set "WINSW_DOWNLOAD_URL=https://github.com/winsw/winsw/releases/download/latest/WinSW-x64.exe"
+REM Alternative for 32-bit systems:
+REM set "WINSW_DOWNLOAD_URL=https://github.com/winsw/winsw/releases/download/latest/WinSW-x86.exe"
+
 REM Get script directory
 set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
@@ -25,11 +30,21 @@ set "REQUIREMENTS=%SCRIPT_DIR%\requirements.txt"
 set "SERVICE_NAME=GNS3-MCP-HTTP"
 set "WINSW_EXE=%SCRIPT_DIR%\%SERVICE_NAME%.exe"
 
-REM Check for WinSW executable
+REM Check for WinSW executable, download if missing
 if not exist "%WINSW_EXE%" (
-    echo ERROR: WinSW executable not found: %WINSW_EXE%
-    echo Please ensure GNS3-MCP-HTTP.exe and GNS3-MCP-HTTP.xml exist
-    exit /b 1
+    echo WinSW executable not found: %WINSW_EXE%
+    echo Downloading WinSW from: %WINSW_DOWNLOAD_URL%
+    echo.
+    powershell -Command "try { Invoke-WebRequest -Uri '%WINSW_DOWNLOAD_URL%' -OutFile '%WINSW_EXE%' -UseBasicParsing; Write-Host 'WinSW downloaded successfully!' } catch { Write-Host 'ERROR: Failed to download WinSW:' $_.Exception.Message; exit 1 }"
+    if %errorlevel% neq 0 (
+        echo.
+        echo ERROR: Failed to download WinSW
+        echo Please download manually from: https://github.com/winsw/winsw/releases
+        echo Rename to: %SERVICE_NAME%.exe
+        echo Place in: %SCRIPT_DIR%
+        exit /b 1
+    )
+    echo.
 )
 
 REM Parse command
