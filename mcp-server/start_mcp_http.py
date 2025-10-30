@@ -21,6 +21,7 @@ import os
 import sys
 import logging
 import runpy
+import signal
 from pathlib import Path
 from datetime import datetime
 
@@ -96,12 +97,30 @@ sys.argv = [
 
 logger.info("Starting FastMCP server...")
 
+# Signal handler for graceful shutdown (Windows NSSM service)
+def signal_handler(signum, frame):
+    """Handle SIGTERM/SIGINT for graceful shutdown."""
+    logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+    # Raise KeyboardInterrupt to trigger uvicorn's shutdown sequence
+    raise KeyboardInterrupt
+
+# Register signal handlers
+# SIGTERM - sent by NSSM when stopping service
+signal.signal(signal.SIGTERM, signal_handler)
+# SIGINT - sent by Ctrl+C
+signal.signal(signal.SIGINT, signal_handler)
+# On Windows, also handle SIGBREAK (Ctrl+Break)
+if hasattr(signal, 'SIGBREAK'):
+    signal.signal(signal.SIGBREAK, signal_handler)
+
 # Execute main.py as __main__ module using runpy (safer than exec)
 try:
     main_py_path = script_dir / "server" / "main.py"
     runpy.run_path(str(main_py_path), run_name="__main__")
 except KeyboardInterrupt:
-    logger.info("Server stopped by user")
+    logger.info("Server stopped by user (Ctrl+C or service stop)")
+    # Give lifespan handlers time to complete
+    logger.info(" Server shutdown complete")
     sys.exit(0)
 except Exception as e:
     logger.error(f"Server failed to start: {e}", exc_info=True)
