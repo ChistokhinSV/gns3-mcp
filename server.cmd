@@ -47,8 +47,9 @@ REM Check if running as administrator
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo Requesting administrator privileges...
-    powershell -Command "Start-Process -FilePath '%~f0' -ArgumentList '%COMMAND%' -Verb RunAs -Wait"
-    exit /b %errorlevel%
+    echo.
+    powershell -Command "Start-Process cmd -ArgumentList '/c cd /d \"%SCRIPT_DIR%\" && \"%~f0\" %COMMAND% && echo. && echo Press any key to close... && pause >nul' -Verb RunAs"
+    exit /b 0
 )
 REM Running as admin, proceed to command
 if /i "%COMMAND%"=="install" goto :install
