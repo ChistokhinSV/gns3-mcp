@@ -107,37 +107,6 @@ Version 0.6.2 fixes label rendering in topology exports to match the official GN
 
 See [CLAUDE.md - Label Rendering Implementation](CLAUDE.md#label-rendering-implementation-v062) for technical details.
 
-## Version History
-
-### v0.6.1 - Newline Normalization & Special Keystrokes
-- Console newlines auto-converted to \r\n (CR+LF) for device compatibility
-- New `send_keystroke()` tool for TUI navigation and vim editing
-- Fixed `detect_console_state()` to check only last non-empty line
-
-### v0.6.0 - Interactive Console Tools
-- New `send_and_wait_console()` - wait for prompt patterns with timeout
-- New `detect_console_state()` - auto-detect device type and console state
-- Added DEVICE_PATTERNS library for Cisco IOS, MikroTik, Juniper, Arista, Linux
-
-### v0.5.0 - Topology Export
-- New `export_topology_diagram()` - export as SVG/PNG with port status indicators
-- Drawing object support: rectangles, ellipses, text labels
-
-### v0.3.0 - Type Safety & Performance (Breaking Changes)
-
-**IMPORTANT**: If upgrading from v0.2.x, see [MIGRATION_v0.3.md](MIGRATION_v0.3.md) for complete migration guide.
-
-- **Type-Safe Operations**: Pydantic v2 models with validation for all inputs/outputs
-- **Two-Phase Validation**: Prevents partial topology changes - validates ALL operations before executing ANY
-- **10× Performance**: TTL-based caching eliminates N+1 queries in batch operations
-- **Multi-Adapter Support**: Explicit `adapter_a`/`adapter_b` parameters for routers with multiple interface types
-- **JSON Outputs**: All tools now return structured JSON instead of formatted strings
-- **Better Error Messages**: Detailed validation errors with suggested fixes
-
-**Breaking Changes:**
-1. All tool outputs now return JSON - Update parsing code if calling from scripts
-2. set_connection() requires adapters - Add `adapter_a` and `adapter_b` to connect operations
-3. Error format changed - Errors now return JSON with `error` and `details` fields
 
 ## Features
 
