@@ -141,6 +141,8 @@ REM Configure stop timeouts (FastMCP needs ~12s for clean shutdown)
 nssm set %SERVICE_NAME% AppStopMethodConsole 15000
 nssm set %SERVICE_NAME% AppStopMethodWindow 5000
 nssm set %SERVICE_NAME% AppStopMethodThreads 3000
+REM Show console window for debugging (set to 1 to hide in production)
+nssm set %SERVICE_NAME% AppNoConsole 0
 
 echo Starting service...
 nssm start %SERVICE_NAME%
