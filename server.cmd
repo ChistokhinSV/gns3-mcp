@@ -1,5 +1,6 @@
 @echo off
 REM GNS3 MCP HTTP Server Management Script
+REM Uses WinSW (Windows Service Wrapper) to run as Windows service
 REM Usage: server.cmd [run|start|stop|restart|install|uninstall|reinstall|status]
 REM   (no params)  - Run server directly (development mode)
 REM   run         - Run server directly (development mode)
@@ -22,12 +23,12 @@ set "VENV_PIP=%VENV_DIR%\Scripts\pip.exe"
 set "SERVER_DIR=%SCRIPT_DIR%\mcp-server"
 set "REQUIREMENTS=%SCRIPT_DIR%\requirements.txt"
 set "SERVICE_NAME=GNS3-MCP-HTTP"
+set "WINSW_EXE=%SCRIPT_DIR%\%SERVICE_NAME%.exe"
 
-REM Check for NSSM
-where nssm >nul 2>&1
-if %errorlevel% neq 0 (
-    echo ERROR: nssm not found in PATH
-    echo Install NSSM from https://nssm.cc/ or add to PATH
+REM Check for WinSW executable
+if not exist "%WINSW_EXE%" (
+    echo ERROR: WinSW executable not found: %WINSW_EXE%
+    echo Please ensure GNS3-MCP-HTTP.exe and GNS3-MCP-HTTP.xml exist
     exit /b 1
 )
 
@@ -35,14 +36,14 @@ REM Parse command
 set "COMMAND=%~1"
 if "%COMMAND%"=="" set "COMMAND=run"
 
-REM Check for admin privileges if running install/uninstall/reinstall
+REM Check for admin privileges if running install/uninstall/reinstall/start/stop/restart
 if /i "%COMMAND%"=="install" goto :check_admin
 if /i "%COMMAND%"=="uninstall" goto :check_admin
 if /i "%COMMAND%"=="reinstall" goto :check_admin
+if /i "%COMMAND%"=="start" goto :check_admin
+if /i "%COMMAND%"=="stop" goto :check_admin
+if /i "%COMMAND%"=="restart" goto :check_admin
 if /i "%COMMAND%"=="status" goto :status
-if /i "%COMMAND%"=="start" goto :service_start
-if /i "%COMMAND%"=="stop" goto :service_stop
-if /i "%COMMAND%"=="restart" goto :service_restart
 if /i "%COMMAND%"=="run" goto :run_direct
 
 echo Unknown command: %COMMAND%
@@ -70,6 +71,9 @@ REM Running as admin, proceed to command
 if /i "%COMMAND%"=="install" goto :install
 if /i "%COMMAND%"=="uninstall" goto :uninstall
 if /i "%COMMAND%"=="reinstall" goto :reinstall
+if /i "%COMMAND%"=="start" goto :service_start
+if /i "%COMMAND%"=="stop" goto :service_stop
+if /i "%COMMAND%"=="restart" goto :service_restart
 
 :run_direct
 echo === GNS3 MCP HTTP Server (Direct Mode) ===
@@ -84,7 +88,7 @@ exit /b %errorlevel%
 
 :service_start
 echo Starting GNS3 MCP HTTP service...
-nssm start %SERVICE_NAME%
+"%WINSW_EXE%" start
 if %errorlevel% neq 0 (
     echo ERROR: Failed to start service. Is it installed?
     echo Run 'server.cmd install' first.
@@ -95,15 +99,13 @@ exit /b 0
 
 :service_stop
 echo Stopping GNS3 MCP HTTP service...
-nssm stop %SERVICE_NAME%
-timeout /t 3 /nobreak >nul
+"%WINSW_EXE%" stop
 echo Service stopped.
 exit /b 0
 
 :service_restart
 echo Restarting GNS3 MCP HTTP service...
-call :service_stop
-call :service_start
+"%WINSW_EXE%" restart
 exit /b %errorlevel%
 
 :install
@@ -113,47 +115,32 @@ call :check_venv
 if %errorlevel% neq 0 exit /b 1
 
 REM Check if already installed
-nssm status %SERVICE_NAME% >nul 2>&1
+"%WINSW_EXE%" status >nul 2>&1
 if %errorlevel% equ 0 (
     echo Service already installed. Use 'reinstall' to update.
     exit /b 1
 )
 
-echo Installing service...
-nssm install %SERVICE_NAME% "%VENV_PYTHON%" start_mcp_http.py
+echo Installing service with WinSW...
+"%WINSW_EXE%" install
 if %errorlevel% neq 0 (
     echo ERROR: Failed to install service
+    echo Check GNS3-MCP-HTTP.xml configuration
     exit /b 1
 )
 
-REM Configure service
-echo Configuring service...
-nssm set %SERVICE_NAME% DisplayName "GNS3 MCP HTTP Server"
-nssm set %SERVICE_NAME% Description "MCP server providing HTTP access to GNS3 network labs"
-nssm set %SERVICE_NAME% AppDirectory "%SERVER_DIR%"
-nssm set %SERVICE_NAME% Start SERVICE_AUTO_START
-nssm set %SERVICE_NAME% AppStdout "%SCRIPT_DIR%\mcp-http-server.log"
-nssm set %SERVICE_NAME% AppStderr "%SCRIPT_DIR%\mcp-http-server.log"
-nssm set %SERVICE_NAME% AppRotateFiles 1
-nssm set %SERVICE_NAME% AppRotateOnline 1
-nssm set %SERVICE_NAME% AppRotateBytes 10485760
-REM Configure stop timeouts (FastMCP needs ~12s for clean shutdown)
-nssm set %SERVICE_NAME% AppStopMethodConsole 15000
-nssm set %SERVICE_NAME% AppStopMethodWindow 5000
-nssm set %SERVICE_NAME% AppStopMethodThreads 3000
-REM Show console window for debugging (set to 1 to hide in production)
-nssm set %SERVICE_NAME% AppNoConsole 0
-
 echo Starting service...
-nssm start %SERVICE_NAME%
+"%WINSW_EXE%" start
 if %errorlevel% neq 0 (
     echo ERROR: Failed to start service
+    echo Check logs: %SCRIPT_DIR%\GNS3-MCP-HTTP.wrapper.log
     exit /b 1
 )
 
 echo.
 echo Service installed and started successfully!
-echo Logs: %SCRIPT_DIR%\mcp-http-server.log
+echo Server log: %SCRIPT_DIR%\mcp-http-server.log
+echo Wrapper log: %SCRIPT_DIR%\GNS3-MCP-HTTP.wrapper.log
 exit /b 0
 
 :uninstall
@@ -161,18 +148,18 @@ echo === Uninstalling GNS3 MCP HTTP Service ===
 echo.
 
 REM Check if installed
-nssm status %SERVICE_NAME% >nul 2>&1
+"%WINSW_EXE%" status >nul 2>&1
 if %errorlevel% neq 0 (
     echo Service not installed
     exit /b 0
 )
 
 echo Stopping service...
-nssm stop %SERVICE_NAME%
-timeout /t 2 /nobreak >nul
+"%WINSW_EXE%" stop
+timeout /t 3 /nobreak >nul
 
 echo Removing service...
-nssm remove %SERVICE_NAME% confirm
+"%WINSW_EXE%" uninstall
 if %errorlevel% neq 0 (
     echo ERROR: Failed to remove service
     exit /b 1
@@ -190,7 +177,7 @@ call :install
 exit /b %errorlevel%
 
 :status
-nssm status %SERVICE_NAME%
+"%WINSW_EXE%" status
 exit /b %errorlevel%
 
 :check_venv

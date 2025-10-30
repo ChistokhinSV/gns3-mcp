@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WinSW Configuration for GNS3 MCP HTTP Server
+
+  WinSW Documentation: https://github.com/winsw/winsw/blob/v3/docs/xml-config-file.md
+
+  This configuration runs the MCP server as a Windows service with:
+  - Automatic startup
+  - Graceful shutdown with 30s timeout
+  - Log rotation (10MB max)
+  - Console window hidden in production
+-->
+<service>
+  <id>GNS3-MCP-HTTP</id>
+  <name>GNS3 MCP HTTP Server</name>
+  <description>MCP server providing HTTP access to GNS3 network labs</description>
+
+  <!-- Executable and Arguments -->
+  <executable>C:\HOME\1. Scripts\008. GNS3 MCP\venv\Scripts\python.exe</executable>
+  <arguments>start_mcp_http.py</arguments>
+  <workingdirectory>C:\HOME\1. Scripts\008. GNS3 MCP\mcp-server</workingdirectory>
+
+  <!-- Service Mode -->
+  <serviceaccount>
+    <domain></domain>
+    <user>LocalSystem</user>
+    <password></password>
+    <allowservicelogon>true</allowservicelogon>
+  </serviceaccount>
+
+  <!-- Startup Mode -->
+  <startmode>Automatic</startmode>
+
+  <!-- Logging -->
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold> <!-- 10MB -->
+    <keepFiles>3</keepFiles>
+  </log>
+  <logpath>C:\HOME\1. Scripts\008. GNS3 MCP</logpath>
+  <logmode>rotate</logmode>
+
+  <!-- Graceful Shutdown Configuration -->
+  <!-- WinSW sends Ctrl+C (SIGINT) on stop, which our signal handler catches -->
+  <stopparentprocessfirst>false</stopparentprocessfirst>
+  <stoptimeout>30sec</stoptimeout> <!-- Allow 30s for graceful shutdown -->
+
+  <!-- Process Priority -->
+  <priority>Normal</priority>
+
+  <!-- Environment Variables -->
+  <env name="PYTHONUNBUFFERED" value="1"/>
+  <env name="PYTHONIOENCODING" value="utf-8"/>
+</service>
