@@ -1,7 +1,7 @@
 name: Build MCP Server Binary
 
 on:
-  workflow_dispatch:  # Manual trigger only
+  workflow_dispatch:  # Manual trigger
   push:
     branches:
       - main
@@ -10,11 +10,9 @@ on:
       - 'mcp-server/**'
       - 'requirements.txt'
       - '.github/workflows/build-mcpb.yml'
-    tags-ignore:
-      - '**'
-  create:
-    tags:
-      - 'v*'
+
+permissions:
+  contents: write  # Required for creating releases
 
 jobs:
   build:
@@ -83,19 +81,28 @@ jobs:
           path: mcp-server/mcp-server.mcpb
           retention-days: 30
 
-      - name: Extract version from manifest
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Extract version and check for tag
         id: version
         run: |
           VERSION=$(python -c "import json; print(json.load(open('mcp-server/manifest.json'))['version'])")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
+          
+          # Check if current commit has a version tag
+          if git describe --exact-match --tags HEAD 2>/dev/null | grep -q "^v"; then
+            echo "is_tagged=true" >> $GITHUB_OUTPUT
+            echo "This commit is tagged for release"
+          else
+            echo "is_tagged=false" >> $GITHUB_OUTPUT
+            echo "This commit is not tagged"
+          fi
 
       - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.version.outputs.is_tagged == 'true'
         uses: softprops/action-gh-release@v1
         with:
           files: mcp-server/mcp-server.mcpb
+          tag_name: v${{ steps.version.outputs.version }}
           name: Release ${{ steps.version.outputs.version }}
           body: |
             ## GNS3 MCP Server v${{ steps.version.outputs.version }}
@@ -107,5 +114,3 @@ jobs:
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details.
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
