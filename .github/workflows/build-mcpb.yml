@@ -10,6 +10,9 @@ on:
       - 'mcp-server/**'
       - 'requirements.txt'
       - '.github/workflows/build-mcpb.yml'
+    tags-ignore:
+      - '**'
+  create:
     tags:
       - 'v*'
 

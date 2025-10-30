@@ -1,5 +1,5 @@
 {
-  "manifest_version": "0.2",
+  "manifest_version": "0.3",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
   "version": "0.40.1",
