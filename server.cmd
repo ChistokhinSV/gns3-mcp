@@ -1,8 +1,12 @@
 @echo off
 REM GNS3 MCP HTTP Server Management Script
-REM Usage: server.cmd [install|uninstall|reinstall|status]
-REM   (no params) - Start server directly with venv auto-setup
-REM   install     - Install as Windows service
+REM Usage: server.cmd [run|start|stop|restart|install|uninstall|reinstall|status]
+REM   (no params)  - Run server directly (development mode)
+REM   run         - Run server directly (development mode)
+REM   start       - Start Windows service
+REM   stop        - Stop Windows service
+REM   restart     - Restart Windows service
+REM   install     - Install Windows service
 REM   uninstall   - Remove Windows service
 REM   reinstall   - Reinstall Windows service
 REM   status      - Show service status
@@ -29,17 +33,28 @@ if %errorlevel% neq 0 (
 
 REM Parse command
 set "COMMAND=%~1"
-if "%COMMAND%"=="" set "COMMAND=start"
+if "%COMMAND%"=="" set "COMMAND=run"
 
 REM Check for admin privileges if running install/uninstall/reinstall
 if /i "%COMMAND%"=="install" goto :check_admin
 if /i "%COMMAND%"=="uninstall" goto :check_admin
 if /i "%COMMAND%"=="reinstall" goto :check_admin
 if /i "%COMMAND%"=="status" goto :status
-if /i "%COMMAND%"=="start" goto :start
+if /i "%COMMAND%"=="start" goto :service_start
+if /i "%COMMAND%"=="stop" goto :service_stop
+if /i "%COMMAND%"=="restart" goto :service_restart
+if /i "%COMMAND%"=="run" goto :run_direct
 
 echo Unknown command: %COMMAND%
-echo Usage: server.cmd [install^|uninstall^|reinstall^|status]
+echo Usage: server.cmd [run^|start^|stop^|restart^|install^|uninstall^|reinstall^|status]
+echo   run        - Run server directly (no service)
+echo   start      - Start Windows service
+echo   stop       - Stop Windows service
+echo   restart    - Restart Windows service
+echo   install    - Install Windows service
+echo   uninstall  - Remove Windows service
+echo   reinstall  - Reinstall Windows service
+echo   status     - Show service status
 exit /b 1
 
 :check_admin
@@ -56,15 +71,39 @@ if /i "%COMMAND%"=="install" goto :install
 if /i "%COMMAND%"=="uninstall" goto :uninstall
 if /i "%COMMAND%"=="reinstall" goto :reinstall
 
-:start
-echo === GNS3 MCP HTTP Server ===
+:run_direct
+echo === GNS3 MCP HTTP Server (Direct Mode) ===
 echo.
 call :check_venv
 if %errorlevel% neq 0 exit /b 1
 
-echo Starting server...
+echo Starting server directly (not as service)...
 cd /d "%SERVER_DIR%"
 "%VENV_PYTHON%" start_mcp_http.py
+exit /b %errorlevel%
+
+:service_start
+echo Starting GNS3 MCP HTTP service...
+nssm start %SERVICE_NAME%
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to start service. Is it installed?
+    echo Run 'server.cmd install' first.
+    exit /b 1
+)
+echo Service started successfully!
+exit /b 0
+
+:service_stop
+echo Stopping GNS3 MCP HTTP service...
+nssm stop %SERVICE_NAME%
+timeout /t 3 /nobreak >nul
+echo Service stopped.
+exit /b 0
+
+:service_restart
+echo Restarting GNS3 MCP HTTP service...
+call :service_stop
+call :service_start
 exit /b %errorlevel%
 
 :install
