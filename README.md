@@ -45,8 +45,7 @@ Single command replaces 5+ installation scripts:
 - `last_auth_attempt` - Timestamp of last attempt
 - Auto-recovery when GNS3 becomes available
 
-See [CLAUDE.md](CLAUDE.md) for complete v0.38.0 release notes.
-
+See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 
 
 ## Features
