@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 import httpx
 from error_utils import create_error_response, validation_error
+from fastmcp import Context
 from models import ErrorCode
 
 if TYPE_CHECKING:
@@ -309,7 +310,8 @@ async def ssh_send_command_impl(
     command: str,
     expect_string: Optional[str] = None,
     read_timeout: float = 30.0,
-    wait_timeout: int = 30
+    wait_timeout: int = 30,
+    ctx: Optional[Context] = None
 ) -> str:
     """
     Execute show command via SSH with adaptive async
@@ -353,6 +355,14 @@ async def ssh_send_command_impl(
     # Get proxy URL for this node (v0.26.0)
     proxy_url = _get_proxy_url_for_node(app, node_name)
 
+    # Progress notification for long commands (v0.39.0)
+    if ctx and wait_timeout > 10:
+        await ctx.report_progress(
+            progress=0,
+            total=wait_timeout,
+            message=f"Executing SSH command (timeout: {wait_timeout}s)..."
+        )
+
     async with httpx.AsyncClient(timeout=read_timeout + wait_timeout + 10) as client:
         try:
             response = await client.post(
@@ -369,15 +379,37 @@ async def ssh_send_command_impl(
             )
 
             if response.status_code == 200:
-                return json.dumps(response.json(), indent=2)
+                result = response.json()
+                # Progress notification for completion (v0.39.0)
+                if ctx and wait_timeout > 10:
+                    await ctx.report_progress(
+                        progress=wait_timeout,
+                        total=wait_timeout,
+                        message="SSH command completed"
+                    )
+                return json.dumps(result, indent=2)
             else:
                 error_data = response.json()
+                # Progress notification for error (v0.39.0)
+                if ctx and wait_timeout > 10:
+                    await ctx.report_progress(
+                        progress=wait_timeout,
+                        total=wait_timeout,
+                        message="SSH command failed"
+                    )
                 return json.dumps({
                     "error": error_data.get("detail", {}).get("error", "Command failed"),
                     "details": error_data.get("detail", {}).get("details")
                 }, indent=2)
 
         except Exception as e:
+            # Progress notification for exception (v0.39.0)
+            if ctx and wait_timeout > 10:
+                await ctx.report_progress(
+                    progress=wait_timeout,
+                    total=wait_timeout,
+                    message="SSH command failed (exception)"
+                )
             return json.dumps({
                 "error": "SSH command failed",
                 "details": str(e)
@@ -388,7 +420,8 @@ async def ssh_send_config_set_impl(
     app: "AppContext",
     node_name: str,
     config_commands: List[str],
-    wait_timeout: int = 30
+    wait_timeout: int = 30,
+    ctx: Optional[Context] = None
 ) -> str:
     """
     Send configuration commands via SSH
@@ -433,6 +466,14 @@ async def ssh_send_config_set_impl(
     # Get proxy URL for this node (v0.26.0)
     proxy_url = _get_proxy_url_for_node(app, node_name)
 
+    # Progress notification for long operations (v0.39.0)
+    if ctx and wait_timeout > 10:
+        await ctx.report_progress(
+            progress=0,
+            total=wait_timeout,
+            message=f"Executing SSH config commands (timeout: {wait_timeout}s)..."
+        )
+
     async with httpx.AsyncClient(timeout=wait_timeout + 60) as client:
         try:
             response = await client.post(
@@ -446,15 +487,37 @@ async def ssh_send_config_set_impl(
             )
 
             if response.status_code == 200:
-                return json.dumps(response.json(), indent=2)
+                result = response.json()
+                # Progress notification for completion (v0.39.0)
+                if ctx and wait_timeout > 10:
+                    await ctx.report_progress(
+                        progress=wait_timeout,
+                        total=wait_timeout,
+                        message="SSH config commands completed"
+                    )
+                return json.dumps(result, indent=2)
             else:
                 error_data = response.json()
+                # Progress notification for error (v0.39.0)
+                if ctx and wait_timeout > 10:
+                    await ctx.report_progress(
+                        progress=wait_timeout,
+                        total=wait_timeout,
+                        message="SSH config commands failed"
+                    )
                 return json.dumps({
                     "error": error_data.get("detail", {}).get("error", "Config failed"),
                     "details": error_data.get("detail", {}).get("details")
                 }, indent=2)
 
         except Exception as e:
+            # Progress notification for exception (v0.39.0)
+            if ctx and wait_timeout > 10:
+                await ctx.report_progress(
+                    progress=wait_timeout,
+                    total=wait_timeout,
+                    message="SSH config commands failed (exception)"
+                )
             return json.dumps({
                 "error": "SSH config failed",
                 "details": str(e)

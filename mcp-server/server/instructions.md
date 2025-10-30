@@ -9,7 +9,7 @@ Network lab automation server with console access and SSH capabilities.
 - **ALWAYS** wait for node status "started" before attempting console connection
 - Use `set_node_properties()` with `action="start"` and wait for completion
 - Attempting console access too early will fail with connection refused errors
-- Progress notifications show startup progress (12 steps over 60 seconds)
+- Progress notifications show startup progress (12 steps over 60 seconds) (v0.39.0)
 
 **Example workflow**:
 ```
@@ -138,19 +138,19 @@ Multi-proxy architecture enables isolated network access through lab-internal pr
 Some operations take extended time to complete:
 
 **Node Operations**:
-- Node startup: 30-60 seconds (progress notifications available)
+- Node startup: 30-60 seconds (progress notifications available, v0.39.0)
 - Node shutdown: 10-30 seconds
 - Firmware upgrades: 10-20 minutes (via SSH commands)
 
 **SSH Operations**:
 - Show commands: 1-10 seconds
-- Configuration commands: 2-30 seconds
+- Configuration commands: 2-30 seconds (progress notifications for wait_timeout > 10s, v0.39.0)
 - File transfers: 10+ seconds per MB
-- Firmware/backup operations: 5-20 minutes
+- Firmware/backup operations: 5-20 minutes (progress notifications available, v0.39.0)
 
 **Best Practices**:
 - Use `wait_timeout` parameter for long SSH operations
-- Monitor progress via notifications (v0.39.0+)
+- Monitor progress via notifications for node start and SSH commands (v0.39.0)
 - For multi-step operations, check status between steps
 - Allow extra time for first command after session creation
 

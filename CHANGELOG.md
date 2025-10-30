@@ -5,6 +5,105 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.0] - 2025-10-30 - Phase 1: MCP Protocol Enhancements
+
+### Added
+- **Server Instructions** (`instructions.md`): 170-line AI guidance document for GNS3-specific behaviors
+  - Node timing requirements and startup polling (30-60s critical wait period)
+  - Console buffer management strategies (diff/last_page/all modes)
+  - Connection management (v0.38.0 non-blocking authentication)
+  - SSH proxy routing (multi-proxy support for isolated networks)
+  - Device-specific behaviors (Cisco IOS, NX-OS, MikroTik, Juniper, Arista, Linux)
+  - Long-running operation patterns and troubleshooting workflows
+  - Loaded automatically by FastMCP and provided to AI agents
+- **Argument Completions**: Auto-complete for 7 argument types
+  - `node_name`: Node names from current project (filtered by prefix)
+  - `project_name`: Available project names (filtered by prefix)
+  - `device_type`: Supported device types for SSH (cisco_ios, cisco_nxos, etc.)
+  - `template_name`: Available node templates (filtered by prefix)
+  - `drawing_type`: Drawing object types (rectangle, ellipse, line, text)
+  - `mode`: Console read modes (diff, last_page, all, num_pages)
+  - `action`: Node actions (start, stop, suspend, reload, restart)
+  - Improves user experience with context-aware suggestions
+- **Progress Notifications**: Real-time progress updates for long-running operations
+  - **Node Start Progress**: Poll node status every 5 seconds (12 steps over 60s max)
+    - Reports progress: "Starting node... (step X/12)"
+    - Completes early if node reaches "started" status
+    - Shows actual startup time in result message
+  - **SSH Command Progress**: For commands with `wait_timeout > 10` seconds
+    - Initial notification: "Executing SSH command (timeout: Xs)..."
+    - Completion notification: "SSH command completed" or "failed"
+    - Applies to both show commands and config command sets
+  - **Background Authentication**: Not implemented (no request context for background tasks)
+    - Use `check_gns3_connection()` tool to check connection status instead
+
+### Changed
+- **FastMCP Server** (`main.py`):
+  - Line 88-94: Load `instructions.md` for AI guidance
+  - Line 331: Pass instructions to FastMCP constructor
+  - Lines 2275-2355: Argument completion handler with 7 completion types
+  - Line 998-1002: Pass Context to `set_node_impl()` for progress notifications
+  - Lines 2025-2029: Pass Context to SSH impl functions for progress
+- **Node Tools** (`tools/node_tools.py`):
+  - Added `from fastmcp import Context` import
+  - Line 148: Added optional `ctx: Optional[Context]` parameter to `set_node_impl()`
+  - Lines 301-344: Node start action with progress polling
+    - 12-step polling loop (5s intervals, 60s max)
+    - Early exit when node status == "started"
+    - Progress notifications at each step
+- **SSH Tools** (`tools/ssh_tools.py`):
+  - Added `from fastmcp import Context` import
+  - Line 315: Added optional `ctx: Optional[Context]` parameter to `ssh_send_command_impl()`
+  - Line 425: Added optional `ctx: Optional[Context]` parameter to `ssh_send_config_set_impl()`
+  - Lines 359-365, 385-413: Progress notifications for show commands (wait_timeout > 10s)
+  - Lines 470-476, 492-525: Progress notifications for config commands (wait_timeout > 10s)
+- **Server Instructions** (`instructions.md`):
+  - Updated node timing section with v0.39.0 progress notification note
+  - Updated long-running operations section with progress availability details
+  - Clarified that progress is available for node start and SSH commands only
+
+### Technical Details
+- **MCP Protocol Compliance**: Implements Phase 1 MCP protocol best practices
+  - Server instructions provide context-specific AI guidance
+  - Argument completions improve user experience with suggestions
+  - Progress notifications give feedback on long-running operations
+- **Architecture**:
+  - Progress notifications require Context object from FastMCP requests
+  - Background tasks (like authentication) cannot send progress (no request context)
+  - Progress reporting uses `ctx.report_progress(progress, total, message)`
+- **Performance**:
+  - Node start polling adds minimal overhead (5s intervals, early exit on success)
+  - SSH progress is start/end only (no intermediate polling due to proxy architecture)
+  - Argument completions cache node/project lists from AppContext
+
+### Files Modified
+- `mcp-server/server/instructions.md` (NEW): 170-line AI guidance document
+- `mcp-server/server/main.py`: Instructions loading, completions handler, Context passing
+- `mcp-server/server/tools/node_tools.py`: Context parameter, node start progress polling
+- `mcp-server/server/tools/ssh_tools.py`: Context parameter, SSH command progress
+- `mcp-server/manifest.json`: Version 0.39.0
+- `mcp-server/start_mcp_http.py`: Version 0.39.0
+- `CHANGELOG.md`: This entry
+
+### Known Limitations
+- **SSH Progress**: Only start/end notifications (no intermediate steps)
+  - SSH proxy handles command execution internally
+  - Future versions could poll job status for fine-grained progress
+- **Background Authentication**: No progress notifications
+  - Background tasks run outside request context
+  - Use `check_gns3_connection()` to check status manually
+- **Progress Token Requirement**: Client must support progress_token
+  - Claude Desktop and Claude Code support progress notifications
+  - Other MCP clients may not display progress updates
+
+### Migration from v0.38.1
+- No breaking changes - fully backward compatible
+- Progress notifications automatically available when using:
+  - `set_node_properties(node_name, action="start")`
+  - `execute_ssh_command(node_name, command, wait_timeout > 10)`
+- Argument completions work automatically in supported clients
+- Server instructions automatically loaded and used by AI agents
+
 ## [0.37.0] - 2025-10-29 - Windows Service Reliability & Code Quality
 
 ### Fixed

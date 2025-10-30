@@ -997,7 +997,8 @@ async def set_node(
     app: AppContext = ctx.request_context.lifespan_context
     return await set_node_impl(
         app, node_name, action, x, y, z, locked, ports,
-        name, ram, cpus, hdd_disk_image, adapters, console_type
+        name, ram, cpus, hdd_disk_image, adapters, console_type,
+        ctx=ctx  # v0.39.0: Pass Context for progress notifications
     )
 
 
@@ -2021,11 +2022,11 @@ async def ssh_command(
 
     # Auto-detect command type
     if isinstance(command, list):
-        # Config mode: list of commands
-        return await ssh_send_config_set_impl(app, node_name, command, wait_timeout)
+        # Config mode: list of commands (v0.39.0: pass Context for progress)
+        return await ssh_send_config_set_impl(app, node_name, command, wait_timeout, ctx=ctx)
     else:
-        # Show mode: single command
-        return await ssh_send_command_impl(app, node_name, command, expect_string, read_timeout, wait_timeout)
+        # Show mode: single command (v0.39.0: pass Context for progress)
+        return await ssh_send_command_impl(app, node_name, command, expect_string, read_timeout, wait_timeout, ctx=ctx)
 
 
 @mcp.tool(

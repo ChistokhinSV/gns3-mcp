@@ -9,7 +9,6 @@ import os
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import httpx
-
 from error_utils import (
     create_error_response,
     node_not_found_error,
@@ -18,6 +17,7 @@ from error_utils import (
     template_not_found_error,
     validation_error,
 )
+from fastmcp import Context
 from models import ErrorCode, NodeInfo, NodeSummary
 
 if TYPE_CHECKING:
@@ -143,7 +143,8 @@ async def set_node_impl(app: "AppContext",
                         cpus: Optional[int] = None,
                         hdd_disk_image: Optional[str] = None,
                         adapters: Optional[int] = None,
-                        console_type: Optional[str] = None) -> str:
+                        console_type: Optional[str] = None,
+                        ctx: Optional[Context] = None) -> str:
     """Configure node properties and/or control node state
 
     Validation Rules:
@@ -297,8 +298,49 @@ async def set_node_impl(app: "AppContext",
         action = action.lower()
         try:
             if action == 'start':
+                # Send start command
                 await app.gns3.start_node(app.current_project_id, node_id)
-                results.append(f"Started {node_name}")
+
+                # Poll for startup completion with progress notifications (v0.39.0)
+                max_steps = 12  # 60 seconds / 5 seconds per check
+                for step in range(max_steps):
+                    # Report progress if context available
+                    if ctx:
+                        await ctx.report_progress(
+                            progress=step,
+                            total=max_steps,
+                            message=f"Starting node... (step {step + 1}/{max_steps})"
+                        )
+
+                    # Check current node status
+                    nodes = await app.gns3.get_nodes(app.current_project_id)
+                    current_node = next((n for n in nodes if n['node_id'] == node_id), None)
+
+                    if current_node:
+                        status = current_node.get('status', 'unknown')
+                        if status == 'started':
+                            # Report completion
+                            if ctx:
+                                await ctx.report_progress(
+                                    progress=max_steps,
+                                    total=max_steps,
+                                    message="Node started successfully"
+                                )
+                            results.append(f"Started {node_name} (ready after {(step + 1) * 5}s)")
+                            break
+
+                    # Wait before next check (except on last iteration)
+                    if step < max_steps - 1:
+                        await asyncio.sleep(5)
+                else:
+                    # Reached max steps without "started" status
+                    if ctx:
+                        await ctx.report_progress(
+                            progress=max_steps,
+                            total=max_steps,
+                            message="Node start command sent (status pending)"
+                        )
+                    results.append(f"Started {node_name} (startup in progress, may need more time)")
 
             elif action == 'stop':
                 await app.gns3.stop_node(app.current_project_id, node_id)
