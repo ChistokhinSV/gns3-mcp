@@ -1,0 +1,48 @@
+name: Build MCP Server Binary
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --target=mcp-server/lib \
+            fastmcp>=2.13.0.2 \
+            httpx>=0.28.1 \
+            telnetlib3>=2.0.8 \
+            pydantic>=2.12.3 \
+            python-dotenv>=1.2.1 \
+            cairosvg>=2.8.2 \
+            docker>=7.1.0 \
+            tabulate>=0.9.0 \
+            --no-warn-script-location
+
+      - name: Build MCP binary
+        run: |
+          cd mcp-server
+          npx @anthropic-ai/mcpb pack
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-server-binary
+          path: mcp-server/mcp-server.mcpb
+          retention-days: 30
