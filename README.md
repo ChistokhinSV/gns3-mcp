@@ -15,6 +15,27 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
 
 ## Quick Start
 
+### Claude Code
+
+1. Create `.env` file in project root:
+   ```bash
+   GNS3_HOST=YOUR_GNS3_HOST_IP
+   GNS3_PORT=80
+   GNS3_USER=admin
+   GNS3_PASSWORD=your-password
+   ```
+
+2. Install globally:
+   ```bash
+   # Windows (PowerShell)
+   claude mcp add --transport stdio gns3-lab --scope user -- python "C:\path\to\project\mcp-server\start_mcp.py"
+   
+   # Linux/Mac
+   claude mcp add --transport stdio gns3-lab --scope user -- python /path/to/project/mcp-server/start_mcp.py
+   ```
+
+3. Verify: `claude mcp get gns3-lab` (should show "✓ Connected")
+
 ### Claude Desktop
 
 1. Download the latest release from [Releases](https://github.com/ChistokhinSV/gns3-mcp/releases)
