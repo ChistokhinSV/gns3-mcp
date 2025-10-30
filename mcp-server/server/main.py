@@ -104,6 +104,8 @@ class AppContext:
     resource_manager: Optional[ResourceManager] = None
     current_project_id: str | None = None
     cleanup_task: Optional[asyncio.Task] = field(default=None)
+    # v0.38.0: Background authentication task (non-blocking startup)
+    auth_task: Optional[asyncio.Task] = field(default=None)
     # v0.26.0: Multi-proxy SSH support - maps node_name to proxy_url for routing
     ssh_proxy_mapping: Dict[str, str] = field(default_factory=dict)
 
@@ -124,6 +126,59 @@ async def periodic_console_cleanup(console: ConsoleManager):
             break
         except Exception as e:
             logger.error(f"Error in cleanup task: {e}")
+
+
+async def background_authentication(gns3: GNS3Client, context: AppContext):
+    """Background task for GNS3 authentication with exponential backoff
+
+    v0.38.0: Non-blocking authentication that allows server to start immediately
+    Retries with exponential backoff: 5s → 10s → 30s → 60s → 300s (max)
+    Updates connection status and auto-detects opened project on success
+    """
+    retry_delays = [5, 10, 30, 60, 300]  # Exponential backoff in seconds
+    retry_index = 0
+
+    while True:
+        try:
+            # Attempt authentication with 3-second timeout per attempt
+            success = await gns3.authenticate(retry=False, retry_interval=3, max_retries=1)
+
+            if success:
+                logger.info("Background authentication succeeded")
+
+                # Auto-detect opened project
+                try:
+                    projects = await gns3.get_projects()
+                    opened = [p for p in projects if p.get("status") == "opened"]
+                    if opened:
+                        context.current_project_id = opened[0]["project_id"]
+                        logger.info(f"Auto-detected opened project: {opened[0]['name']}")
+                    else:
+                        logger.info("No opened project found")
+                except Exception as e:
+                    logger.warning(f"Failed to detect opened project: {e}")
+
+                # Reset backoff on success
+                retry_index = 0
+
+                # Wait 5 minutes before next check (keep-alive)
+                await asyncio.sleep(300)
+            else:
+                # Failed - use exponential backoff
+                delay = retry_delays[min(retry_index, len(retry_delays) - 1)]
+                logger.warning(f"Background authentication failed: {gns3.connection_error}")
+                logger.info(f"Retrying in {delay} seconds...")
+                retry_index += 1
+                await asyncio.sleep(delay)
+
+        except asyncio.CancelledError:
+            logger.info("Background authentication task cancelled")
+            break
+        except Exception as e:
+            # Unexpected error - log and retry with current backoff
+            logger.error(f"Error in background authentication: {e}")
+            delay = retry_delays[min(retry_index, len(retry_delays) - 1)]
+            await asyncio.sleep(delay)
 
 
 @asynccontextmanager
@@ -147,33 +202,19 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     # Start periodic cleanup task
     cleanup_task = asyncio.create_task(periodic_console_cleanup(console))
 
-    # Try initial authentication (max 3 attempts)
-    # If fails, continue initialization - auth will retry in background on first API call
-    try:
-        await gns3.authenticate(retry=True, retry_interval=5, max_retries=3)
-        logger.info("Successfully authenticated with GNS3 server")
-
-        # Auto-detect opened project
-        projects = await gns3.get_projects()
-        opened = [p for p in projects if p.get("status") == "opened"]
-        current_project_id = opened[0]["project_id"] if opened else None
-
-        if current_project_id:
-            logger.info(f"Auto-detected opened project: {opened[0]['name']}")
-        else:
-            logger.warning("No opened project found - some tools require opening a project first")
-    except Exception as e:
-        logger.warning(f"Initial authentication failed: {e}")
-        logger.warning("MCP server will continue starting - tools will retry authentication as needed")
-        current_project_id = None
-
-    # Create context (resource_manager needs context, so create first then update)
+    # v0.38.0: Create context first (background auth needs it)
+    # Server starts immediately without waiting for authentication
     context = AppContext(
         gns3=gns3,
         console=console,
-        current_project_id=current_project_id,
+        current_project_id=None,  # Will be set by background auth task
         cleanup_task=cleanup_task
     )
+
+    # Start background authentication task (non-blocking)
+    auth_task = asyncio.create_task(background_authentication(gns3, context))
+    context.auth_task = auth_task
+    logger.info("Background authentication task started - server ready")
 
     # Initialize resource manager (needs context for callbacks)
     context.resource_manager = ResourceManager(context)
@@ -186,11 +227,18 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         yield context
     finally:
         _app = None  # Clear global on shutdown
-        # Cleanup
+        # Cleanup background tasks
         if cleanup_task:
             cleanup_task.cancel()
             try:
                 await cleanup_task
+            except asyncio.CancelledError:
+                pass
+
+        if auth_task:
+            auth_task.cancel()
+            try:
+                await auth_task
             except asyncio.CancelledError:
                 pass
 
@@ -742,6 +790,107 @@ async def node_setup(
         username=username,
         password=password
     )
+
+
+# ============================================================================
+# MCP Tools - Connection Management (v0.38.0)
+# ============================================================================
+
+@mcp.tool(
+    name="check_gns3_connection",
+    tags={"connection", "diagnostics", "readonly"},
+)
+async def check_gns3_connection(ctx: Context) -> str:
+    """Check GNS3 server connection status
+
+    Returns connection state, error details if disconnected, and last authentication attempt time.
+    Use this before running operations that require GNS3 connectivity.
+
+    Returns:
+        JSON with connection status:
+        {
+            "connected": bool,
+            "server": str (GNS3 server URL),
+            "error": str | null (error details if disconnected),
+            "last_attempt": str | null (timestamp of last auth attempt)
+        }
+
+    Example:
+        >>> check_gns3_connection()
+        {"connected": false, "server": "http://192.168.1.20:80",
+         "error": "Connection timeout", "last_attempt": "08:15:42 30.10.2025"}
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    gns3 = app.gns3
+
+    status = {
+        "connected": gns3.is_connected,
+        "server": gns3.base_url,
+        "error": gns3.connection_error,
+        "last_attempt": gns3.last_auth_attempt.strftime("%H:%M:%S %d.%m.%Y") if gns3.last_auth_attempt else None
+    }
+
+    return json.dumps(status, indent=2)
+
+
+@mcp.tool(
+    name="retry_gns3_connection",
+    tags={"connection", "management"},
+)
+async def retry_gns3_connection(ctx: Context) -> str:
+    """Force immediate GNS3 reconnection attempt
+
+    Bypasses exponential backoff timer and attempts to reconnect immediately.
+    Use this after fixing GNS3 server issues or network connectivity.
+
+    Returns:
+        JSON with reconnection result:
+        {
+            "success": bool,
+            "message": str (result details),
+            "server": str (GNS3 server URL),
+            "error": str | null (error details if failed)
+        }
+
+    Example:
+        >>> retry_gns3_connection()
+        {"success": true, "message": "Successfully reconnected to GNS3 server",
+         "server": "http://192.168.1.20:80", "error": null}
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    gns3 = app.gns3
+
+    logger.info("Manual reconnection attempt triggered")
+
+    # Attempt authentication with 5-second timeout
+    success = await gns3.authenticate(retry=False, retry_interval=5, max_retries=1)
+
+    if success:
+        # Try to detect opened project
+        try:
+            projects = await gns3.get_projects()
+            opened = [p for p in projects if p.get("status") == "opened"]
+            if opened:
+                app.current_project_id = opened[0]["project_id"]
+                logger.info(f"Auto-detected opened project: {opened[0]['name']}")
+        except Exception as e:
+            logger.warning(f"Failed to detect opened project: {e}")
+
+        result = {
+            "success": True,
+            "message": "Successfully reconnected to GNS3 server",
+            "server": gns3.base_url,
+            "error": None
+        }
+    else:
+        result = {
+            "success": False,
+            "message": "Failed to reconnect to GNS3 server",
+            "server": gns3.base_url,
+            "error": gns3.connection_error
+        }
+
+    return json.dumps(result, indent=2)
 
 
 # ============================================================================

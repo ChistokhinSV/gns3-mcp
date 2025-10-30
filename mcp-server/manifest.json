@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.36.0",
+  "version": "0.38.0",
   "description": "GNS3 lab automation with AI agent",
   "long_description": "GNS3 v3 lab automation MCP server. Can create/delete/modify nodes, drawings, connect/disconnect nodes, configure them with console and ssh proxy access",
   "author": {
@@ -57,6 +57,14 @@
     }
   },
   "tools": [
+    {
+      "name": "check_gns3_connection",
+      "description": "Check GNS3 server connection status with error details and last attempt time"
+    },
+    {
+      "name": "retry_gns3_connection",
+      "description": "Force immediate GNS3 reconnection attempt (bypasses backoff timer)"
+    },
     {
       "name": "open_project",
       "description": "Open a GNS3 project by name"

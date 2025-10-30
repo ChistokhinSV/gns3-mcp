@@ -24,6 +24,10 @@ class GNS3Client:
         self.username = username
         self.password = password
         self.token: Optional[str] = None
+        # Connection status tracking (v0.38.0)
+        self.is_connected: bool = False
+        self.connection_error: Optional[str] = None
+        self.last_auth_attempt: Optional[datetime] = None
         self.client = httpx.AsyncClient(timeout=30.0)
 
     async def authenticate(self, retry: bool = False, retry_interval: int = 30,
@@ -45,6 +49,7 @@ class GNS3Client:
         attempt = 0
         while True:
             attempt += 1
+            self.last_auth_attempt = datetime.now()
             try:
                 response = await self.client.post(
                     f"{self.base_url}/v3/access/users/authenticate",
@@ -53,12 +58,19 @@ class GNS3Client:
                 response.raise_for_status()
                 data = response.json()
                 self.token = data["access_token"]
+                # Update connection status on success
+                self.is_connected = True
+                self.connection_error = None
                 if attempt > 1:
                     logger.info(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication succeeded on attempt {attempt}")
                 else:
                     logger.info(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authenticated to GNS3 server at {self.base_url}")
                 return True
             except Exception as e:
+                # Update connection status on failure
+                self.is_connected = False
+                self.connection_error = self._extract_error(e)
+
                 if not retry or (max_retries is not None and attempt > max_retries):
                     logger.error(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication failed: {e}")
                     return False
@@ -74,12 +86,17 @@ class GNS3Client:
                 await asyncio.sleep(retry_interval)
 
     async def _ensure_authenticated(self) -> None:
-        """Ensure we have a valid token, authenticate if needed"""
+        """Ensure we have a valid token, authenticate if needed
+
+        v0.38.0: Optimized for fast failure (1 retry only)
+        Background authentication task handles reconnection logic
+        """
         if not self.token:
             logger.info("No auth token - attempting authentication...")
-            success = await self.authenticate(retry=True, retry_interval=5, max_retries=3)
+            success = await self.authenticate(retry=True, retry_interval=3, max_retries=1)
             if not success:
-                raise RuntimeError("Failed to authenticate with GNS3 server after multiple attempts")
+                error_msg = f"GNS3 server unavailable: {self.connection_error} ({self.base_url})"
+                raise RuntimeError(error_msg)
 
     def _headers(self) -> Dict[str, str]:
         """Get headers with Bearer token"""
