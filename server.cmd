@@ -137,6 +137,10 @@ nssm set %SERVICE_NAME% AppStderr "%SCRIPT_DIR%\mcp-http-server.log"
 nssm set %SERVICE_NAME% AppRotateFiles 1
 nssm set %SERVICE_NAME% AppRotateOnline 1
 nssm set %SERVICE_NAME% AppRotateBytes 10485760
+REM Configure stop timeouts (FastMCP needs ~12s for clean shutdown)
+nssm set %SERVICE_NAME% AppStopMethodConsole 15000
+nssm set %SERVICE_NAME% AppStopMethodWindow 5000
+nssm set %SERVICE_NAME% AppStopMethodThreads 3000
 
 echo Starting service...
 nssm start %SERVICE_NAME%
