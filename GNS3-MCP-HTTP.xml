@@ -23,8 +23,8 @@
   <!-- Service Mode -->
   <serviceaccount>
     <domain></domain>
-    <user>LocalSystem</user>
-    <password></password>
+    <user>.\GNS3MCPService</user>
+    <password>GNS3mcp!2025</password>
     <allowservicelogon>true</allowservicelogon>
   </serviceaccount>
 

@@ -22,11 +22,15 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
 
 from console_manager import ConsoleManager
 from export_tools import (
@@ -196,12 +200,25 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     # Get server args
     args = server.get_args()
 
+    # Read password from environment with fallback (CWE-214 fix - no password in process args)
+    password = args.password or os.getenv("PASSWORD") or os.getenv("GNS3_PASSWORD")
+    if not password:
+        raise ValueError("Password required: use --password arg or PASSWORD/GNS3_PASSWORD env var")
+
+    # Read HTTPS settings from environment if not provided as arguments
+    use_https = args.use_https or os.getenv("GNS3_USE_HTTPS", "").lower() == "true"
+    verify_ssl = args.verify_ssl
+    if os.getenv("GNS3_VERIFY_SSL", "").lower() == "false":
+        verify_ssl = False
+
     # Initialize GNS3 client
     gns3 = GNS3Client(
         host=args.host,
         port=args.port,
         username=args.username,
-        password=args.password
+        password=password,
+        use_https=use_https,
+        verify_ssl=verify_ssl
     )
 
     # Initialize console manager first (no dependencies)
@@ -2315,7 +2332,10 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="localhost", help="GNS3 server host")
     parser.add_argument("--port", type=int, default=80, help="GNS3 server port")
     parser.add_argument("--username", default="admin", help="GNS3 username")
-    parser.add_argument("--password", default="", help="GNS3 password")
+    parser.add_argument("--password", default="", help="GNS3 password (or use PASSWORD/GNS3_PASSWORD env var)")
+    parser.add_argument("--use-https", action="store_true", help="Use HTTPS for GNS3 connection (or set GNS3_USE_HTTPS=true)")
+    parser.add_argument("--verify-ssl", default=True, type=lambda x: str(x).lower() != 'false',
+                        help="Verify GNS3 SSL certificate (default: true, set to 'false' for self-signed certs)")
 
     # MCP transport mode arguments
     parser.add_argument(
@@ -2353,6 +2373,34 @@ if __name__ == "__main__":
 
         # Create ASGI app for HTTP transport
         app = mcp.http_app()
+
+        # Add API key authentication middleware (CWE-306 fix)
+        api_key = os.getenv("MCP_API_KEY")
+        if not api_key:
+            raise ValueError("MCP_API_KEY required for HTTP transport (set in .env). "
+                            "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\"")
+
+        @app.middleware("http")
+        async def verify_api_key(request: Request, call_next):
+            """Verify MCP_API_KEY header for all HTTP requests (except health/status)"""
+            # Skip auth for health/status endpoints (if any)
+            if request.url.path in ["/health", "/status"]:
+                return await call_next(request)
+
+            # Check API key header (case-insensitive)
+            client_key = request.headers.get("MCP_API_KEY") or request.headers.get("mcp_api_key")
+            if client_key != api_key:
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": "Unauthorized",
+                        "detail": "Invalid or missing MCP_API_KEY header. "
+                                 "Add header: 'MCP_API_KEY: <your-key-from-env>'"
+                    }
+                )
+            return await call_next(request)
+
+        print(f"✓ API key authentication enabled (MCP_API_KEY required)")
 
         # Run with uvicorn
         uvicorn.run(

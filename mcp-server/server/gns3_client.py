@@ -19,8 +19,20 @@ class GNS3Client:
     """Async client for GNS3 v3 API"""
 
     def __init__(self, host: str = "localhost", port: int = 80,
-                 username: str = "admin", password: str = ""):
-        self.base_url = f"http://{host}:{port}"
+                 username: str = "admin", password: str = "",
+                 use_https: bool = False, verify_ssl: bool = True):
+        """Initialize GNS3 API client
+
+        Args:
+            host: GNS3 server hostname/IP
+            port: GNS3 server port
+            username: GNS3 username
+            password: GNS3 password
+            use_https: Use HTTPS instead of HTTP (default: False)
+            verify_ssl: Verify SSL certificate, set False for self-signed (default: True)
+        """
+        scheme = "https" if use_https else "http"
+        self.base_url = f"{scheme}://{host}:{port}"
         self.username = username
         self.password = password
         self.token: Optional[str] = None
@@ -28,7 +40,8 @@ class GNS3Client:
         self.is_connected: bool = False
         self.connection_error: Optional[str] = None
         self.last_auth_attempt: Optional[datetime] = None
-        self.client = httpx.AsyncClient(timeout=30.0)
+        # Support HTTPS with self-signed certificates (CWE-319 fix)
+        self.client = httpx.AsyncClient(timeout=30.0, verify=verify_ssl)
 
     async def authenticate(self, retry: bool = False, retry_interval: int = 30,
                           max_retries: Optional[int] = None) -> bool:

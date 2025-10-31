@@ -1,5 +1,6 @@
 # Production dependencies
 fastmcp>=2.13.0.2
+fastapi>=0.115.0  # Required by FastMCP for HTTP transport
 httpx>=0.28.1
 telnetlib3>=2.0.8
 pydantic>=2.12.3
