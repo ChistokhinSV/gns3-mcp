@@ -42,10 +42,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: mcp-server\lib
-          key: ${{ runner.os }}-py3.10-lib-v2-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-py3.10-lib-v3-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-py3.10-lib-v2-
-            ${{ runner.os }}-lib-
+            ${{ runner.os }}-py3.10-lib-v3-
 
       - name: Create lib directory
         if: steps.cache-lib.outputs.cache-hit != 'true'

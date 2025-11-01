@@ -5,7 +5,44 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.43.9] - 2025-11-01 - Fix GitHub Release File Paths
+## [0.43.10] - 2025-11-01 - Fix Linux Binary Contamination (CRITICAL)
+
+### Fixed
+- **Linux Binaries in Windows Build** (CRITICAL):
+  - v0.43.9 Windows release contained Linux `.so` files instead of Windows `.pyd` files
+  - Error: `ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'`
+  - Root cause: Cache restore-keys allowed Windows runner to restore Linux cache
+  - Cache key `Windows-lib-` matched old `Linux-lib-` caches from v0.43.7 and earlier
+  - Windows runner installed Linux binaries from cached dependencies
+
+### Changed
+- **Cache Key Version Bump**: v2 → v3 to invalidate old Linux caches
+- **Removed Broad Restore-Keys**: Removed `${{ runner.os }}-lib-` fallback
+- **OS-Specific Caching**: Now only restores Windows-py3.10-lib-v3-* caches
+
+### Technical Details
+- Cache key pattern BEFORE (v0.43.9):
+  ```yaml
+  key: Windows-py3.10-lib-v2-<hash>
+  restore-keys:
+    - Windows-py3.10-lib-v2-
+    - Windows-lib-              # ❌ Matched Linux-lib- from old builds!
+  ```
+- Cache key pattern AFTER (v0.43.10):
+  ```yaml
+  key: Windows-py3.10-lib-v3-<hash>
+  restore-keys:
+    - Windows-py3.10-lib-v3-    # ✅ Windows-only, no cross-platform contamination
+  ```
+- This will force fresh Windows dependency installation on first v3 build
+- Future builds will cache Windows binaries correctly under v3 key
+
+### Verification
+- Download v0.43.10 .mcpb and unpack to verify Windows binaries:
+  - Expected: `lib/pydantic_core/_pydantic_core.cp310-win_amd64.pyd` ✅
+  - NOT: `lib/pydantic_core/_pydantic_core.cpython-310-x86_64-linux-gnu.so` ❌
+
+## [0.43.9] - 2025-11-01 - Fix GitHub Release File Paths (SKIP - Linux Binaries)
 
 ### Fixed
 - **GitHub Release Creation Failed**:

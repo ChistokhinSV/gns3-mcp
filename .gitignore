@@ -66,3 +66,7 @@ gns3-project/.coverage
 GNS3-MCP-HTTP.exe
 .git.bfg-report/
 
+# Temp files and directories
+DOWNLOAD_TEMP/
+DOWNLOAD_TEMP*/
+
