@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.41.0",
+  "version": "0.42.0",
   "description": "GNS3 lab automation with AI agent",
-  "long_description": "GNS3 v3 lab automation MCP server. Create/modify nodes, configure via console/SSH, topology management. v0.41.0: Security hardening - credential protection (CWE-214), service privilege reduction (CWE-250), API authentication for HTTP mode (CWE-306), HTTPS support for GNS3 (CWE-319).",
+  "long_description": "GNS3 v3 lab automation MCP server. Create/modify nodes, configure via console/SSH, topology management. v0.42.0: PyPI packaging support, optimized GitHub Actions with dependency caching (3x faster builds).",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
