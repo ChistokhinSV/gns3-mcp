@@ -5,6 +5,13 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.7] - 2025-11-01 - PyPI Version Bump
+
+### Technical Details
+- PyPI rejected v0.43.6 upload: "File already exists ('gns3_mcp-0.43.6-py3-none-any.whl')"
+- v0.43.7 is functionally identical to v0.43.6
+- Windows runner workflow + platform compatibility fixes
+
 ## [0.43.6] - 2025-11-01 - Windows Runner for Platform Compatibility
 
 ### Fixed
