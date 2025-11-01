@@ -2,27 +2,29 @@
 
 Tests telnet console session management with mocked network I/O.
 """
-import pytest
+
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, call
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from console_manager import (
+    MAX_BUFFER_SIZE,
+    SESSION_TIMEOUT,
     ConsoleManager,
     ConsoleSession,
     strip_ansi,
-    MAX_BUFFER_SIZE,
-    SESSION_TIMEOUT
 )
 
-
 # ===== Helper Functions Tests =====
+
 
 class TestStripAnsi:
     """Tests for strip_ansi() helper function"""
 
     def test_strip_ansi_codes(self):
         """Test ANSI escape code removal"""
-        text = "\x1B[31mRed text\x1B[0m Normal"
+        text = "\x1b[31mRed text\x1b[0m Normal"
         result = strip_ansi(text)
         assert result == "Red text Normal"
 
@@ -46,12 +48,13 @@ class TestStripAnsi:
 
     def test_complex_ansi_with_line_endings(self):
         """Test combined ANSI removal and line ending normalization"""
-        text = "\x1B[1;32mGreen\x1B[0m\r\n\x1B[31mRed\x1B[0m\r\n"
+        text = "\x1b[1;32mGreen\x1b[0m\r\n\x1b[31mRed\x1b[0m\r\n"
         result = strip_ansi(text)
         assert result == "Green\nRed\n"
 
 
 # ===== ConsoleSession Tests =====
+
 
 class TestConsoleSession:
     """Tests for ConsoleSession dataclass"""
@@ -59,10 +62,7 @@ class TestConsoleSession:
     def test_session_initialization(self):
         """Test session is initialized with correct defaults"""
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         assert session.session_id == "test-id"
         assert session.host == "localhost"
@@ -76,14 +76,12 @@ class TestConsoleSession:
     def test_update_activity(self):
         """Test activity timestamp updates"""
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         original_time = session.last_activity
         # Sleep to ensure time difference
         import time
+
         time.sleep(0.01)
         session.update_activity()
         assert session.last_activity > original_time
@@ -91,27 +89,24 @@ class TestConsoleSession:
     def test_is_expired_fresh_session(self):
         """Test fresh session is not expired"""
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         assert session.is_expired() is False
 
     def test_is_expired_old_session(self):
         """Test old session is expired"""
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         # Set last_activity to old time
-        session.last_activity = datetime.now(timezone.utc) - timedelta(seconds=SESSION_TIMEOUT + 100)
+        session.last_activity = datetime.now(timezone.utc) - timedelta(
+            seconds=SESSION_TIMEOUT + 100
+        )
         assert session.is_expired() is True
 
 
 # ===== Connection Management Tests =====
+
 
 class TestConnect:
     """Tests for ConsoleManager.connect()"""
@@ -125,9 +120,11 @@ class TestConnect:
         mock_reader.read = AsyncMock(return_value="")
         mock_writer = MagicMock()
 
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             session_id = await manager.connect("localhost", 5000, "Router1")
 
             assert session_id in manager.sessions
@@ -146,9 +143,11 @@ class TestConnect:
         mock_reader.read = AsyncMock(return_value="")
         mock_writer = MagicMock()
 
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             # First connection
             session_id_1 = await manager.connect("localhost", 5000, "Router1")
             # Second connection to same node
@@ -162,11 +161,15 @@ class TestConnect:
         """Test connection failure raises exception"""
         manager = ConsoleManager()
 
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  side_effect=ConnectionRefusedError("Connection refused")):
-            with pytest.raises(ConnectionRefusedError):
-                await manager.connect("localhost", 5000, "Router1")
+        with (
+            patch(
+                "console_manager.telnetlib3.open_connection",
+                new_callable=AsyncMock,
+                side_effect=ConnectionRefusedError("Connection refused"),
+            ),
+            pytest.raises(ConnectionRefusedError),
+        ):
+            await manager.connect("localhost", 5000, "Router1")
 
     @pytest.mark.asyncio
     async def test_connect_race_condition_handled(self):
@@ -180,15 +183,19 @@ class TestConnect:
         mock_writer.wait_closed = AsyncMock()
 
         # First connection succeeds and adds to sessions
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             session_id_1 = await manager.connect("localhost", 5000, "Router1")
 
         # Second connection encounters race condition (node already mapped)
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             session_id_2 = await manager.connect("localhost", 5000, "Router1")
 
             # Should return existing session
@@ -211,9 +218,11 @@ class TestDisconnect:
         mock_writer.close = MagicMock()
         mock_writer.wait_closed = AsyncMock()
 
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             session_id = await manager.connect("localhost", 5000, "Router1")
 
             # Disconnect
@@ -236,9 +245,11 @@ class TestDisconnect:
         mock_writer.close = MagicMock()
         mock_writer.wait_closed = AsyncMock()
 
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             session_id = await manager.connect("localhost", 5000, "Router1")
 
             # Get reader task
@@ -270,9 +281,11 @@ class TestDisconnect:
         mock_writer.close = MagicMock()
         mock_writer.wait_closed = AsyncMock()
 
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             await manager.connect("localhost", 5000, "Router1")
 
             # Disconnect by node name
@@ -283,6 +296,7 @@ class TestDisconnect:
 
 
 # ===== Session Lifecycle Tests =====
+
 
 class TestSessionLifecycle:
     """Tests for session lifecycle management"""
@@ -298,14 +312,16 @@ class TestSessionLifecycle:
         mock_writer.close = MagicMock()
         mock_writer.wait_closed = AsyncMock()
 
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             session_id = await manager.connect("localhost", 5000, "Router1")
 
             # Manually expire the session
-            manager.sessions[session_id].last_activity = (
-                datetime.now(timezone.utc) - timedelta(seconds=SESSION_TIMEOUT + 100)
+            manager.sessions[session_id].last_activity = datetime.now(timezone.utc) - timedelta(
+                seconds=SESSION_TIMEOUT + 100
             )
 
             # Run cleanup
@@ -323,9 +339,11 @@ class TestSessionLifecycle:
         mock_reader.read = AsyncMock(return_value="")
         mock_writer = MagicMock()
 
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             session_id = await manager.connect("localhost", 5000, "Router1")
 
             # Run cleanup on fresh session
@@ -345,9 +363,11 @@ class TestSessionLifecycle:
         mock_writer.close = MagicMock()
         mock_writer.wait_closed = AsyncMock()
 
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             await manager.connect("localhost", 5000, "Router1")
             await manager.connect("localhost", 5001, "Router2")
             await manager.connect("localhost", 5002, "Router3")
@@ -364,10 +384,7 @@ class TestSessionLifecycle:
 
         # Create session manually (simpler than mocking telnet)
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         manager.sessions["test-id"] = session
 
@@ -383,6 +400,7 @@ class TestSessionLifecycle:
 
 # ===== Buffer Management Tests =====
 
+
 class TestBufferManagement:
     """Tests for buffer management and reading"""
 
@@ -390,10 +408,7 @@ class TestBufferManagement:
         """Test get_output() returns full console buffer"""
         manager = ConsoleManager()
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         session.buffer = "Line 1\nLine 2\nLine 3"
         manager.sessions["test-id"] = session
@@ -406,27 +421,21 @@ class TestBufferManagement:
         """Test get_output() strips ANSI codes"""
         manager = ConsoleManager()
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
-        session.buffer = "\x1B[31mRed\x1B[0m text"
+        session.buffer = "\x1b[31mRed\x1b[0m text"
         manager.sessions["test-id"] = session
 
         output = manager.get_output("test-id")
 
         assert output == "Red text"
-        assert "\x1B" not in output
+        assert "\x1b" not in output
 
     def test_get_diff_returns_new_output(self):
         """Test get_diff() returns only new output since last read"""
         manager = ConsoleManager()
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         session.buffer = "Old output\nNew output"
         session.read_position = 11  # After "Old output\n"
@@ -441,10 +450,7 @@ class TestBufferManagement:
         """Test get_diff() advances read position"""
         manager = ConsoleManager()
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         session.buffer = "First\nSecond\nThird"
         session.read_position = 0
@@ -464,10 +470,7 @@ class TestBufferManagement:
         """Test buffer is trimmed when exceeding MAX_BUFFER_SIZE"""
         manager = ConsoleManager()
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
 
         # Create large buffer exceeding MAX_BUFFER_SIZE
@@ -489,6 +492,7 @@ class TestBufferManagement:
 
 # ===== Data Processing Tests =====
 
+
 class TestDataProcessing:
     """Tests for send() and data processing"""
 
@@ -505,7 +509,7 @@ class TestDataProcessing:
             host="localhost",
             port=5000,
             node_name="Router1",
-            writer=mock_writer
+            writer=mock_writer,
         )
         manager.sessions["test-id"] = session
 
@@ -535,7 +539,7 @@ class TestDataProcessing:
             host="localhost",
             port=5000,
             node_name="Router1",
-            writer=mock_writer
+            writer=mock_writer,
         )
         original_activity = session.last_activity
         manager.sessions["test-id"] = session
@@ -560,7 +564,7 @@ class TestDataProcessing:
             host="localhost",
             port=5000,
             node_name="Router1",
-            writer=mock_writer
+            writer=mock_writer,
         )
         manager.sessions["test-id"] = session
         manager._node_sessions["Router1"] = "test-id"
@@ -572,6 +576,7 @@ class TestDataProcessing:
 
 
 # ===== Convenience Methods Tests =====
+
 
 class TestConvenienceMethods:
     """Tests for node-name based convenience methods"""
@@ -595,10 +600,7 @@ class TestConvenienceMethods:
         """Test has_session() returns True for active session"""
         manager = ConsoleManager()
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         manager.sessions["test-id"] = session
         manager._node_sessions["Router1"] = "test-id"
@@ -616,10 +618,7 @@ class TestConvenienceMethods:
         """Test get_output_by_node() retrieves output by node name"""
         manager = ConsoleManager()
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         session.buffer = "Test output"
         manager.sessions["test-id"] = session
@@ -633,10 +632,7 @@ class TestConvenienceMethods:
         """Test get_diff_by_node() retrieves diff by node name"""
         manager = ConsoleManager()
         session = ConsoleSession(
-            session_id="test-id",
-            host="localhost",
-            port=5000,
-            node_name="Router1"
+            session_id="test-id", host="localhost", port=5000, node_name="Router1"
         )
         session.buffer = "New data"
         session.read_position = 0
@@ -651,6 +647,7 @@ class TestConvenienceMethods:
 
 # ===== Concurrent Access Tests =====
 
+
 class TestConcurrentAccess:
     """Tests for thread-safety and concurrent access"""
 
@@ -663,14 +660,16 @@ class TestConcurrentAccess:
         mock_reader.read = AsyncMock(return_value="")
         mock_writer = MagicMock()
 
-        with patch('console_manager.telnetlib3.open_connection',
-                  new_callable=AsyncMock,
-                  return_value=(mock_reader, mock_writer)):
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(mock_reader, mock_writer),
+        ):
             # Launch multiple concurrent connections
             results = await asyncio.gather(
                 manager.connect("localhost", 5000, "Router1"),
                 manager.connect("localhost", 5001, "Router2"),
-                manager.connect("localhost", 5002, "Router3")
+                manager.connect("localhost", 5002, "Router3"),
             )
 
             # All should succeed and create separate sessions

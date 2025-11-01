@@ -189,45 +189,78 @@ All linting configuration centralized in [pyproject.toml](pyproject.toml):
 
 ## Development Workflow
 
+### Quick Start (v0.43.0 Just-Based Workflow)
+
+```bash
+# Install dependencies and set up environment
+just install
+
+# Run all quality checks (dev mode with auto-fixes)
+just check
+
+# Build desktop extension for local testing
+just build
+
+# Full release pipeline (strict mode, no auto-fixes)
+just release
+```
+
 ### 1. Making Code Changes
 
 **Before editing server code:**
 ```bash
 # Read the current implementation
-cat mcp-server/server/main.py
-cat mcp-server/server/gns3_client.py
-cat mcp-server/server/console_manager.py
+cat gns3_mcp/server/main.py
+cat gns3_mcp/server/gns3_client.py
+cat gns3_mcp/server/console_manager.py
 
 # [v0.3.0] Architecture files
-cat mcp-server/server/models.py        # Pydantic data models
-cat mcp-server/server/link_validator.py  # Two-phase validation
-cat mcp-server/server/cache.py         # TTL-based caching
+cat gns3_mcp/server/models.py           # Pydantic data models
+cat gns3_mcp/server/link_validator.py   # Two-phase validation
+cat gns3_mcp/server/cache.py            # TTL-based caching
 ```
 
 **After editing:**
-1. Test locally first (see Testing section)
-2. Update version in manifest.json (increment appropriately)
-3. Commit changes - pre-commit hook automatically rebuilds extension
-4. Verify version in hook output: `gns3-mcp@X.Y.Z`
-5. Reinstall and test in Claude Desktop (double-click .mcpb)
+1. Run quality checks: `just check` (auto-fixes issues, runs tests)
+2. Update version if needed:
+   - Edit `gns3_mcp/__init__.py` (single source of truth)
+   - Edit `pyproject.toml`
+   - Edit `mcp-server/manifest.json`
+   - Run `just version-check` to verify consistency
+3. Update CHANGELOG.md with changes
+4. Commit changes - pre-commit hook runs fast checks (3-5s)
+5. Build and test: `just build` then double-click .mcpb
 
-### 2. Testing
+### 2. Quality Checks & Testing
 
-**Always test changes before packaging:**
+**Just Commands (v0.43.0):**
 
 ```bash
-# Test node discovery
+# Development mode (auto-fixes, non-blocking mypy)
+just check          # All checks: lint, format, type-check, test, version, changelog
+just lint           # Ruff linting with auto-fix
+just format         # Code formatting (Ruff + Black)
+just type-check     # Mypy type checking (non-blocking in dev mode)
+just test           # Run unit tests with coverage
+
+# CI mode (strict, no auto-fixes)
+just ci             # All checks in strict mode
+
+# Validation
+just version-check  # Verify version consistency across 3 files
+just changelog-check # Verify changelog has current version entry
+```
+
+**Manual Testing:**
+
+```bash
+# Test specific components
 python tests/list_nodes_helper.py
-
-# Test console directly (verify telnet works)
 python tests/interactive_console_test.py --port <PORT>
-
-# Test ConsoleManager
 python tests/test_mcp_console.py --port <PORT>
 
 # Manual MCP server test
-cd mcp-server
-mcp dev server/main.py --host 192.168.1.20 --port 80 --username admin --password <PASS>
+just dev-server     # Start HTTP server locally
 ```
 
 **Test device:** AlpineLinuxTest-1 (port 5014)
@@ -235,20 +268,23 @@ mcp dev server/main.py --host 192.168.1.20 --port 80 --username admin --password
 - Good for automated testing
 - See `tests/ALPINE_SETUP_GUIDE.md`
 
-### 3. Packaging
+### 3. Building & Packaging
 
-**After any server code change:**
+**Build desktop extension locally:**
 
 ```bash
-cd mcp-server
-npx @anthropic-ai/mcpb pack
-
-# Output: mcp-server.mcpb (~19MB)
+just build          # Builds .mcpb in mcp-server/ directory
+# Output: mcp-server/mcp-server.mcpb (~19MB)
 ```
 
-**Validate manifest before packaging:**
+**Validate manifest:**
 ```bash
-npx @anthropic-ai/mcpb validate manifest.json
+npx @anthropic-ai/mcpb validate mcp-server/manifest.json
+```
+
+**Full release pipeline:**
+```bash
+just release        # Runs: version-check, changelog-check, ci, build
 ```
 
 ### 4. Installation
@@ -668,3 +704,4 @@ git add . && git commit -m "feat: description"
 - remember to restart chat when need to update mcp server
 - keep version history in CLAUDE.md
 - Remember that you need to update the version and set the 'latest' tag to the container
+- just bump [major|minor|patch] command that automatically updates all version files from a single source. Remember to update versions according to their importance

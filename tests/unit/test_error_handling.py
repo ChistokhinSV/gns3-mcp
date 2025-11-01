@@ -2,34 +2,36 @@
 
 Tests error codes, error response structure, helper functions, and version tracking.
 """
-import pytest
+
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 
-import sys
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "mcp-server" / "server"))
 
-from models import ErrorCode, ErrorResponse
 from error_utils import (
-    get_version,
+    console_connection_failed_error,
     create_error_response,
-    node_not_found_error,
-    project_not_found_error,
-    template_not_found_error,
     drawing_not_found_error,
-    snapshot_not_found_error,
-    port_in_use_error,
+    get_version,
+    gns3_api_error,
+    gns3_unreachable_error,
+    node_not_found_error,
     node_running_error,
     node_stopped_error,
-    gns3_unreachable_error,
-    console_connection_failed_error,
+    port_in_use_error,
+    project_not_found_error,
+    snapshot_not_found_error,
+    template_not_found_error,
     validation_error,
-    gns3_api_error
 )
-
+from models import ErrorCode, ErrorResponse
 
 # ===== ErrorCode Enum Tests =====
+
 
 class TestErrorCode:
     """Tests for ErrorCode enum (26 codes across 5 categories)"""
@@ -67,7 +69,7 @@ class TestErrorCode:
             # Internal Errors (500-style) - 3 codes
             "INTERNAL_ERROR",
             "TIMEOUT",
-            "OPERATION_FAILED"
+            "OPERATION_FAILED",
         ]
 
         # Verify count
@@ -76,7 +78,9 @@ class TestErrorCode:
         # Verify all codes exist
         for code in expected_codes:
             assert hasattr(ErrorCode, code), f"ErrorCode.{code} should be defined"
-            assert getattr(ErrorCode, code).value == code, f"ErrorCode.{code} should have value '{code}'"
+            assert (
+                getattr(ErrorCode, code).value == code
+            ), f"ErrorCode.{code} should have value '{code}'"
 
     def test_error_code_is_string_enum(self):
         """Verify ErrorCode is a string enum"""
@@ -92,7 +96,7 @@ class TestErrorCode:
             ErrorCode.LINK_NOT_FOUND,
             ErrorCode.TEMPLATE_NOT_FOUND,
             ErrorCode.DRAWING_NOT_FOUND,
-            ErrorCode.SNAPSHOT_NOT_FOUND
+            ErrorCode.SNAPSHOT_NOT_FOUND,
         }
         assert len(not_found_codes) == 6
 
@@ -105,7 +109,7 @@ class TestErrorCode:
             ErrorCode.NODE_STOPPED,
             ErrorCode.INVALID_NODE_STATE,
             ErrorCode.INVALID_ADAPTER,
-            ErrorCode.INVALID_PORT
+            ErrorCode.INVALID_PORT,
         }
         assert len(validation_codes) == 8
 
@@ -116,28 +120,21 @@ class TestErrorCode:
             ErrorCode.CONSOLE_DISCONNECTED,
             ErrorCode.CONSOLE_CONNECTION_FAILED,
             ErrorCode.SSH_CONNECTION_FAILED,
-            ErrorCode.SSH_DISCONNECTED
+            ErrorCode.SSH_DISCONNECTED,
         }
         assert len(connection_codes) == 6
 
         # Authentication Errors (401-style)
-        auth_codes = {
-            ErrorCode.AUTH_FAILED,
-            ErrorCode.TOKEN_EXPIRED,
-            ErrorCode.INVALID_CREDENTIALS
-        }
+        auth_codes = {ErrorCode.AUTH_FAILED, ErrorCode.TOKEN_EXPIRED, ErrorCode.INVALID_CREDENTIALS}
         assert len(auth_codes) == 3
 
         # Internal Errors (500-style)
-        internal_codes = {
-            ErrorCode.INTERNAL_ERROR,
-            ErrorCode.TIMEOUT,
-            ErrorCode.OPERATION_FAILED
-        }
+        internal_codes = {ErrorCode.INTERNAL_ERROR, ErrorCode.TIMEOUT, ErrorCode.OPERATION_FAILED}
         assert len(internal_codes) == 3
 
 
 # ===== ErrorResponse Model Tests =====
+
 
 class TestErrorResponse:
     """Tests for ErrorResponse Pydantic model"""
@@ -161,7 +158,7 @@ class TestErrorResponse:
             details="Available nodes: R1, R2",
             suggested_action="Use list_nodes() to see all nodes",
             context={"node_name": "R3", "project_id": "abc123"},
-            server_version="0.20.0"
+            server_version="0.20.0",
         )
         assert error.error == "Node not found"
         assert error.error_code == "NODE_NOT_FOUND"
@@ -174,7 +171,7 @@ class TestErrorResponse:
         """Test timestamp is valid ISO 8601 format"""
         error = ErrorResponse(error="Test")
         # Should parse without exception
-        parsed = datetime.fromisoformat(error.timestamp.replace('Z', '+00:00'))
+        parsed = datetime.fromisoformat(error.timestamp.replace("Z", "+00:00"))
         assert isinstance(parsed, datetime)
 
     def test_json_serialization(self):
@@ -185,7 +182,7 @@ class TestErrorResponse:
             details="Details here",
             suggested_action="Fix it",
             context={"key": "value"},
-            server_version="0.20.0"
+            server_version="0.20.0",
         )
         json_str = error.model_dump_json()
         parsed = json.loads(json_str)
@@ -200,6 +197,7 @@ class TestErrorResponse:
 
 
 # ===== Version Synchronization Tests =====
+
 
 class TestVersionSynchronization:
     """Tests for version tracking and synchronization"""
@@ -217,14 +215,13 @@ class TestVersionSynchronization:
         # Should match semantic versioning pattern
         parts = version.split(".")
         assert len(parts) == 3, f"Version should be X.Y.Z format, got {version}"
-        assert all(part.isdigit() for part in parts), f"Version parts should be numeric, got {version}"
+        assert all(
+            part.isdigit() for part in parts
+        ), f"Version parts should be numeric, got {version}"
 
     def test_error_response_includes_version(self):
         """Verify all error responses include server_version"""
-        error = create_error_response(
-            error="Test error",
-            error_code=ErrorCode.INTERNAL_ERROR.value
-        )
+        error = create_error_response(error="Test error", error_code=ErrorCode.INTERNAL_ERROR.value)
 
         parsed = json.loads(error)
         assert "server_version" in parsed
@@ -252,6 +249,7 @@ class TestVersionSynchronization:
 
 # ===== Error Helper Function Tests =====
 
+
 class TestErrorHelperFunctions:
     """Tests for all 15 error helper functions in error_utils.py"""
 
@@ -262,7 +260,7 @@ class TestErrorHelperFunctions:
             error_code=ErrorCode.INTERNAL_ERROR.value,
             details="Error details",
             suggested_action="Fix it",
-            context={"key": "value"}
+            context={"key": "value"},
         )
 
         parsed = json.loads(error_json)
@@ -277,9 +275,7 @@ class TestErrorHelperFunctions:
     def test_node_not_found_error(self):
         """Test node not found error helper"""
         error_json = node_not_found_error(
-            node_name="R1",
-            project_id="abc123",
-            available_nodes=["R2", "R3", "Switch1"]
+            node_name="R1", project_id="abc123", available_nodes=["R2", "R3", "Switch1"]
         )
 
         parsed = json.loads(error_json)
@@ -310,8 +306,7 @@ class TestErrorHelperFunctions:
     def test_template_not_found_error(self):
         """Test template not found error helper"""
         error_json = template_not_found_error(
-            template_name="Cisco IOSv",
-            available_templates=["Alpine Linux", "Ethernet switch"]
+            template_name="Cisco IOSv", available_templates=["Alpine Linux", "Ethernet switch"]
         )
 
         parsed = json.loads(error_json)
@@ -323,9 +318,7 @@ class TestErrorHelperFunctions:
     def test_drawing_not_found_error(self):
         """Test drawing not found error helper"""
         error_json = drawing_not_found_error(
-            drawing_id="draw-123",
-            project_id="abc123",
-            available_ids=["draw-456", "draw-789"]
+            drawing_id="draw-123", project_id="abc123", available_ids=["draw-456", "draw-789"]
         )
 
         parsed = json.loads(error_json)
@@ -339,7 +332,7 @@ class TestErrorHelperFunctions:
         error_json = snapshot_not_found_error(
             snapshot_name="Before Config",
             project_id="abc123",
-            available_snapshots=["Initial Setup", "After OSPF"]
+            available_snapshots=["Initial Setup", "After OSPF"],
         )
 
         parsed = json.loads(error_json)
@@ -349,12 +342,7 @@ class TestErrorHelperFunctions:
 
     def test_port_in_use_error(self):
         """Test port in use error helper"""
-        error_json = port_in_use_error(
-            node_name="R1",
-            adapter=0,
-            port=0,
-            connected_to="R2"
-        )
+        error_json = port_in_use_error(node_name="R1", adapter=0, port=0, connected_to="R2")
 
         parsed = json.loads(error_json)
         assert "R1" in parsed["error"]
@@ -365,10 +353,7 @@ class TestErrorHelperFunctions:
 
     def test_node_running_error(self):
         """Test node running error helper"""
-        error_json = node_running_error(
-            node_name="Router1",
-            operation="change properties"
-        )
+        error_json = node_running_error(node_name="Router1", operation="change properties")
 
         parsed = json.loads(error_json)
         assert "Router1" in parsed["error"]
@@ -378,10 +363,7 @@ class TestErrorHelperFunctions:
 
     def test_node_stopped_error(self):
         """Test node stopped error helper"""
-        error_json = node_stopped_error(
-            node_name="Router1",
-            operation="console access"
-        )
+        error_json = node_stopped_error(node_name="Router1", operation="console access")
 
         parsed = json.loads(error_json)
         assert "Router1" in parsed["error"]
@@ -392,9 +374,7 @@ class TestErrorHelperFunctions:
     def test_gns3_unreachable_error(self):
         """Test GNS3 unreachable error helper"""
         error_json = gns3_unreachable_error(
-            host="192.168.1.20",
-            port=80,
-            details="Connection refused"
+            host="192.168.1.20", port=80, details="Connection refused"
         )
 
         parsed = json.loads(error_json)
@@ -407,10 +387,7 @@ class TestErrorHelperFunctions:
     def test_console_connection_failed_error(self):
         """Test console connection failed error helper"""
         error_json = console_connection_failed_error(
-            node_name="Router1",
-            host="192.168.1.20",
-            port=5000,
-            details="Connection timeout"
+            node_name="Router1", host="192.168.1.20", port=5000, details="Connection timeout"
         )
 
         parsed = json.loads(error_json)
@@ -426,7 +403,7 @@ class TestErrorHelperFunctions:
             message="Invalid action 'restart'",
             parameter="action",
             value="restart",
-            valid_values=["start", "stop", "suspend", "reload"]
+            valid_values=["start", "stop", "suspend", "reload"],
         )
 
         parsed = json.loads(error_json)
@@ -439,9 +416,7 @@ class TestErrorHelperFunctions:
     def test_gns3_api_error(self):
         """Test GNS3 API error helper"""
         error_json = gns3_api_error(
-            status_code=500,
-            message="Internal Server Error",
-            endpoint="/v3/projects/abc123/nodes"
+            status_code=500, message="Internal Server Error", endpoint="/v3/projects/abc123/nodes"
         )
 
         parsed = json.loads(error_json)
@@ -455,6 +430,7 @@ class TestErrorHelperFunctions:
 
 # ===== Integration Tests =====
 
+
 class TestErrorHandlingIntegration:
     """Integration tests for error handling across the system"""
 
@@ -465,15 +441,27 @@ class TestErrorHandlingIntegration:
             (node_not_found_error, {"node_name": "R1", "project_id": "abc", "available_nodes": []}),
             (project_not_found_error, {}),
             (template_not_found_error, {"template_name": "test", "available_templates": []}),
-            (drawing_not_found_error, {"drawing_id": "d1", "project_id": "abc", "available_ids": []}),
-            (snapshot_not_found_error, {"snapshot_name": "s1", "project_id": "abc", "available_snapshots": []}),
+            (
+                drawing_not_found_error,
+                {"drawing_id": "d1", "project_id": "abc", "available_ids": []},
+            ),
+            (
+                snapshot_not_found_error,
+                {"snapshot_name": "s1", "project_id": "abc", "available_snapshots": []},
+            ),
             (port_in_use_error, {"node_name": "R1", "adapter": 0, "port": 0, "connected_to": "R2"}),
             (node_running_error, {"node_name": "R1", "operation": "test"}),
             (node_stopped_error, {"node_name": "R1", "operation": "test"}),
             (gns3_unreachable_error, {"host": "localhost", "port": 80, "details": "test"}),
-            (console_connection_failed_error, {"node_name": "R1", "host": "localhost", "port": 5000, "details": "test"}),
-            (validation_error, {"message": "test", "parameter": "p", "value": "v", "valid_values": []}),
-            (gns3_api_error, {"status_code": 500, "message": "test", "endpoint": "/test"})
+            (
+                console_connection_failed_error,
+                {"node_name": "R1", "host": "localhost", "port": 5000, "details": "test"},
+            ),
+            (
+                validation_error,
+                {"message": "test", "parameter": "p", "value": "v", "valid_values": []},
+            ),
+            (gns3_api_error, {"status_code": 500, "message": "test", "endpoint": "/test"}),
         ]
 
         for helper_func, kwargs in helpers:
@@ -483,12 +471,18 @@ class TestErrorHandlingIntegration:
             # Required fields
             assert "error" in parsed, f"{helper_func.__name__} missing 'error' field"
             assert "error_code" in parsed, f"{helper_func.__name__} missing 'error_code' field"
-            assert "server_version" in parsed, f"{helper_func.__name__} missing 'server_version' field"
+            assert (
+                "server_version" in parsed
+            ), f"{helper_func.__name__} missing 'server_version' field"
             assert "timestamp" in parsed, f"{helper_func.__name__} missing 'timestamp' field"
 
             # Recommended fields
-            assert "suggested_action" in parsed, f"{helper_func.__name__} missing 'suggested_action' field"
-            assert parsed["suggested_action"] is not None, f"{helper_func.__name__} has null 'suggested_action'"
+            assert (
+                "suggested_action" in parsed
+            ), f"{helper_func.__name__} missing 'suggested_action' field"
+            assert (
+                parsed["suggested_action"] is not None
+            ), f"{helper_func.__name__} has null 'suggested_action'"
 
     def test_error_codes_match_enum(self):
         """Verify all error helpers use valid ErrorCode enum values"""
@@ -504,7 +498,7 @@ class TestErrorHandlingIntegration:
             (gns3_unreachable_error, "GNS3_UNREACHABLE"),
             (console_connection_failed_error, "CONSOLE_CONNECTION_FAILED"),
             (validation_error, "INVALID_PARAMETER"),
-            (gns3_api_error, "GNS3_API_ERROR")
+            (gns3_api_error, "GNS3_API_ERROR"),
         ]
 
         for helper_func, expected_code in test_cases:
@@ -521,9 +515,7 @@ class TestErrorHandlingIntegration:
                 error_json = helper_func("s1", "abc", [])
             elif helper_func == port_in_use_error:
                 error_json = helper_func("R1", 0, 0, "R2")
-            elif helper_func == node_running_error:
-                error_json = helper_func("R1", "test")
-            elif helper_func == node_stopped_error:
+            elif helper_func in (node_running_error, node_stopped_error):
                 error_json = helper_func("R1", "test")
             elif helper_func == gns3_unreachable_error:
                 error_json = helper_func("localhost", 80, "test")
@@ -535,8 +527,9 @@ class TestErrorHandlingIntegration:
                 error_json = helper_func(500, "test", "/test")
 
             parsed = json.loads(error_json)
-            assert parsed["error_code"] == expected_code, \
-                f"{helper_func.__name__} should return error_code={expected_code}, got {parsed['error_code']}"
+            assert (
+                parsed["error_code"] == expected_code
+            ), f"{helper_func.__name__} should return error_code={expected_code}, got {parsed['error_code']}"
 
     def test_context_contains_useful_debug_info(self):
         """Verify error context includes useful debugging information"""

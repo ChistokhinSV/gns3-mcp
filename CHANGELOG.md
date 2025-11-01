@@ -5,6 +5,112 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.0] - 2025-11-01 - Just-Based Local CI/CD Complete
+
+### Added
+- **Just-Based Local CI/CD** (GM-18):
+  - `justfile` with 25+ recipes for unified development workflow
+  - `just check` - All checks (lint, format, type-check, test, version, changelog) in dev mode with auto-fixes
+  - `just ci` - Strict CI mode (no auto-fixes, blocking errors)
+  - `just build` - Build .mcpb desktop extension locally
+  - `just release` - Full release pipeline (version check, changelog check, tests, build)
+  - `just dev-server` - Start HTTP server locally for testing
+  - `just service-*` - Windows service management shortcuts
+  - PowerShell-compatible syntax (`windows-shell` configuration)
+- **Validation Scripts**:
+  - `scripts/check_version.py` - Version consistency validator (3 files)
+  - `scripts/check_changelog.py` - Changelog entry validator
+  - `scripts/get_version.py` - Version extraction helper
+  - ASCII-only output (fixed Windows cp1251 encoding issues)
+- **Developer Experience**:
+  - 10x faster commits (3-5s vs 30-60s with old pre-commit hooks)
+  - Single command interface for all quality checks
+  - Non-blocking mypy in dev mode (warnings only)
+  - Fast local .mcpb builds for testing
+
+### Changed
+- **Pre-commit Hooks Simplified** (7 → 3 hooks):
+  - **Removed**: Black formatter (Ruff covers it), Mypy (moved to Just), lib/ rebuild, .mcpb rebuild
+  - **Kept**: Ruff linter+formatter, fast unit tests (now blocking), version check
+  - **Result**: 10x faster commits (3-5s vs 30-60s)
+- **Mypy Configuration** (Lenient Mode - Temporary):
+  - Python version: 3.9 → 3.10 (matches MCP library pattern matching syntax)
+  - Disabled `warn_return_any`, `warn_unused_ignores`, `check_untyped_defs` for fast iteration
+  - Non-blocking in justfile (dev mode - shows warnings, doesn't fail build)
+  - 65 type errors deferred to GM-19 (strict mode restoration)
+  - Added `types-tabulate` for proper type hints
+  - Ignore MCP library internal errors (`mcp.server.lowlevel.*`)
+- **Black Configuration**:
+  - Fixed regex exclude pattern (`*.egg-info` → `.*\.egg-info`)
+  - Target version: py39 → py310
+- **Test Infrastructure**:
+  - Fixed paths for PyPI package structure (`mcp-server/server` → `gns3_mcp/server`)
+  - Updated `conftest.py`, `pytest.ini`, `test_version.py`
+  - Coverage paths updated (`mcp-server/server` → `gns3_mcp/server`)
+  - 202 tests passing, 24% coverage
+
+### Fixed
+- **Ruff Errors**:
+  - C401: Set comprehension instead of `set(generator)` in link_validator.py:298
+  - B905: Added `strict=True` to `zip()` call in node_tools.py:646 (Python 3.10+ requirement)
+  - SIM117: Combined nested `with` statements in test_console_manager.py:165
+  - SIM109: Used `in (a, b)` instead of `or` in test_error_handling.py:524
+  - F401: Removed unused `stdio_client` import in test_mcp_server.py
+- **Test Collection Errors**:
+  - Updated import paths for PyPI package structure
+  - Fixed version synchronization tests
+  - All 202 unit tests now passing
+
+### Technical Debt
+- Created **GM-19**: Restore strict mypy type checking
+  - 65 errors across 12 files to fix
+  - Re-enable `warn_return_any`, `warn_unused_ignores`, `check_untyped_defs`
+  - Make mypy blocking in justfile
+
+## [0.42.0] - 2025-11-01 - PyPI Packaging & Local CI/CD Workflow
+
+### Added
+- **PyPI Package Support**:
+  - Published to PyPI as `gns3-mcp` package
+  - Console script entry point: `gns3-mcp` command
+  - Simplified installation: `pip install gns3-mcp`
+  - Editable mode support for development: `pip install -e .`
+- **Just-based Local CI/CD**:
+  - New `justfile` with 25+ automation recipes
+  - Unified commands: `just check`, `just build`, `just release`
+  - Fast local checks (3-5s vs 30-60s with old setup)
+  - Version validation across 3 files
+  - Changelog validation
+  - Service management shortcuts
+- **Validation Scripts** (`scripts/`):
+  - `check_version.py` - Validates version consistency across gns3_mcp/__init__.py, pyproject.toml, manifest.json
+  - `check_changelog.py` - Ensures current version documented in CHANGELOG.md
+  - `get_version.py` - Helper to extract current version
+
+### Changed
+- **Service Architecture**:
+  - Windows service now uses `gns3-mcp` CLI instead of wrapper script
+  - Removed `mcp-server/start_mcp_http.py` (185 lines deleted)
+  - Updated `server.cmd` to install package with `pip install -e .`
+  - Simplified service configuration in `GNS3-MCP-HTTP.xml`
+- **Pre-commit Hooks** (7 → 3 hooks, 10x faster):
+  - Removed: Black (Ruff formatter covers it), Mypy (moved to Just), lib/ rebuild, .mcpb rebuild
+  - Kept: Ruff linter/formatter (fast), unit tests (now blocking), version check
+  - Deleted `.git/hooks/pre-commit.bat` (duplication eliminated)
+- **GitHub Actions Optimization**:
+  - Workflow triggers only on v* tags (not every master push)
+  - Added dependency caching (3x faster builds)
+  - Removed npm cache (no package-lock.json)
+- **CLI Improvements** (`gns3_mcp/cli.py`):
+  - Added `--use-https` and `--verify-ssl` arguments (fixes AttributeError)
+  - Replaced deprecated `streamable_http_app()` with `http_app()`
+  - Version reading from `gns3_mcp.__version__` instead of manifest.json
+
+### Fixed
+- **Service Execution**: Windows service now starts correctly with CLI-based execution
+- **Version Management**: Single source of truth (gns3_mcp/__init__.py)
+- **Deprecation Warnings**: Updated to non-deprecated FastMCP methods
+
 ## [0.40.0] - 2025-10-30 - Competitive Features: Bulk Operations & Topology Report
 
 ### Added

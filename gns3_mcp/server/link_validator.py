@@ -8,7 +8,7 @@ This prevents partial topology changes that leave the network in an inconsistent
 """
 
 import logging
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +23,10 @@ class LinkValidator:
             nodes: List of node dictionaries from GNS3 API
             links: List of link dictionaries from GNS3 API
         """
-        self.nodes = {n['name']: n for n in nodes}
-        self.node_ids = {n['node_id']: n for n in nodes}
+        self.nodes = {n["name"]: n for n in nodes}
+        self.node_ids = {n["node_id"]: n for n in nodes}
         self.links = links
-        self.link_ids = {link['link_id']: link for link in links}
+        self.link_ids = {link["link_id"]: link for link in links}
         self.port_usage = self._build_port_usage_map()
         self._build_adapter_name_maps()
 
@@ -39,11 +39,11 @@ class LinkValidator:
         usage = {}
 
         for link in self.links:
-            link_nodes = link.get('nodes', [])
+            link_nodes = link.get("nodes", [])
             for node in link_nodes:
-                node_id = node.get('node_id')
-                adapter = node.get('adapter_number', 0)
-                port = node.get('port_number')
+                node_id = node.get("node_id")
+                adapter = node.get("adapter_number", 0)
+                port = node.get("port_number")
 
                 if not node_id or port is None:
                     continue
@@ -68,16 +68,16 @@ class LinkValidator:
         self.adapter_name_to_num = {}
 
         for node_name, node in self.nodes.items():
-            if 'ports' not in node or not node['ports']:
+            if "ports" not in node or not node["ports"]:
                 continue
 
             self.adapter_names[node_name] = {}
             self.adapter_name_to_num[node_name] = {}
 
-            for port in node['ports']:
-                adapter_num = port.get('adapter_number', 0)
-                port_num = port.get('port_number', 0)
-                port_name = port.get('name', f'port{port_num}')
+            for port in node["ports"]:
+                adapter_num = port.get("adapter_number", 0)
+                port_num = port.get("port_number", 0)
+                port_name = port.get("name", f"port{port_num}")
 
                 # Map (adapter, port) -> name
                 self.adapter_names[node_name][(adapter_num, port_num)] = port_name
@@ -85,7 +85,9 @@ class LinkValidator:
                 # Map name -> (adapter, port)
                 self.adapter_name_to_num[node_name][port_name] = (adapter_num, port_num)
 
-    def resolve_adapter_identifier(self, node_name: str, identifier: any) -> Tuple[int, int, str, Optional[str]]:
+    def resolve_adapter_identifier(
+        self, node_name: str, identifier: any
+    ) -> Tuple[int, int, str, str | None]:
         """Resolve adapter identifier (name or number) to (adapter_num, port_num, name, error)
 
         Args:
@@ -109,8 +111,7 @@ class LinkValidator:
             # Try to get the actual port name
             if node_name in self.adapter_names:
                 port_name = self.adapter_names[node_name].get(
-                    (adapter_num, port_num),
-                    f"adapter{adapter_num}/port{port_num}"
+                    (adapter_num, port_num), f"adapter{adapter_num}/port{port_num}"
                 )
             else:
                 port_name = f"adapter{adapter_num}/port{port_num}"
@@ -133,20 +134,26 @@ class LinkValidator:
             else:
                 avail_str = ", ".join(available[:15]) + f"... ({len(available)} total)"
 
-            return (0, 0, "",
+            return (
+                0,
+                0,
+                "",
                 f"Port '{identifier}' not found on {node_name} (case-sensitive). "
                 f"Available ports: {avail_str}. "
-                f"Tip: Use get_links() to see current connections")
+                f"Tip: Use get_links() to see current connections",
+            )
 
         return (0, 0, "", f"Invalid adapter identifier type: {type(identifier)}")
 
-    def validate_connect(self,
-                        node_a_name: str,
-                        node_b_name: str,
-                        port_a: int,
-                        port_b: int,
-                        adapter_a: int = 0,
-                        adapter_b: int = 0) -> Optional[str]:
+    def validate_connect(
+        self,
+        node_a_name: str,
+        node_b_name: str,
+        port_a: int,
+        port_b: int,
+        adapter_a: int = 0,
+        adapter_b: int = 0,
+    ) -> str | None:
         """Validate a connect operation
 
         Args:
@@ -171,15 +178,11 @@ class LinkValidator:
         node_b = self.nodes[node_b_name]
 
         # Check ports are available
-        error = self._check_port_available(
-            node_a['node_id'], node_a_name, adapter_a, port_a
-        )
+        error = self._check_port_available(node_a["node_id"], node_a_name, adapter_a, port_a)
         if error:
             return error
 
-        error = self._check_port_available(
-            node_b['node_id'], node_b_name, adapter_b, port_b
-        )
+        error = self._check_port_available(node_b["node_id"], node_b_name, adapter_b, port_b)
         if error:
             return error
 
@@ -194,7 +197,7 @@ class LinkValidator:
 
         return None
 
-    def validate_disconnect(self, link_id: str) -> Optional[str]:
+    def validate_disconnect(self, link_id: str) -> str | None:
         """Validate a disconnect operation
 
         Args:
@@ -208,11 +211,9 @@ class LinkValidator:
 
         return None
 
-    def _check_port_available(self,
-                              node_id: str,
-                              node_name: str,
-                              adapter: int,
-                              port: int) -> Optional[str]:
+    def _check_port_available(
+        self, node_id: str, node_name: str, adapter: int, port: int
+    ) -> str | None:
         """Check if a port is currently available (not in use)
 
         Args:
@@ -237,7 +238,7 @@ class LinkValidator:
 
         return None
 
-    def _find_link_using_port(self, node_id: str, adapter: int, port: int) -> Optional[str]:
+    def _find_link_using_port(self, node_id: str, adapter: int, port: int) -> str | None:
         """Find link ID that uses specified port
 
         Args:
@@ -249,19 +250,19 @@ class LinkValidator:
             Link ID or "unknown" if not found
         """
         for link in self.links:
-            for node in link.get('nodes', []):
-                if (node.get('node_id') == node_id and
-                    node.get('adapter_number', 0) == adapter and
-                    node.get('port_number') == port):
-                    return link['link_id']
+            for node in link.get("nodes", []):
+                if (
+                    node.get("node_id") == node_id
+                    and node.get("adapter_number", 0) == adapter
+                    and node.get("port_number") == port
+                ):
+                    return link["link_id"]
 
         return "unknown"
 
-    def _validate_port_exists(self,
-                             node: Dict,
-                             adapter: int,
-                             port: int,
-                             node_name: str) -> Optional[str]:
+    def _validate_port_exists(
+        self, node: Dict, adapter: int, port: int, node_name: str
+    ) -> str | None:
         """Validate that adapter/port actually exists on the node
 
         Args:
@@ -275,19 +276,19 @@ class LinkValidator:
         """
         # If node doesn't have ports info, we can't validate
         # (Some node types like Cloud, NAT don't expose port details)
-        if 'ports' not in node:
+        if "ports" not in node:
             logger.debug(f"Node {node_name} has no port information, skipping validation")
             return None
 
-        ports = node['ports']
+        ports = node["ports"]
         if not ports:
             return None
 
         # Check if requested adapter/port exists
         matching_port = None
         for p in ports:
-            p_adapter = p.get('adapter_number', 0)
-            p_port = p.get('port_number')
+            p_adapter = p.get("adapter_number", 0)
+            p_port = p.get("port_number")
 
             if p_adapter == adapter and p_port == port:
                 matching_port = p
@@ -295,13 +296,13 @@ class LinkValidator:
 
         if not matching_port:
             # Build helpful error with available adapters
-            available_adapters = sorted(set(p.get('adapter_number', 0) for p in ports))
+            available_adapters = sorted({p.get("adapter_number", 0) for p in ports})
             adapter_info = []
 
             for a in available_adapters:
-                adapter_ports = sorted([p.get('port_number', 0)
-                                       for p in ports
-                                       if p.get('adapter_number', 0) == a])
+                adapter_ports = sorted(
+                    [p.get("port_number", 0) for p in ports if p.get("adapter_number", 0) == a]
+                )
                 adapter_info.append(f"adapter {a}: ports {adapter_ports}")
 
             return (
@@ -311,7 +312,7 @@ class LinkValidator:
 
         return None
 
-    def get_port_info(self, node_name: str) -> Optional[str]:
+    def get_port_info(self, node_name: str) -> str | None:
         """Get human-readable port information for a node
 
         Args:
@@ -325,22 +326,22 @@ class LinkValidator:
 
         node = self.nodes[node_name]
 
-        if 'ports' not in node or not node['ports']:
+        if "ports" not in node or not node["ports"]:
             return f"Node {node_name} has no port information available"
 
-        ports = node['ports']
+        ports = node["ports"]
         port_by_adapter = {}
 
         for p in ports:
-            adapter = p.get('adapter_number', 0)
-            port_num = p.get('port_number', 0)
-            port_name = p.get('name', f'port{port_num}')
+            adapter = p.get("adapter_number", 0)
+            port_num = p.get("port_number", 0)
+            port_name = p.get("name", f"port{port_num}")
 
             if adapter not in port_by_adapter:
                 port_by_adapter[adapter] = []
 
             # Check if port is in use
-            in_use = self._is_port_used(node['node_id'], adapter, port_num)
+            in_use = self._is_port_used(node["node_id"], adapter, port_num)
             status = "in use" if in_use else "free"
 
             port_by_adapter[adapter].append(f"  {port_num}: {port_name} ({status})")
@@ -363,6 +364,8 @@ class LinkValidator:
         Returns:
             True if port is in use, False otherwise
         """
-        return (node_id in self.port_usage and
-                adapter in self.port_usage[node_id] and
-                port in self.port_usage[node_id][adapter])
+        return (
+            node_id in self.port_usage
+            and adapter in self.port_usage[node_id]
+            and port in self.port_usage[node_id][adapter]
+        )

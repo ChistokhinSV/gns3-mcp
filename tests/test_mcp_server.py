@@ -5,24 +5,22 @@ Tests all MCP tools against a real GNS3 server.
 Run this script to verify server functionality.
 """
 
-import asyncio
 import argparse
-import sys
-from typing import Optional
+import asyncio
 import logging
+import sys
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s: %(message)s',
-    datefmt='%H:%M:%S %d.%m.%Y'
+    format="[%(asctime)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S %d.%m.%Y",
 )
 logger = logging.getLogger(__name__)
 
 # Import MCP client libraries
 try:
     from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
 except ImportError:
     logger.error("MCP package not installed. Run: pip install mcp")
     sys.exit(1)
@@ -36,9 +34,9 @@ class GNS3MCPTester:
         self.port = port
         self.username = username
         self.password = password
-        self.session: Optional[ClientSession] = None
-        self.test_node_name: Optional[str] = None
-        self.console_session_id: Optional[str] = None
+        self.session: ClientSession | None = None
+        self.test_node_name: str | None = None
+        self.console_session_id: str | None = None
 
     async def setup(self):
         """Initialize MCP client connection"""
@@ -51,11 +49,11 @@ class GNS3MCPTester:
                 f"--host={self.host}",
                 f"--port={self.port}",
                 f"--username={self.username}",
-                f"--password={self.password}"
+                f"--password={self.password}",
             ],
             env={
                 "PYTHONPATH": "C:/HOME/1. Scripts/008. GNS3 MCP/mcp-server/lib;C:/HOME/1. Scripts/008. GNS3 MCP/mcp-server/server"
-            }
+            },
         )
 
         # Note: Actual client connection would go here
@@ -181,9 +179,9 @@ class GNS3MCPTester:
 
     async def run_all_tests(self, test_node: str):
         """Run complete test suite"""
-        logger.info("="*60)
+        logger.info("=" * 60)
         logger.info("GNS3 MCP Server Test Suite")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
         results = []
 
@@ -209,11 +207,11 @@ class GNS3MCPTester:
             results.append(False)
 
         # Summary
-        logger.info("="*60)
+        logger.info("=" * 60)
         passed = sum(results)
         total = len(results)
         logger.info(f"Tests passed: {passed}/{total}")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
         return all(results)
 
@@ -229,10 +227,7 @@ async def main():
     args = parser.parse_args()
 
     tester = GNS3MCPTester(
-        host=args.host,
-        port=args.port,
-        username=args.username,
-        password=args.password
+        host=args.host, port=args.port, username=args.username, password=args.password
     )
 
     try:

@@ -3,17 +3,21 @@ Pytest configuration and shared fixtures for GNS3 MCP Server tests.
 
 This file contains fixtures that are available to all tests.
 """
+
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
+
 import pytest
-from unittest.mock import Mock, AsyncMock
 
 # Add server directory to path for imports
-server_path = Path(__file__).parent.parent / "mcp-server" / "server"
+# Updated for PyPI package structure (v0.42.0)
+server_path = Path(__file__).parent.parent / "gns3_mcp" / "server"
 sys.path.insert(0, str(server_path))
 
 
 # ===== Common Fixtures =====
+
 
 @pytest.fixture
 def mock_gns3_client():
@@ -37,7 +41,7 @@ def sample_project_data():
         "project_id": "test-project-123",
         "name": "Test Project",
         "status": "opened",
-        "path": "/projects/test-project-123"
+        "path": "/projects/test-project-123",
     }
 
 
@@ -61,17 +65,10 @@ def sample_node_data():
             "x": None,
             "y": -25,
             "rotation": 0,
-            "style": "font-family: TypeWriter;font-size: 10.0;font-weight: bold;"
+            "style": "font-family: TypeWriter;font-size: 10.0;font-weight: bold;",
         },
         "symbol": ":/symbols/router.svg",
-        "ports": [
-            {
-                "adapter_number": 0,
-                "port_number": 0,
-                "name": "eth0",
-                "link_type": "ethernet"
-            }
-        ]
+        "ports": [{"adapter_number": 0, "port_number": 0, "name": "eth0", "link_type": "ethernet"}],
     }
 
 
@@ -83,17 +80,9 @@ def sample_link_data():
         "link_type": "ethernet",
         "suspend": False,
         "nodes": [
-            {
-                "node_id": "test-node-1",
-                "adapter_number": 0,
-                "port_number": 0
-            },
-            {
-                "node_id": "test-node-2",
-                "adapter_number": 0,
-                "port_number": 0
-            }
-        ]
+            {"node_id": "test-node-1", "adapter_number": 0, "port_number": 0},
+            {"node_id": "test-node-2", "adapter_number": 0, "port_number": 0},
+        ],
     }
 
 
@@ -105,7 +94,7 @@ def sample_drawing_data():
         "x": 50,
         "y": 50,
         "z": 0,
-        "svg": '<rect width="100" height="50" fill="#ffffff" stroke="#000000" stroke-width="2"/>'
+        "svg": '<rect width="100" height="50" fill="#ffffff" stroke="#000000" stroke-width="2"/>',
     }
 
 
@@ -121,6 +110,7 @@ def mock_app_context(mock_gns3_client, sample_project_data):
 
 
 # ===== Pytest Configuration Hooks =====
+
 
 def pytest_configure(config):
     """Configure pytest with custom settings."""

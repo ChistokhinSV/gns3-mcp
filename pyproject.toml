@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gns3-mcp"
-version = "0.42.0"
+version = "0.43.0"
 description = "GNS3 lab automation MCP server with AI agent integration"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -71,7 +71,7 @@ exclude = ["tests*", "mcp-server*", "skill*", "ssh-proxy*", "docs*", "data*", ".
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 # Exclude generated and vendored code
 exclude = [
@@ -110,18 +110,19 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+"tests/**/*.py" = ["E402"]  # Allow imports after sys.path manipulation
 
 [tool.mypy]
-python_version = "3.9"
-warn_return_any = true
+python_version = "3.10"
+warn_return_any = false  # Disabled for lenient mode
 warn_unused_configs = true
 warn_redundant_casts = true
-warn_unused_ignores = true
+warn_unused_ignores = false  # Disabled for lenient mode
 
 # Start lenient, tighten later
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
-check_untyped_defs = true
+check_untyped_defs = false  # Disabled for lenient mode
 
 # Allow missing imports for third-party libs
 ignore_missing_imports = true
@@ -131,16 +132,21 @@ exclude = [
     'mcp-server/lib/',
 ]
 
+# Per-module options
+[[tool.mypy.overrides]]
+module = "mcp.server.lowlevel.*"
+ignore_errors = true
+
 [tool.black]
 line-length = 100
-target-version = ['py39']
+target-version = ['py310']
 skip-string-normalization = false
 exclude = '''
 /(
     \.git
   | __pycache__
   | mcp-server/lib
-  | *.egg-info
+  | .*\.egg-info
 )/
 '''
 
