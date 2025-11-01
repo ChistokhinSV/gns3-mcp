@@ -84,6 +84,21 @@ jobs:
           cp -r gns3_mcp mcp-server/
           echo "Source code copied successfully"
 
+      - name: Clean __pycache__ before packaging
+        run: |
+          echo "Removing __pycache__ directories to reduce package size..."
+          # Count before
+          BEFORE=$(find mcp-server -type d -name '__pycache__' | wc -l)
+          echo "Found $BEFORE __pycache__ directories"
+
+          # Delete with depth-first traversal (children before parents)
+          find mcp-server -depth -type d -name '__pycache__' -exec rm -rf {} \;
+
+          # Verify cleanup
+          AFTER=$(find mcp-server -type d -name '__pycache__' 2>/dev/null | wc -l)
+          echo "Removed $(($BEFORE - $AFTER)) __pycache__ directories"
+          echo "Cleanup complete"
+
       - name: Build MCP binary
         run: |
           cd mcp-server

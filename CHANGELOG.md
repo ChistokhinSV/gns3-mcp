@@ -5,6 +5,23 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.4] - 2025-11-01 - Package Size Optimization
+
+### Fixed
+- **GitHub Release Package Bloat** - Optimization:
+  - v0.43.3 GitHub release included 73 `__pycache__` directories (~2478 files, ~4 MB)
+  - Added cleanup step to GitHub Actions workflow to remove `__pycache__` before packaging
+  - Reduces package size from 34 MB to ~30 MB
+  - Reduces file count from 6857 to ~4300 (matches local build)
+  - Faster installation and extraction for users
+  - Local builds already had this cleanup (added in v0.43.3)
+
+### Technical Details
+- **Investigation**: User noticed GitHub build (6857 files) vs local build (4379 files) = 2478 file difference
+- **Root cause**: GitHub Actions workflow missing `find mcp-server -type d -name "__pycache__" -exec rm -rf {} +` cleanup step
+- **Impact**: Package works correctly (FastAPI included), but unnecessarily large
+- **Solution**: Added cleanup step before `npx @anthropic-ai/mcpb pack` in GitHub Actions
+
 ## [0.43.3] - 2025-11-01 - GitHub Release FastAPI Dependency Fix
 
 ### Fixed
