@@ -81,6 +81,12 @@ version-check:
 changelog-check:
     python scripts/check_changelog.py
 
+# Bump version (major/minor/patch) across all files
+# Usage: just bump patch | just bump minor | just bump major
+# For dry-run: python scripts/bump_version.py patch --dry-run
+bump level:
+    python scripts/bump_version.py {{level}}
+
 # Run all quality checks (local development mode - with auto-fixes)
 check: lint format type-check test version-check changelog-check
     @echo "✓ All checks passed!"
