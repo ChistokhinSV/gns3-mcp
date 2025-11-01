@@ -14,22 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `just build` now copies `gns3_mcp/` into `mcp-server/` before packaging
   - Updated `manifest.json` entry_point from `../gns3_mcp/` to `gns3_mcp/` (local path)
   - .mcpb size increased from 46 MB → 47 MB (source code now included)
+- **License Configuration** (PEP 639 compliance):
+  - Changed `license = {text = "MIT"}` → `license = "MIT"` in pyproject.toml
+  - Removed `License :: OSI Approved :: MIT License` classifier (conflicts with PEP 639)
+  - Setuptools >=77.0.0 enforces: can't have both license expression AND classifier
+  - Complies with setuptools 2026 requirement
 - **PowerShell Syntax** in justfile:
   - Changed `cd mcp-server && npx` → `powershell -Command "cd mcp-server; npx"`
   - PowerShell doesn't support `&&` operator (requires `;` separator)
-- **Setuptools Deprecation Warning**:
-  - Changed `license = {text = "MIT"}` → `license = "MIT"` in pyproject.toml
-  - Complies with setuptools>=77.0.0 requirement (2026 deadline)
 - **Version Bump Script**:
   - Fixed regex to only match `^version =` (not `target-version` or `python_version`)
   - Prevents accidentally changing Ruff/Mypy config values during version bumps
 
-### Changed
+### Performance
+- **GitHub Actions Optimizations**:
+  - **Python dependency cache**: Only rebuild on `requirements.txt` changes (not `pyproject.toml` metadata)
+  - **APT package cache**: Cache `libcairo2-dev` and `libpango1.0-dev` (30-60s speedup per build)
+  - Total expected speedup: 1-3 minutes per build with cache hits
 - **.gitignore**: Added `mcp-server/lib/` and `mcp-server/gns3_mcp/` (build artifacts)
-- **GitHub Actions Cache**: Optimized to only rebuild on dependency changes
-  - Changed key from `hashFiles('requirements.txt', 'pyproject.toml')` → `hashFiles('requirements.txt')`
-  - Metadata/config changes (license, mypy, linting) no longer invalidate cache
-  - Expected speedup: 1-2 minutes per build
 
 ### Migration Notes
 **CRITICAL**: All v0.42.0-v0.43.0 users must upgrade to v0.43.1!
