@@ -5,7 +5,25 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.43.1] - 2025-11-01 - Critical Desktop Extension Fix
+## [0.43.2] - 2025-11-01 - GitHub Release Source Code Fix
+
+### Fixed
+- **GitHub Release .mcpb Missing Source Code** - CRITICAL:
+  - v0.42.0, v0.43.0, and v0.43.1 GitHub releases had broken .mcpb files (32 MB instead of 47 MB)
+  - GitHub Actions workflow was missing source code copy step before building
+  - Added `cp -r gns3_mcp mcp-server/` step in workflow before `.mcpb` packaging
+  - Added size verification check (build fails if < 40 MB to catch missing source)
+  - **All users who downloaded from GitHub releases v0.42.0-v0.43.1 MUST upgrade to v0.43.2**
+  - Local builds via `just build` were always correct (included source code)
+
+### Migration Notes
+**CRITICAL**: If you downloaded .mcpb from GitHub releases v0.42.0-v0.43.1, upgrade now!
+- Those releases were missing source code (showed "update Claude Desktop" warning)
+- Download fresh v0.43.2: https://github.com/ChistokhinSV/gns3-mcp/releases/tag/v0.43.2
+- Or rebuild locally: `just clean && just build && just install-desktop`
+- Local builds were always correct - only GitHub releases were affected
+
+## [0.43.1] - 2025-11-01 - Desktop Extension Fix (GitHub Release Still Broken!)
 
 ### Fixed
 - **Desktop Extension Packaging** - CRITICAL bugfix for v0.42.0-v0.43.0:

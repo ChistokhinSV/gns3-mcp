@@ -84,6 +84,12 @@ jobs:
           echo "Installed packages:"
           ls mcp-server/lib | head -20
 
+      - name: Copy source code for packaging
+        run: |
+          echo "Copying gns3_mcp/ source code into mcp-server/ for .mcpb packaging..."
+          cp -r gns3_mcp mcp-server/
+          echo "Source code copied successfully"
+
       - name: Build MCP binary
         run: |
           cd mcp-server
@@ -95,7 +101,18 @@ jobs:
             echo "Error: mcp-server.mcpb was not created"
             exit 1
           fi
+          echo "Build successful:"
           ls -lh mcp-server/mcp-server.mcpb
+
+          # Verify source code is included (size should be ~47 MB, not ~32 MB)
+          SIZE_MB=$(du -m mcp-server/mcp-server.mcpb | cut -f1)
+          if [ "$SIZE_MB" -lt 40 ]; then
+            echo "ERROR: .mcpb size is ${SIZE_MB}M - source code likely missing!"
+            echo "Expected size: ~47 MB (with source code)"
+            echo "Actual size: ${SIZE_MB} MB"
+            exit 1
+          fi
+          echo "Size check passed: ${SIZE_MB} MB (source code included)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
