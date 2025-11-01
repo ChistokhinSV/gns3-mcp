@@ -73,12 +73,12 @@ build: install-lib
     @echo "Cleaning __pycache__ directories before packaging..."
     powershell -Command "Get-ChildItem -Path mcp-server -Include __pycache__ -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
     @echo "Building .mcpb package..."
-    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb pack"
+    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb@1.1.2 pack"
     @echo "Built: mcp-server/mcp-server.mcpb"
 
 # Validate manifest.json
 validate-manifest:
-    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb validate manifest.json"
+    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb@1.1.2 validate manifest.json"
 
 # Check version consistency across files
 version-check:

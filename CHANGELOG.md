@@ -10,9 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Claude Desktop "Update Required" Warning** - CRITICAL:
   - Reverted `manifest_version` from `"0.3"` back to `"0.2"`
+  - Downgraded `@anthropic-ai/mcpb` from 1.1.5 to **1.1.2** (last version supporting 0.2)
   - v0.36.0 (worked): manifest_version 0.2
   - v0.40.1+ (broken): manifest_version 0.3
-  - Extension now compatible with Claude Desktop 1.0.211 (latest)
+  - Extension now compatible with Claude Desktop 1.0.211 (latest from website)
   - Fixes "Requirements: an update to Claude Desktop" false warning
 
 - **Package Size Optimization Abandoned**:
@@ -23,10 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All dependencies present (FastAPI included), extension works correctly
 
 ### Technical Details
-- **Root cause**: manifest_version 0.3 incompatible with Claude Desktop 1.0.211
-- **User report**: "I only have 0.36.0 installed" (which had manifest_version 0.2)
-- **Decision**: Prioritize compatibility and build reliability over 4 MB size reduction
-- **Migration**: Users should reinstall .mcpb after updating to v0.43.4
+- **Root cause**:
+  - mcpb 1.1.3+ enforces manifest_version 0.3
+  - Claude Desktop 1.0.211 incompatible with manifest_version 0.3
+- **Version matrix**:
+  - mcpb 1.0.0-1.1.2: Accepts manifest_version 0.2 ✅
+  - mcpb 1.1.3+: Requires manifest_version 0.3 ❌
+- **Solution**: Pin to mcpb@1.1.2 with manifest_version 0.2
+- **Future**: Issue GM-21 tracks Claude Desktop update (due 2025-11-15)
+- **Migration**: Users must reinstall .mcpb after updating to v0.43.4
 
 ## [0.43.3] - 2025-11-01 - GitHub Release FastAPI Dependency Fix
 

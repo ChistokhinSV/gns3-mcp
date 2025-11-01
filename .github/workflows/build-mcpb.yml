@@ -87,7 +87,7 @@ jobs:
       - name: Build MCP binary
         run: |
           cd mcp-server
-          npx @anthropic-ai/mcpb pack
+          npx @anthropic-ai/mcpb@1.1.2 pack
 
       - name: Verify build output
         run: |
