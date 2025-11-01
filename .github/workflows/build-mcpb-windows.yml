@@ -152,9 +152,9 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            mcp-server\mcp-server.mcpb
-            dist\*.whl
-            dist\*.tar.gz
+            mcp-server/mcp-server.mcpb
+            dist/*.whl
+            dist/*.tar.gz
           tag_name: v${{ steps.version.outputs.version }}
           name: Release ${{ steps.version.outputs.version }} (Windows)
           body: |

@@ -5,19 +5,37 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.43.8] - 2025-11-01 - Windows-Only Release (Clean Build)
+## [0.43.9] - 2025-11-01 - Fix GitHub Release File Paths
+
+### Fixed
+- **GitHub Release Creation Failed**:
+  - v0.43.8 release created but no files attached
+  - Error: "Pattern 'mcp-server\mcp-server.mcpb' does not match any files"
+  - Workflow used Windows backslashes (`\`) in file paths
+  - GitHub Actions requires forward slashes (`/`) even on Windows runners
+
+### Technical Details
+- Changed `mcp-server\mcp-server.mcpb` → `mcp-server/mcp-server.mcpb`
+- Changed `dist\*.whl` → `dist/*.whl`
+- Changed `dist\*.tar.gz` → `dist/*.tar.gz`
+- Windows runner uses forward slashes for GitHub Actions paths
+
+## [0.43.8] - 2025-11-01 - Windows-Only Release (SKIP - No Files)
 
 ### Fixed
 - **Workflow Race Condition**:
   - v0.43.7 triggered both Linux AND Windows workflows
-  - First to upload to PyPI wins (likely Linux with incompatible binaries)
   - Deleted Linux workflow completely (no Claude Desktop for Linux)
   - v0.43.8 triggers Windows workflow only
+
+### Issues
+- ⚠️ **No files attached to release** - path separator issue
+- Skip this version - use v0.43.9 instead
 
 ### Technical Details
 - Linux workflow deleted from repository
 - Windows-only builds going forward
-- Clean Windows-compatible .mcpb package
+- File path issue fixed in v0.43.9
 
 ## [0.43.7] - 2025-11-01 - PyPI Version Bump (SKIP - Race Condition)
 
