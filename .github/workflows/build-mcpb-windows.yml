@@ -33,9 +33,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~\AppData\Local\pip\Cache
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+          key: ${{ runner.os }}-pip-v3-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
           restore-keys: |
-            ${{ runner.os }}-pip-
+            ${{ runner.os }}-pip-v3-
 
       - name: Cache lib folder
         id: cache-lib

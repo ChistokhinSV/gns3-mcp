@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.43.10",
+  "version": "0.43.11",
   "description": "GNS3 lab automation with AI agent",
-  "long_description": "GNS3 v3 lab automation MCP server. Create/modify nodes, configure via console/SSH, topology management. v0.43.10: Just-based local CI/CD with unified commands (just check, just build, just release), 10x faster commits (3-5s vs 30-60s).",
+  "long_description": "GNS3 v3 lab automation MCP server. Create/modify nodes, configure via console/SSH, topology management. v0.43.11: Just-based local CI/CD with unified commands (just check, just build, just release), 10x faster commits (3-5s vs 30-60s).",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"

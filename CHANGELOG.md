@@ -5,20 +5,37 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.43.10] - 2025-11-01 - Fix Linux Binary Contamination (CRITICAL)
+## [0.43.11] - 2025-11-01 - Fix PIP Cache Contamination (CRITICAL)
 
 ### Fixed
-- **Linux Binaries in Windows Build** (CRITICAL):
-  - v0.43.9 Windows release contained Linux `.so` files instead of Windows `.pyd` files
-  - Error: `ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'`
-  - Root cause: Cache restore-keys allowed Windows runner to restore Linux cache
-  - Cache key `Windows-lib-` matched old `Linux-lib-` caches from v0.43.7 and earlier
-  - Windows runner installed Linux binaries from cached dependencies
+- **PIP Cache Contamination** (CRITICAL - v0.43.10 ALSO BROKEN):
+  - v0.43.10 attempt FAILED - Linux binaries persisted despite lib cache v3 bump
+  - Root cause: **PIP wheel cache** contaminated, not just lib dependencies cache
+  - Pip cache restore-key `Windows-pip-` matched old `Linux-pip-` caches
+  - Pip reused cached Linux wheels instead of downloading Windows wheels
+  - Result: `_pydantic_core.cpython-310-x86_64-linux-gnu.so` (Linux) instead of `.pyd` (Windows)
 
 ### Changed
-- **Cache Key Version Bump**: v2 → v3 to invalidate old Linux caches
-- **Removed Broad Restore-Keys**: Removed `${{ runner.os }}-lib-` fallback
-- **OS-Specific Caching**: Now only restores Windows-py3.10-lib-v3-* caches
+- **PIP Cache Version Bump**: Bumped to `v3` to invalidate Linux wheel caches
+- **Lib Cache**: Kept at `v3` (already bumped in v0.43.10)
+- **Removed Broad Restore-Keys**: Both caches now OS+version specific only
+
+### Root Cause Analysis
+Two separate caches caused contamination:
+1. **Lib dependencies cache** (`mcp-server\lib`) - Fixed in v0.43.10 ✅
+2. **Pip wheel cache** (`~\AppData\Local\pip\Cache`) - **THIS** was the real culprit ❌
+
+Investigation showed:
+- Local build (Python 3.13): `_pydantic_core.cp313-win_amd64.pyd` ✅
+- GitHub build (Python 3.10): `_pydantic_core.cpython-310-x86_64-linux-gnu.so` ❌
+- Pip install logs showed downloading Windows wheels, but cached Linux wheels were used
+
+## [0.43.10] - 2025-11-01 - Failed Fix Attempt (SKIP - STILL HAS LINUX BINARIES)
+
+### Fixed (ATTEMPT FAILED)
+- Attempted to fix Linux binaries by bumping lib cache v2 → v3
+- Cache was not hit (cache miss logged), dependencies freshly installed
+- But Linux binaries persisted due to **pip wheel cache** contamination (discovered in v0.43.11)
 
 ### Technical Details
 - Cache key pattern BEFORE (v0.43.9):
