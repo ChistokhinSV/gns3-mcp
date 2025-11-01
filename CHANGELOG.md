@@ -5,6 +5,19 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.5] - 2025-11-01 - Authentication Warning in Server Instructions
+
+### Changed
+- **Server Instructions Enhancement**:
+  - Added prominent warning about GNS3 server authentication requirements
+  - Instructs AI to use MCP tools only (not direct curl/httpx commands)
+  - Prevents authentication failures from manual API calls
+  - JWT token management is handled internally by the server
+
+### Technical Details
+- PyPI rejected v0.43.4 re-upload (duplicate version)
+- v0.43.5 is functionally identical to v0.43.4 with added instructions
+
 ## [0.43.4] - 2025-11-01 - Claude Desktop Compatibility Fix
 
 ### Fixed
