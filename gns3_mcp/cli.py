@@ -65,6 +65,17 @@ Environment variables (.env file):
         "--password",
         help="GNS3 password (default: from .env)"
     )
+    parser.add_argument(
+        "--use-https",
+        action="store_true",
+        help="Use HTTPS for GNS3 connection (or set GNS3_USE_HTTPS=true in .env)"
+    )
+    parser.add_argument(
+        "--verify-ssl",
+        default=True,
+        type=lambda x: str(x).lower() != 'false',
+        help="Verify GNS3 SSL certificate (default: true, set to 'false' for self-signed certs)"
+    )
 
     # MCP transport mode arguments
     parser.add_argument(
@@ -159,8 +170,8 @@ Environment variables (.env file):
 
         print(f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp/")
 
-        # Create ASGI app for Streamable HTTP transport
-        app = mcp.streamable_http_app()
+        # Create ASGI app for HTTP transport
+        app = mcp.http_app()
 
         # Run with uvicorn
         uvicorn.run(

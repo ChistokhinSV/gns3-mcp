@@ -78,16 +78,14 @@ from tools.project_tools import (
     open_project_impl,
 )
 
-# Read version from manifest.json (single source of truth)
-MANIFEST_PATH = Path(__file__).parent.parent / "manifest.json"
+# Read version from package __init__.py (single source of truth for PyPI package)
 try:
-    with open(MANIFEST_PATH) as f:
-        manifest = json.load(f)
-        VERSION = manifest["version"]
-except Exception as e:
-    # Fallback version if manifest read fails (not a string literal to avoid pre-commit hook detection)
-    VERSION = f"{0}.{20}.{0}"
-    print(f"Warning: Could not read version from manifest.json: {e}")
+    from gns3_mcp import __version__
+    VERSION = __version__
+except ImportError:
+    # Fallback version if import fails (e.g., running directly without package installation)
+    VERSION = f"{0}.{42}.{0}"
+    print(f"Warning: Could not import version from gns3_mcp package, using fallback")
 
 # Read server instructions for AI guidance (v0.39.0)
 INSTRUCTIONS_PATH = Path(__file__).parent / "instructions.md"
