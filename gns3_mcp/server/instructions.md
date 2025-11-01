@@ -2,6 +2,17 @@
 
 Network lab automation server with console access and SSH capabilities.
 
+## Important: Use MCP Tools Only
+
+**CRITICAL**: The GNS3 server requires authentication (JWT tokens). **Do NOT attempt direct curl commands** or manual API calls.
+
+- ✅ **Always use MCP tools** provided by this server (e.g., `list_nodes`, `set_node_properties`, `open_project`)
+- ❌ **Never use curl or httpx directly** - authentication is handled automatically by the server
+- ❌ **Never try to authenticate manually** - the server manages JWT tokens internally
+- 🔒 All API access is authenticated and managed by the MCP server
+
+**Why**: Direct API calls will fail without proper JWT authentication flow. MCP tools handle all authentication automatically.
+
 ## Node Timing Requirements
 
 **Critical**: Nodes require 30-60 seconds startup time after start command.
