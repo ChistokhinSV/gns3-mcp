@@ -5,6 +5,31 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.6] - 2025-11-01 - Windows Runner for Platform Compatibility
+
+### Fixed
+- **CRITICAL: Platform-Specific Binary Mismatch**:
+  - v0.43.5 GitHub release built on Ubuntu with Linux binaries (`.so` files)
+  - Windows users got `ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'`
+  - Linux `_pydantic_core.cpython-310-x86_64-linux-gnu.so` won't load on Windows
+  - Created dedicated **Windows runner** workflow for Windows-compatible builds
+
+- **Workflow Changes**:
+  - New: `.github/workflows/build-mcpb-windows.yml` (windows-latest runner)
+  - Disabled: Linux workflow (produces incompatible binaries)
+  - Windows builds use Python 3.10 with Windows-compiled wheels
+
+### Technical Details
+- **Root cause**: GitHub Actions Ubuntu runner installed Linux-specific binary wheels
+- **File analysis**: Remote had 12,251 files vs local 7,888 (4,363 extra files)
+- **Extra files**: Mostly `__pycache__` directories + Linux `.so` binaries
+- **Solution**: Use `windows-latest` runner to match Windows user environment
+- **Binary compatibility**: `_pydantic_core.cp310-win_amd64.pyd` (Windows) vs `.cpython-310-x86_64-linux-gnu.so` (Linux)
+
+### Migration
+- Users on v0.43.5: Must upgrade to v0.43.6 (v0.43.5 broken on Windows)
+- Windows-only release (macOS/Linux users can build from source)
+
 ## [0.43.5] - 2025-11-01 - Authentication Warning in Server Instructions
 
 ### Changed
