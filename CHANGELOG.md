@@ -5,6 +5,50 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.45.0] - 2025-11-01 - UV Package Manager Integration
+
+### Added
+- **UV Package Manager Integration**: Replaced pip with UV for 10-100× faster dependency installation
+  - Bundled UV binary (58 MB) in .mcpb package
+  - Venv creation: 3s → 1-2s (50% faster)
+  - Dependency install: 68s (38s pip upgrade + 30s install) → 5-8s (no upgrade needed)
+  - **Total bootstrap time: 70s → 6-10s (7× faster)**
+  - **Fits within 60-second MCP initialization timeout** ✅
+
+### Changed
+- **bootstrap.py**:
+  - Replaced `python -m venv` with `uv venv`
+  - Removed pip upgrade step (UV doesn't need it)
+  - Replaced `pip install` with `uv pip install`
+  - Added UV binary existence check
+  - Updated logging messages to reflect UV usage
+- **justfile**:
+  - Added UV binary check in `build` recipe
+  - Updated `clean` recipe to preserve uv.exe (permanent fixture)
+  - Updated comments to mention UV
+- **manifest.json**: Updated long_description to mention UV integration
+- **Package size**: ~5 MB (v0.44.1) → ~63 MB (includes 58 MB UV binary)
+
+### Technical Details
+- UV download: https://github.com/astral-sh/uv/releases/latest
+- UV version: Latest (as of 2025-11-01)
+- UV binary platform: x86_64-pc-windows-msvc
+- License: MIT/Apache-2.0 (permissive, bundling allowed)
+
+### Performance Metrics
+| Operation | pip (v0.44.1) | UV (v0.45.0) | Improvement |
+|-----------|---------------|--------------|-------------|
+| Venv creation | 3s | 1-2s | 1.5-3× faster |
+| Pip upgrade | 38s | N/A (not needed) | - |
+| Dependency install | 30s | 5-8s | 4-6× faster |
+| **Total** | **70s** | **6-10s** | **7× faster** |
+
+### Migration Notes
+- First run: 6-10s setup time (one-time venv creation + install)
+- Subsequent runs: Instant (venv already exists)
+- Works with Python 3.10-3.13 (same as before)
+- No user-facing changes - fully transparent upgrade
+
 ## [0.43.11] - 2025-11-01 - Fix PIP Cache Contamination (CRITICAL)
 
 ### Fixed

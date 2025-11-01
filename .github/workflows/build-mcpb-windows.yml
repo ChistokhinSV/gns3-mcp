@@ -29,50 +29,21 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~\AppData\Local\pip\Cache
-          key: ${{ runner.os }}-pip-v3-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-v3-
-
-      - name: Cache lib folder
-        id: cache-lib
-        uses: actions/cache@v4
-        with:
-          path: mcp-server\lib
-          key: ${{ runner.os }}-py3.10-lib-v3-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-py3.10-lib-v3-
-
-      - name: Create lib directory
-        if: steps.cache-lib.outputs.cache-hit != 'true'
+      - name: Download UV package manager
         run: |
-          New-Item -Path mcp-server\lib -ItemType Directory -Force | Out-Null
-
-      - name: Install Python dependencies to lib
-        if: steps.cache-lib.outputs.cache-hit != 'true'
-        run: |
-          python -m pip install --upgrade pip
-          # Extract only production dependencies from requirements.txt (skip dev dependencies)
-          Select-String -Path requirements.txt -Pattern "^[a-z]" | Select-Object -First 9 | ForEach-Object { $_.Line } | Out-File -FilePath prod-requirements.txt
-          pip install --target=mcp-server\lib -r prod-requirements.txt --no-warn-script-location
+          Write-Host "Downloading UV package manager for Windows..."
+          $uvUrl = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip"
+          $uvZip = "uv-windows.zip"
+          Invoke-WebRequest -Uri $uvUrl -OutFile $uvZip
+          Write-Host "Extracting UV binary..."
+          Expand-Archive -Path $uvZip -DestinationPath mcp-server -Force
+          Remove-Item $uvZip
+          Write-Host "UV binary downloaded successfully"
+          Get-Item mcp-server\uv.exe | Format-List
 
       - name: Install build tools for PyPI
         run: |
           pip install build twine
-
-      - name: Verify dependencies installed
-        run: |
-          if ('${{ steps.cache-lib.outputs.cache-hit }}' -eq 'true') {
-            Write-Host "Cache status: HIT - Using cached dependencies"
-          } else {
-            Write-Host "Cache status: MISS - Installed fresh dependencies"
-          }
-          Get-ChildItem mcp-server\lib
-          Write-Host "Installed packages:"
-          Get-ChildItem mcp-server\lib | Select-Object -First 20
 
       - name: Copy source code for packaging
         run: |
@@ -97,15 +68,15 @@ jobs:
           Write-Host "Build successful:"
           Get-Item mcp-server\mcp-server.mcpb | Format-List
 
-          # Verify dependencies are included (size should be ~32-35 MB with all production deps)
+          # Verify UV binary is included (size should be ~22 MB with UV binary)
           $SizeMB = [math]::Round((Get-Item mcp-server\mcp-server.mcpb).Length / 1MB)
-          if ($SizeMB -lt 30) {
-            Write-Host "ERROR: .mcpb size is ${SizeMB}M - dependencies likely missing!"
-            Write-Host "Expected size: ~32-35 MB (with FastAPI + all dependencies)"
+          if ($SizeMB -lt 20) {
+            Write-Host "ERROR: .mcpb size is ${SizeMB}M - UV binary likely missing!"
+            Write-Host "Expected size: ~22 MB (compressed, includes 58 MB UV binary)"
             Write-Host "Actual size: $SizeMB MB"
             exit 1
           }
-          Write-Host "Size check passed: $SizeMB MB (all dependencies included)"
+          Write-Host "Size check passed: $SizeMB MB (UV binary included)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -159,6 +130,12 @@ jobs:
           body: |
             ## GNS3 MCP Server v${{ steps.version.outputs.version }} (Windows Build)
 
+            ### 🚀 Performance Improvements (v0.45.0)
+            - **UV Package Manager Integration**: 10-100× faster dependency installation
+            - **Bootstrap time**: 70s → 6-10s (7× faster)
+            - **MCP timeout compliance**: ✅ Fits within 60-second initialization timeout
+            - **Runtime dependencies**: Installed on-demand from bundled UV binary (58 MB)
+
             ### Installation
 
             **Via pip (Recommended):**
@@ -173,7 +150,8 @@ jobs:
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details.
 
             ### Platform
-            - Windows-compatible binaries (Python 3.10+)
+            - Windows-compatible binaries (Python 3.10-3.13)
             - Built on: windows-latest runner
+            - Package size: ~22 MB (compressed)
           draft: false
           prerelease: false

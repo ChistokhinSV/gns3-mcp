@@ -12,13 +12,12 @@ default:
 install:
     pip install -r requirements.txt
     pip install -e .
-    just install-lib
 
-# Install bundled dependencies for .mcpb desktop extension
-install-lib:
-    powershell -Command "if (Test-Path mcp-server/lib) { Remove-Item -Path mcp-server/lib -Recurse -Force }"
-    powershell -Command "New-Item -Path mcp-server/lib -ItemType Directory -Force | Out-Null"
-    pip install --target=mcp-server/lib fastmcp>=2.13.0.2 fastapi>=0.115.0 httpx>=0.28.1 telnetlib3>=2.0.8 pydantic>=2.12.3 python-dotenv>=1.2.1 cairosvg>=2.8.2 docker>=7.1.0 tabulate>=0.9.0 --no-warn-script-location --quiet
+# Install bundled dependencies for .mcpb desktop extension (DEPRECATED - using runtime venv instead)
+# install-lib:
+#     powershell -Command "if (Test-Path mcp-server/lib) { Remove-Item -Path mcp-server/lib -Recurse -Force }"
+#     powershell -Command "New-Item -Path mcp-server/lib -ItemType Directory -Force | Out-Null"
+#     pip install --target=mcp-server/lib fastmcp>=2.13.0.2 fastapi>=0.115.0 httpx>=0.28.1 telnetlib3>=2.0.8 pydantic>=2.12.3 python-dotenv>=1.2.1 cairosvg>=2.8.2 docker>=7.1.0 tabulate>=0.9.0 --no-warn-script-location --quiet
 
 # Run unit tests
 test *ARGS='':
@@ -57,22 +56,29 @@ type-check:
     -mypy gns3_mcp/
     @echo "[INFO] Mypy check complete (non-blocking in dev mode)"
 
-# Clean build artifacts and caches
+# Clean build artifacts and caches (keeps UV binary - permanent fixture)
 clean:
     powershell -Command "if (Test-Path mcp-server/lib) { Remove-Item -Path mcp-server/lib -Recurse -Force }"
+    powershell -Command "if (Test-Path mcp-server/venv) { Remove-Item -Path mcp-server/venv -Recurse -Force }"
     powershell -Command "if (Test-Path mcp-server/gns3_mcp) { Remove-Item -Path mcp-server/gns3_mcp -Recurse -Force }"
+    powershell -Command "if (Test-Path mcp-server/requirements.txt) { Remove-Item -Path mcp-server/requirements.txt -Force }"
     powershell -Command "if (Test-Path mcp-server/mcp-server.mcpb) { Remove-Item -Path mcp-server/mcp-server.mcpb -Force }"
     powershell -Command "if (Test-Path dist) { Remove-Item -Path dist -Recurse -Force }"
     powershell -Command "Get-ChildItem -Path . -Include __pycache__,*.pyc,*.egg-info,.pytest_cache,.ruff_cache,.mypy_cache -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+    @echo "Note: mcp-server/uv.exe (58 MB) is kept - it's bundled in .mcpb"
 
-# Build desktop extension (.mcpb)
-build: install-lib
+# Build desktop extension (.mcpb) - using UV for fast runtime dependency installation
+build:
+    @echo "Checking for UV package manager binary..."
+    powershell -Command "if (-not (Test-Path mcp-server/uv.exe)) { Write-Host 'ERROR: UV binary not found at mcp-server/uv.exe' -ForegroundColor Red; Write-Host 'Download from: https://github.com/astral-sh/uv/releases/latest' -ForegroundColor Yellow; exit 1 }"
     @echo "Copying source code to mcp-server for packaging..."
     powershell -Command "if (Test-Path mcp-server/gns3_mcp) { Remove-Item -Path mcp-server/gns3_mcp -Recurse -Force }"
     powershell -Command "Copy-Item -Path gns3_mcp -Destination mcp-server/gns3_mcp -Recurse -Force"
+    @echo "Copying requirements.txt for runtime dependency installation..."
+    powershell -Command "Copy-Item -Path requirements.txt -Destination mcp-server/requirements.txt -Force"
     @echo "Cleaning __pycache__ directories before packaging..."
     powershell -Command "Get-ChildItem -Path mcp-server -Include __pycache__ -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
-    @echo "Building .mcpb package..."
+    @echo "Building .mcpb package with UV binary (58 MB)..."
     powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb@1.1.2 pack"
     @echo "Built: mcp-server/mcp-server.mcpb"
 
