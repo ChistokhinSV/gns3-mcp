@@ -233,6 +233,15 @@ if "%NEED_INSTALL%"=="1" (
         exit /b 1
     )
     echo Dependencies installed successfully
+
+    REM Install package in editable mode for Windows service
+    echo Installing gns3-mcp package...
+    "%VENV_PIP%" install -e "%SCRIPT_DIR%"
+    if %errorlevel% neq 0 (
+        echo ERROR: Failed to install gns3-mcp package
+        exit /b 1
+    )
+    echo Package installed successfully
 ) else (
     echo Dependencies already installed
 )
@@ -336,16 +345,27 @@ if %errorlevel% neq 0 (
 )
 echo   [OK] Lib folder rebuilt (%LIB_DIR%)
 
+REM 6. Install package in editable mode
+echo [6/6] Installing gns3-mcp package in editable mode...
+"%VENV_PIP%" install -e "%SCRIPT_DIR%" --quiet
+if %errorlevel% neq 0 (
+    echo   [ERROR] Failed to install package
+    exit /b 1
+)
+echo   [OK] Package installed
+
 echo.
 echo === Rebuild Complete ===
 echo.
 echo Venv: %VENV_DIR%
 echo Lib: %LIB_DIR%
+echo Package: gns3-mcp (editable mode)
 echo.
 echo Next steps:
-echo   1. Test server: .\server.cmd run
-echo   2. Rebuild desktop extension: cd mcp-server ^&^& npx @anthropic-ai/mcpb pack
-echo   3. Reinstall service (if installed): .\server.cmd reinstall
+echo   1. Test CLI: gns3-mcp --version
+echo   2. Test server: .\server.cmd run
+echo   3. Rebuild desktop extension: cd mcp-server ^&^& npx @anthropic-ai/mcpb pack
+echo   4. Reinstall service (if installed): .\server.cmd reinstall
 echo.
 exit /b 0
 
