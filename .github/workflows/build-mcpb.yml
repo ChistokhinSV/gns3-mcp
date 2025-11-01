@@ -47,8 +47,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: mcp-server/lib
-          key: ${{ runner.os }}-lib-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+          key: ${{ runner.os }}-py3.10-lib-${{ hashFiles('requirements.txt') }}
           restore-keys: |
+            ${{ runner.os }}-py3.10-lib-
             ${{ runner.os }}-lib-
 
       - name: Create lib directory
