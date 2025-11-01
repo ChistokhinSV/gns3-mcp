@@ -107,8 +107,8 @@ call :check_venv
 if %errorlevel% neq 0 exit /b 1
 
 echo Starting server directly (not as service)...
-cd /d "%SERVER_DIR%"
-"%VENV_PYTHON%" start_mcp_http.py
+cd /d "%SCRIPT_DIR%"
+"%SCRIPT_DIR%\venv\Scripts\gns3-mcp.exe" --transport http --http-port 8100
 exit /b %errorlevel%
 
 :service_start
