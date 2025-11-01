@@ -5,8 +5,7 @@ Guides users through discovering and visualizing network topology using MCP reso
 
 
 async def render_topology_discovery_prompt(
-    project_name: str = None,
-    include_export: bool = True
+    project_name: str = None, include_export: bool = True
 ) -> str:
     """Generate topology discovery workflow prompt
 
@@ -18,7 +17,10 @@ async def render_topology_discovery_prompt(
         Formatted workflow instructions as string
     """
 
-    project_section = f"**Project: {project_name}**" if project_name else """
+    project_section = (
+        f"**Project: {project_name}**"
+        if project_name
+        else """
 ## Step 1: Select Project
 
 List available projects to find the one you want to explore:
@@ -39,6 +41,7 @@ list_projects()
 
 Identify the project ID for the topology you want to discover.
 """
+    )
 
     workflow = f"""# Topology Discovery Workflow
 

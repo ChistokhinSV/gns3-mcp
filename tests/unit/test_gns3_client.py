@@ -2,15 +2,16 @@
 
 Tests GNS3 API v3 client with mocked HTTP responses.
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-import httpx
-import json
 
+import json
+from unittest.mock import AsyncMock, MagicMock
+
+import httpx
+import pytest
 from gns3_client import GNS3Client
 
-
 # ===== Fixtures =====
+
 
 @pytest.fixture
 def client():
@@ -26,6 +27,7 @@ def authenticated_client(client):
 
 
 # ===== Initialization Tests =====
+
 
 class TestGNS3ClientInit:
     """Tests for GNS3Client initialization"""
@@ -50,6 +52,7 @@ class TestGNS3ClientInit:
 
 # ===== Authentication Tests =====
 
+
 class TestAuthentication:
     """Tests for authenticate()"""
 
@@ -57,10 +60,7 @@ class TestAuthentication:
     async def test_successful_authentication(self, client):
         """Test successful authentication"""
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "access_token": "jwt-token-123",
-            "token_type": "bearer"
-        }
+        mock_response.json.return_value = {"access_token": "jwt-token-123", "token_type": "bearer"}
         mock_response.raise_for_status = MagicMock()
 
         client.client.post = AsyncMock(return_value=mock_response)
@@ -74,11 +74,11 @@ class TestAuthentication:
     @pytest.mark.asyncio
     async def test_authentication_failure(self, client):
         """Test authentication failure"""
-        client.client.post = AsyncMock(side_effect=httpx.HTTPStatusError(
-            "401 Unauthorized",
-            request=MagicMock(),
-            response=MagicMock(status_code=401)
-        ))
+        client.client.post = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "401 Unauthorized", request=MagicMock(), response=MagicMock(status_code=401)
+            )
+        )
 
         result = await client.authenticate()
 
@@ -96,6 +96,7 @@ class TestAuthentication:
 
 
 # ===== Headers Tests =====
+
 
 class TestHeaders:
     """Tests for _headers()"""
@@ -115,6 +116,7 @@ class TestHeaders:
 
 # ===== Error Extraction Tests =====
 
+
 class TestExtractError:
     """Tests for _extract_error()"""
 
@@ -124,11 +126,7 @@ class TestExtractError:
         mock_response.json.return_value = {"message": "Node not found"}
         mock_response.status_code = 404
 
-        exc = httpx.HTTPStatusError(
-            "404 Not Found",
-            request=MagicMock(),
-            response=mock_response
-        )
+        exc = httpx.HTTPStatusError("404 Not Found", request=MagicMock(), response=mock_response)
 
         error_msg = client._extract_error(exc)
         assert "Node not found" in error_msg
@@ -141,9 +139,7 @@ class TestExtractError:
         mock_response.text = "Internal Server Error Details"
 
         exc = httpx.HTTPStatusError(
-            "500 Internal Server Error",
-            request=MagicMock(),
-            response=mock_response
+            "500 Internal Server Error", request=MagicMock(), response=mock_response
         )
 
         error_msg = client._extract_error(exc)
@@ -158,6 +154,7 @@ class TestExtractError:
 
 # ===== Project Methods Tests =====
 
+
 class TestProjectMethods:
     """Tests for project-related methods"""
 
@@ -167,7 +164,7 @@ class TestProjectMethods:
         mock_response = MagicMock()
         mock_response.json.return_value = [
             {"project_id": "proj-1", "name": "Project 1"},
-            {"project_id": "proj-2", "name": "Project 2"}
+            {"project_id": "proj-2", "name": "Project 2"},
         ]
         mock_response.raise_for_status = MagicMock()
 
@@ -185,7 +182,7 @@ class TestProjectMethods:
         mock_response.json.return_value = {
             "project_id": "proj-1",
             "name": "Test Project",
-            "status": "opened"
+            "status": "opened",
         }
         mock_response.raise_for_status = MagicMock()
 
@@ -199,6 +196,7 @@ class TestProjectMethods:
 
 # ===== Node Methods Tests =====
 
+
 class TestNodeMethods:
     """Tests for node-related methods"""
 
@@ -208,7 +206,7 @@ class TestNodeMethods:
         mock_response = MagicMock()
         mock_response.json.return_value = [
             {"node_id": "node-1", "name": "Router1"},
-            {"node_id": "node-2", "name": "Router2"}
+            {"node_id": "node-2", "name": "Router2"},
         ]
         mock_response.raise_for_status = MagicMock()
 
@@ -224,7 +222,7 @@ class TestNodeMethods:
         """Test starting a node"""
         mock_response = MagicMock()
         mock_response.status_code = 204
-        mock_response.content = b''
+        mock_response.content = b""
         mock_response.raise_for_status = MagicMock()
 
         authenticated_client.client.post = AsyncMock(return_value=mock_response)
@@ -239,7 +237,7 @@ class TestNodeMethods:
         """Test stopping a node"""
         mock_response = MagicMock()
         mock_response.status_code = 204
-        mock_response.content = b''
+        mock_response.content = b""
         mock_response.raise_for_status = MagicMock()
 
         authenticated_client.client.post = AsyncMock(return_value=mock_response)
@@ -256,21 +254,14 @@ class TestNodeMethods:
             "node_id": "node-1",
             "name": "UpdatedName",
             "x": 200,
-            "y": 300
+            "y": 300,
         }
         mock_response.raise_for_status = MagicMock()
 
         authenticated_client.client.put = AsyncMock(return_value=mock_response)
 
-        properties = {
-            "name": "UpdatedName",
-            "x": 200,
-            "y": 300
-        }
-        result = await authenticated_client.update_node(
-            "proj-1", "node-1",
-            properties
-        )
+        properties = {"name": "UpdatedName", "x": 200, "y": 300}
+        result = await authenticated_client.update_node("proj-1", "node-1", properties)
 
         assert result["name"] == "UpdatedName"
         assert result["x"] == 200
@@ -290,6 +281,7 @@ class TestNodeMethods:
 
 # ===== Link Methods Tests =====
 
+
 class TestLinkMethods:
     """Tests for link-related methods"""
 
@@ -299,7 +291,7 @@ class TestLinkMethods:
         mock_response = MagicMock()
         mock_response.json.return_value = [
             {"link_id": "link-1", "link_type": "ethernet"},
-            {"link_id": "link-2", "link_type": "ethernet"}
+            {"link_id": "link-2", "link_type": "ethernet"},
         ]
         mock_response.raise_for_status = MagicMock()
 
@@ -314,10 +306,7 @@ class TestLinkMethods:
     async def test_create_link(self, authenticated_client):
         """Test creating a link"""
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "link_id": "new-link",
-            "link_type": "ethernet"
-        }
+        mock_response.json.return_value = {"link_id": "new-link", "link_type": "ethernet"}
         mock_response.raise_for_status = MagicMock()
 
         authenticated_client.client.post = AsyncMock(return_value=mock_response)
@@ -325,7 +314,7 @@ class TestLinkMethods:
         link_spec = {
             "nodes": [
                 {"node_id": "node-1", "adapter_number": 0, "port_number": 0},
-                {"node_id": "node-2", "adapter_number": 0, "port_number": 0}
+                {"node_id": "node-2", "adapter_number": 0, "port_number": 0},
             ]
         }
 
@@ -348,6 +337,7 @@ class TestLinkMethods:
 
 # ===== Template Methods Tests =====
 
+
 class TestTemplateMethods:
     """Tests for template-related methods"""
 
@@ -357,7 +347,7 @@ class TestTemplateMethods:
         mock_response = MagicMock()
         mock_response.json.return_value = [
             {"template_id": "tmpl-1", "name": "Router"},
-            {"template_id": "tmpl-2", "name": "Switch"}
+            {"template_id": "tmpl-2", "name": "Switch"},
         ]
         mock_response.raise_for_status = MagicMock()
 
@@ -372,10 +362,7 @@ class TestTemplateMethods:
     async def test_get_template(self, authenticated_client):
         """Test getting single template"""
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "template_id": "tmpl-1",
-            "name": "Router"
-        }
+        mock_response.json.return_value = {"template_id": "tmpl-1", "name": "Router"}
         mock_response.raise_for_status = MagicMock()
 
         authenticated_client.client.get = AsyncMock(return_value=mock_response)
@@ -388,28 +375,19 @@ class TestTemplateMethods:
     async def test_create_node_from_template(self, authenticated_client):
         """Test creating node from template"""
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "node_id": "new-node",
-            "name": "Router1"
-        }
+        mock_response.json.return_value = {"node_id": "new-node", "name": "Router1"}
         mock_response.raise_for_status = MagicMock()
 
         authenticated_client.client.post = AsyncMock(return_value=mock_response)
 
-        payload = {
-            "x": 100,
-            "y": 200,
-            "name": "Router1"
-        }
-        result = await authenticated_client.create_node_from_template(
-            "proj-1", "tmpl-1",
-            payload
-        )
+        payload = {"x": 100, "y": 200, "name": "Router1"}
+        result = await authenticated_client.create_node_from_template("proj-1", "tmpl-1", payload)
 
         assert result["node_id"] == "new-node"
 
 
 # ===== Drawing Methods Tests =====
+
 
 class TestDrawingMethods:
     """Tests for drawing-related methods"""
@@ -420,7 +398,7 @@ class TestDrawingMethods:
         mock_response = MagicMock()
         mock_response.json.return_value = [
             {"drawing_id": "draw-1", "x": 100, "y": 200},
-            {"drawing_id": "draw-2", "x": 300, "y": 400}
+            {"drawing_id": "draw-2", "x": 300, "y": 400},
         ]
         mock_response.raise_for_status = MagicMock()
 
@@ -435,20 +413,12 @@ class TestDrawingMethods:
     async def test_create_drawing(self, authenticated_client):
         """Test creating a drawing"""
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "drawing_id": "new-draw",
-            "x": 100,
-            "y": 200
-        }
+        mock_response.json.return_value = {"drawing_id": "new-draw", "x": 100, "y": 200}
         mock_response.raise_for_status = MagicMock()
 
         authenticated_client.client.post = AsyncMock(return_value=mock_response)
 
-        drawing_data = {
-            "x": 100,
-            "y": 200,
-            "svg": "<rect/>"
-        }
+        drawing_data = {"x": 100, "y": 200, "svg": "<rect/>"}
 
         result = await authenticated_client.create_drawing("proj-1", drawing_data)
 
@@ -469,6 +439,7 @@ class TestDrawingMethods:
 
 # ===== Edge Cases Tests =====
 
+
 class TestEdgeCases:
     """Tests for edge cases and error handling"""
 
@@ -477,9 +448,7 @@ class TestEdgeCases:
         """Test HTTP errors are raised"""
         mock_response = MagicMock()
         mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "404 Not Found",
-            request=MagicMock(),
-            response=MagicMock(status_code=404)
+            "404 Not Found", request=MagicMock(), response=MagicMock(status_code=404)
         )
 
         authenticated_client.client.get = AsyncMock(return_value=mock_response)
@@ -492,7 +461,7 @@ class TestEdgeCases:
         """Test handling empty responses (HTTP 204)"""
         mock_response = MagicMock()
         mock_response.status_code = 204
-        mock_response.content = b''
+        mock_response.content = b""
         mock_response.raise_for_status = MagicMock()
 
         authenticated_client.client.post = AsyncMock(return_value=mock_response)

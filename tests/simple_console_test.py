@@ -5,16 +5,13 @@ Tests telnet console connection without MCP layer.
 Useful for debugging console issues.
 """
 
-import asyncio
-import telnetlib3
 import argparse
+import asyncio
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] %(message)s',
-    datefmt='%H:%M:%S'
-)
+import telnetlib3
+
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
 
 
@@ -24,9 +21,7 @@ async def test_console(host: str, port: int, duration: int = 10):
     logger.info(f"Connecting to {host}:{port}...")
 
     try:
-        reader, writer = await telnetlib3.open_connection(
-            host, port, encoding='utf-8'
-        )
+        reader, writer = await telnetlib3.open_connection(host, port, encoding="utf-8")
 
         logger.info("Connected successfully")
         logger.info(f"Reading console output for {duration} seconds...")
@@ -39,7 +34,7 @@ async def test_console(host: str, port: int, duration: int = 10):
             try:
                 data = await asyncio.wait_for(reader.read(4096), timeout=1.0)
                 if data:
-                    print(data, end='', flush=True)
+                    print(data, end="", flush=True)
             except asyncio.TimeoutError:
                 pass
 
@@ -54,7 +49,7 @@ async def test_console(host: str, port: int, duration: int = 10):
         if data:
             logger.info("Response:")
             logger.info("-" * 60)
-            print(data, end='', flush=True)
+            print(data, end="", flush=True)
             logger.info("-" * 60)
 
         # Cleanup

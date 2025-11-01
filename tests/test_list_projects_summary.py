@@ -11,9 +11,10 @@ from pathlib import Path
 server_path = Path(__file__).parent.parent / "mcp-server" / "server"
 sys.path.insert(0, str(server_path))
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 import json
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 # Mock the AppContext
@@ -30,15 +31,15 @@ SAMPLE_PROJECTS_DATA = [
         "project_id": "79d09537-5b07-4af6-8308-bd1846f6d267",
         "status": "opened",
         "path": "/opt/gns3/projects/79d09537-5b07-4af6-8308-bd1846f6d267",
-        "filename": "Test LAB.gns3"
+        "filename": "Test LAB.gns3",
     },
     {
         "name": "Test DNS HA",
         "project_id": "00700165-3140-4a1e-b3f0-0a11eb15ab47",
         "status": "closed",
         "path": "/opt/gns3/projects/00700165-3140-4a1e-b3f0-0a11eb15ab47",
-        "filename": "Test DNS HA.gns3"
-    }
+        "filename": "Test DNS HA.gns3",
+    },
 ]
 
 
@@ -61,17 +62,19 @@ async def test_list_projects_summary():
         {
             "status": "opened",
             "name": "Test LAB",
-            "uri": "projects://79d09537-5b07-4af6-8308-bd1846f6d267"
+            "uri": "projects://79d09537-5b07-4af6-8308-bd1846f6d267",
         },
         {
             "status": "closed",
             "name": "Test DNS HA",
-            "uri": "projects://00700165-3140-4a1e-b3f0-0a11eb15ab47"
-        }
+            "uri": "projects://00700165-3140-4a1e-b3f0-0a11eb15ab47",
+        },
     ]
 
     # Verify the result
-    assert result_data == expected_data, f"Expected:\n{json.dumps(expected_data, indent=2)}\n\nGot:\n{json.dumps(result_data, indent=2)}"
+    assert (
+        result_data == expected_data
+    ), f"Expected:\n{json.dumps(expected_data, indent=2)}\n\nGot:\n{json.dumps(result_data, indent=2)}"
     print("[PASS] Test passed: ProjectSummary format with uri is correct")
 
 
@@ -90,7 +93,9 @@ async def test_list_projects_detailed():
     result_data = json.loads(result)
 
     # Should return full project data
-    assert result_data == SAMPLE_PROJECTS_DATA, f"Expected full data, got:\n{json.dumps(result_data, indent=2)}"
+    assert (
+        result_data == SAMPLE_PROJECTS_DATA
+    ), f"Expected full data, got:\n{json.dumps(result_data, indent=2)}"
     print("[PASS] Test passed: Detailed mode returns full project data")
 
 

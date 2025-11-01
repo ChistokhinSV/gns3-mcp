@@ -2,6 +2,7 @@
 
 Provides tools for listing available GNS3 device templates.
 """
+
 import json
 from typing import TYPE_CHECKING
 
@@ -23,13 +24,13 @@ async def list_templates_impl(app: "AppContext") -> str:
 
         template_models = [
             TemplateInfo(
-                template_id=t['template_id'],
-                name=t['name'],
-                category=t.get('category', 'default'),
-                node_type=t.get('template_type'),
-                compute_id=t.get('compute_id') or 'local',
-                builtin=t.get('builtin', False),
-                symbol=t.get('symbol')
+                template_id=t["template_id"],
+                name=t["name"],
+                category=t.get("category", "default"),
+                node_type=t.get("template_type"),
+                compute_id=t.get("compute_id") or "local",
+                builtin=t.get("builtin", False),
+                symbol=t.get("symbol"),
             )
             for t in templates
         ]
@@ -42,5 +43,5 @@ async def list_templates_impl(app: "AppContext") -> str:
             error_code=ErrorCode.GNS3_API_ERROR.value,
             details=str(e),
             suggested_action="Check that GNS3 server is running and accessible",
-            context={"exception": str(e)}
+            context={"exception": str(e)},
         )

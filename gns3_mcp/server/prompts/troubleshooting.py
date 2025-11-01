@@ -4,11 +4,7 @@ Guides users through systematic troubleshooting of network issues in GNS3 labs.
 """
 
 
-
-async def render_troubleshooting_prompt(
-    node_name: str = None,
-    issue_type: str = None
-) -> str:
+async def render_troubleshooting_prompt(node_name: str = None, issue_type: str = None) -> str:
     """Generate troubleshooting workflow prompt
 
     Args:
@@ -27,7 +23,7 @@ async def render_troubleshooting_prompt(
             "connectivity": "network connectivity issues",
             "console": "console access problems",
             "ssh": "SSH connection failures",
-            "performance": "performance degradation"
+            "performance": "performance degradation",
         }
         issue_section = f"\n**Focus Area: {issue_map.get(issue_type, issue_type)}**\n"
 
@@ -431,7 +427,7 @@ ssh_command("R1", "show version", read_timeout=60.0)
 ssh_disconnect("R1")
 # Wait 2 seconds
 ssh_configure("R1", {
-    "device_type": "cisco_ios",
+        "device_type": "cisco_ios",
     "host": "192.168.1.1",
     "username": "admin",
     "password": "password"

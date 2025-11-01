@@ -11,6 +11,7 @@ from typing import Dict, List, Tuple
 # Layout Algorithms - Calculate Node Positions
 # ============================================================================
 
+
 def calculate_star_layout(spoke_count: int) -> Dict[str, Tuple[int, int]]:
     """Calculate positions for star topology (hub-and-spoke)
 
@@ -33,7 +34,7 @@ def calculate_star_layout(spoke_count: int) -> Dict[str, Tuple[int, int]]:
         angle_rad = math.radians(i * angle_step)
         x = int(center_x + radius * math.cos(angle_rad))
         y = int(center_y + radius * math.sin(angle_rad))
-        positions[f"Spoke{i+1}"] = (x, y)
+        positions[f"Spoke{i + 1}"] = (x, y)
 
     return positions
 
@@ -62,7 +63,7 @@ def calculate_mesh_layout(device_count: int) -> Dict[str, Tuple[int, int]]:
         angle_rad = math.radians(i * angle_step)
         x = int(center_x + radius * math.cos(angle_rad))
         y = int(center_y + radius * math.sin(angle_rad))
-        positions[f"R{i+1}"] = (x, y)
+        positions[f"R{i + 1}"] = (x, y)
 
     return positions
 
@@ -85,7 +86,7 @@ def calculate_linear_layout(device_count: int) -> Dict[str, Tuple[int, int]]:
     positions = {}
     for i in range(device_count):
         x = start_x + (i * spacing)
-        positions[f"R{i+1}"] = (x, y)
+        positions[f"R{i + 1}"] = (x, y)
 
     return positions
 
@@ -124,12 +125,14 @@ def calculate_ospf_layout(area_count: int, routers_per_area: int) -> Dict[str, T
             angle_rad = math.radians(i * (360 / routers_per_area))
             x = int(center_x + backbone_radius * math.cos(angle_rad))
             y = int(center_y + backbone_radius * math.sin(angle_rad))
-            positions[f"ABR0-{i+1}"] = (x, y)
+            positions[f"ABR0-{i + 1}"] = (x, y)
 
     # Other areas radiating outward
     area_radius = 400
     for area_idx in range(1, area_count):
-        area_angle_rad = math.radians((area_idx - 1) * (360 / (area_count - 1 if area_count > 1 else 1)))
+        area_angle_rad = math.radians(
+            (area_idx - 1) * (360 / (area_count - 1 if area_count > 1 else 1))
+        )
         area_center_x = int(center_x + area_radius * math.cos(area_angle_rad))
         area_center_y = int(center_y + area_radius * math.sin(area_angle_rad))
 
@@ -139,7 +142,7 @@ def calculate_ospf_layout(area_count: int, routers_per_area: int) -> Dict[str, T
             angle_rad = math.radians(i * (360 / routers_per_area))
             x = int(area_center_x + local_radius * math.cos(angle_rad))
             y = int(area_center_y + local_radius * math.sin(angle_rad))
-            positions[f"R{area_idx}-{i+1}"] = (x, y)
+            positions[f"R{area_idx}-{i + 1}"] = (x, y)
 
     return positions
 
@@ -171,14 +174,8 @@ def calculate_bgp_layout(as_count: int) -> Dict[str, Tuple[int, int]]:
         as_center_y = int(center_y + as_radius * math.sin(angle_rad))
 
         # Two routers per AS
-        positions[f"AS{as_idx+1}-R1"] = (
-            int(as_center_x - local_radius / 2),
-            as_center_y
-        )
-        positions[f"AS{as_idx+1}-R2"] = (
-            int(as_center_x + local_radius / 2),
-            as_center_y
-        )
+        positions[f"AS{as_idx + 1}-R1"] = (int(as_center_x - local_radius / 2), as_center_y)
+        positions[f"AS{as_idx + 1}-R2"] = (int(as_center_x + local_radius / 2), as_center_y)
 
     return positions
 
@@ -186,6 +183,7 @@ def calculate_bgp_layout(as_count: int) -> Dict[str, Tuple[int, int]]:
 # ============================================================================
 # Link Generation Functions
 # ============================================================================
+
 
 def generate_star_links(spoke_count: int) -> List[Tuple[str, str]]:
     """Generate links for star topology
@@ -229,7 +227,7 @@ def generate_linear_links(device_count: int) -> List[Tuple[str, str]]:
     """
     links = []
     for i in range(1, device_count):
-        links.append((f"R{i}", f"R{i+1}"))
+        links.append((f"R{i}", f"R{i + 1}"))
     return links
 
 
@@ -264,14 +262,14 @@ def generate_ospf_links(area_count: int, routers_per_area: int) -> List[Tuple[st
     if area_count > 0:
         for i in range(routers_per_area):
             for j in range(i + 1, routers_per_area):
-                links.append((f"ABR0-{i+1}", f"ABR0-{j+1}"))
+                links.append((f"ABR0-{i + 1}", f"ABR0-{j + 1}"))
 
     # Each non-backbone area
     for area_idx in range(1, area_count):
         # Ring within area
         for i in range(routers_per_area):
             next_i = (i + 1) % routers_per_area
-            links.append((f"R{area_idx}-{i+1}", f"R{area_idx}-{next_i+1}"))
+            links.append((f"R{area_idx}-{i + 1}", f"R{area_idx}-{next_i + 1}"))
 
         # Connect to backbone (first router in area connects to first ABR)
         if routers_per_area > 0:
@@ -297,7 +295,7 @@ def generate_bgp_links(as_count: int) -> List[Tuple[str, str]]:
 
     # eBGP between adjacent AS
     for as_idx in range(1, as_count):
-        links.append((f"AS{as_idx}-R2", f"AS{as_idx+1}-R1"))
+        links.append((f"AS{as_idx}-R2", f"AS{as_idx + 1}-R1"))
 
     # Close the circle for > 2 AS
     if as_count > 2:
@@ -309,6 +307,7 @@ def generate_bgp_links(as_count: int) -> List[Tuple[str, str]]:
 # ============================================================================
 # IP Addressing Schemes
 # ============================================================================
+
 
 def generate_star_ips(spoke_count: int) -> Dict[str, Dict[str, str]]:
     """Generate IP addresses for star topology
@@ -325,7 +324,7 @@ def generate_star_ips(spoke_count: int) -> Dict[str, Dict[str, str]]:
     # Hub gets .1 on each spoke subnet
     hub_ips = {}
     for i in range(1, spoke_count + 1):
-        hub_ips[f"Gi0/{i-1}"] = f"{base}.{i}.1/24"
+        hub_ips[f"Gi0/{i - 1}"] = f"{base}.{i}.1/24"
     ips["Hub"] = hub_ips
 
     # Each spoke gets .2 on its subnet
@@ -376,7 +375,7 @@ def generate_linear_ips(device_count: int) -> Dict[str, Dict[str, str]]:
     for i in range(1, device_count):
         # Link between R{i} and R{i+1}
         ips[f"R{i}"]["Gi0/1"] = f"10.0.{i}.1/30"
-        ips[f"R{i+1}"]["Gi0/0"] = f"10.0.{i}.2/30"
+        ips[f"R{i + 1}"]["Gi0/0"] = f"10.0.{i}.2/30"
 
     return ips
 
@@ -396,17 +395,13 @@ def generate_ospf_ips(area_count: int, routers_per_area: int) -> Dict[str, Dict[
 
     # Area 0 backbone - 10.0.x.x range
     for i in range(routers_per_area):
-        ips[f"ABR0-{i+1}"] = {
-            "Loopback0": f"10.0.0.{i+1}/32"
-        }
+        ips[f"ABR0-{i + 1}"] = {"Loopback0": f"10.0.0.{i + 1}/32"}
         # Interfaces will be added when creating mesh links
 
     # Other areas - 10.{area}.x.x range
     for area_idx in range(1, area_count):
         for i in range(routers_per_area):
-            ips[f"R{area_idx}-{i+1}"] = {
-                "Loopback0": f"10.{area_idx}.0.{i+1}/32"
-            }
+            ips[f"R{area_idx}-{i + 1}"] = {"Loopback0": f"10.{area_idx}.0.{i + 1}/32"}
 
     return ips
 
@@ -426,18 +421,18 @@ def generate_bgp_ips(as_count: int) -> Dict[str, Dict[str, str]]:
         # iBGP link within AS
         ips[f"AS{as_idx}-R1"] = {
             "Loopback0": f"192.168.{as_idx}.1/32",
-            "Gi0/0": f"10.{as_idx}.1.1/30"  # iBGP link
+            "Gi0/0": f"10.{as_idx}.1.1/30",  # iBGP link
         }
         ips[f"AS{as_idx}-R2"] = {
             "Loopback0": f"192.168.{as_idx}.2/32",
-            "Gi0/0": f"10.{as_idx}.1.2/30"  # iBGP link
+            "Gi0/0": f"10.{as_idx}.1.2/30",  # iBGP link
         }
 
     # eBGP links use 172.16.x.x range
     ebgp_subnet = 1
     for as_idx in range(1, as_count):
         ips[f"AS{as_idx}-R2"]["Gi0/1"] = f"172.16.{ebgp_subnet}.1/30"
-        ips[f"AS{as_idx+1}-R1"]["Gi0/1"] = f"172.16.{ebgp_subnet}.2/30"
+        ips[f"AS{as_idx + 1}-R1"]["Gi0/1"] = f"172.16.{ebgp_subnet}.2/30"
         ebgp_subnet += 1
 
     # Close the circle
@@ -452,11 +447,12 @@ def generate_bgp_ips(as_count: int) -> Dict[str, Dict[str, str]]:
 # Main Prompt Generator
 # ============================================================================
 
+
 def render_lab_setup_prompt(
     topology_type: str,
     device_count: int,
     template_name: str = "Alpine Linux",
-    project_name: str = "Lab Topology"
+    project_name: str = "Lab Topology",
 ) -> str:
     """Generate lab setup workflow prompt
 
@@ -502,7 +498,9 @@ def render_lab_setup_prompt(
         links = generate_ospf_links(device_count, routers_per_area)
         ips = generate_ospf_ips(device_count, routers_per_area)
         total_devices = device_count * routers_per_area
-        topology_desc = f"OSPF topology with {device_count} areas, {routers_per_area} routers per area"
+        topology_desc = (
+            f"OSPF topology with {device_count} areas, {routers_per_area} routers per area"
+        )
     elif topology_type == "bgp":
         # device_count represents number of AS
         positions = calculate_bgp_layout(device_count)
@@ -521,9 +519,11 @@ def render_lab_setup_prompt(
     # Generate link creation commands
     link_commands = []
     for node_a, node_b in links:
-        link_commands.append(f'''set_connection([
+        link_commands.append(
+            f"""set_connection([
     {{"action": "connect", "node_a": "{node_a}", "node_b": "{node_b}", "adapter_a": 0, "adapter_b": 0, "port_a": 0, "port_b": 0}}
-])''')
+])"""
+        )
 
     # Generate IP configuration examples
     ip_examples = []
@@ -604,7 +604,7 @@ Start all nodes in the project:
 Check the topology visually:
 
 ```python
-export_topology_diagram("C:/DOWNLOAD_TEMP/{project_name.replace(' ', '_')}", format="both")
+export_topology_diagram("C:/DOWNLOAD_TEMP/{project_name.replace(" ", "_")}", format="both")
 ```
 
 This creates SVG and PNG diagrams of your topology.

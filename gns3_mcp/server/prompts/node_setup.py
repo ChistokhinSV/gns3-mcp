@@ -11,7 +11,7 @@ def render_node_setup_prompt(
     subnet_mask: str = "255.255.255.0",
     device_type: str = "cisco_ios",
     username: str = "admin",
-    password: str = "admin"
+    password: str = "admin",
 ) -> str:
     """Generate complete node setup workflow prompt
 
@@ -84,7 +84,6 @@ def render_node_setup_prompt(
    console_send("{node_name}", "write memory\\n")
    ```
 """,
-
         "linux": f"""
 **Linux IP Configuration:**
 
@@ -139,7 +138,6 @@ def render_node_setup_prompt(
    console_send("{node_name}", "addgroup {username} wheel\\n")
    ```
 """,
-
         "mikrotik_routeros": f"""
 **MikroTik RouterOS IP Configuration:**
 
@@ -175,11 +173,13 @@ def render_node_setup_prompt(
    ```
    console_send("{node_name}", "/ip service enable ssh\\n")
    ```
-"""
+""",
     }
 
     # Get device-specific config or generic
-    ip_config = ip_configs.get(device_type, f"""
+    ip_config = ip_configs.get(
+        device_type,
+        f"""
 **Generic IP Configuration (device_type: {device_type}):**
 
 1. Access device console and login
@@ -189,7 +189,8 @@ def render_node_setup_prompt(
 5. Verify configuration
 
 Refer to device documentation for specific commands.
-""")
+""",
+    )
 
     # Format with parameters
     ip_config = ip_config.format(
@@ -197,7 +198,7 @@ Refer to device documentation for specific commands.
         ip_address=ip_address,
         subnet_mask=subnet_mask,
         username=username,
-        password=password
+        password=password,
     )
 
     # Build complete workflow

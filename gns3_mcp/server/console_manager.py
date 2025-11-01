@@ -10,27 +10,29 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict
 
 import telnetlib3
 
 logger = logging.getLogger(__name__)
 
 # ANSI escape sequence pattern
-ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+ANSI_ESCAPE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
 
 def strip_ansi(text: str) -> str:
     """Remove ANSI escape codes and normalize line endings"""
     # Remove ANSI escape codes
-    text = ANSI_ESCAPE.sub('', text)
+    text = ANSI_ESCAPE.sub("", text)
 
     # Normalize line endings: convert \r\n and \r to \n
-    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
 
     # Remove excessive blank lines (more than 2 consecutive newlines)
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     return text
+
 
 MAX_BUFFER_SIZE = 10 * 1024 * 1024  # 10MB per session
 SESSION_TIMEOUT = 1800  # 30 minutes
@@ -39,12 +41,13 @@ SESSION_TIMEOUT = 1800  # 30 minutes
 @dataclass
 class ConsoleSession:
     """Represents an active console session"""
+
     session_id: str
     host: str
     port: int
     node_name: str
-    reader: Optional[asyncio.StreamReader] = None
-    writer: Optional[asyncio.StreamWriter] = None
+    reader: asyncio.StreamReader | None = None
+    writer: asyncio.StreamWriter | None = None
     buffer: str = ""
     read_position: int = 0
     accessed_terminal: bool = False  # Track if terminal has been read at least once
@@ -70,8 +73,8 @@ class ConsoleManager:
 
     def __init__(self):
         self.sessions: Dict[str, ConsoleSession] = {}  # session_id → ConsoleSession
-        self._readers: Dict[str, asyncio.Task] = {}    # session_id → reader task
-        self._node_sessions: Dict[str, str] = {}       # node_name → session_id
+        self._readers: Dict[str, asyncio.Task] = {}  # session_id → reader task
+        self._node_sessions: Dict[str, str] = {}  # node_name → session_id
         self._lock = asyncio.Lock()  # Protect shared state from race conditions
 
     async def connect(self, host: str, port: int, node_name: str) -> str:
@@ -99,9 +102,7 @@ class ConsoleManager:
 
         try:
             # Connect via telnet (outside lock - network I/O)
-            reader, writer = await telnetlib3.open_connection(
-                host, port, encoding='utf-8'
-            )
+            reader, writer = await telnetlib3.open_connection(host, port, encoding="utf-8")
 
             session = ConsoleSession(
                 session_id=session_id,
@@ -109,7 +110,7 @@ class ConsoleManager:
                 port=port,
                 node_name=node_name,
                 reader=reader,
-                writer=writer
+                writer=writer,
             )
 
             async with self._lock:
@@ -120,7 +121,9 @@ class ConsoleManager:
                         # Another connection won the race - close this one and return existing
                         writer.close()
                         await writer.wait_closed()
-                        logger.debug(f"Race condition detected for {node_name}, using existing session")
+                        logger.debug(
+                            f"Race condition detected for {node_name}, using existing session"
+                        )
                         return existing_id
 
                 # Store session
@@ -128,11 +131,11 @@ class ConsoleManager:
                 self._node_sessions[node_name] = session_id
 
             # Start background task to read console output (outside lock)
-            self._readers[session_id] = asyncio.create_task(
-                self._read_console(session)
-            )
+            self._readers[session_id] = asyncio.create_task(self._read_console(session))
 
-            logger.info(f"Connected to {node_name} console at {host}:{port} (session: {session_id})")
+            logger.info(
+                f"Connected to {node_name} console at {host}:{port} (session: {session_id})"
+            )
             return session_id
 
         except Exception as e:
@@ -186,7 +189,7 @@ class ConsoleManager:
             logger.error(f"Failed to send to console: {e}")
             return False
 
-    def get_output(self, session_id: str) -> Optional[str]:
+    def get_output(self, session_id: str) -> str | None:
         """Get current console output buffer
 
         Args:
@@ -202,7 +205,7 @@ class ConsoleManager:
             return strip_ansi(session.buffer)
         return None
 
-    def get_diff(self, session_id: str) -> Optional[str]:
+    def get_diff(self, session_id: str) -> str | None:
         """Get new console output since last read
 
         Args:
@@ -215,7 +218,7 @@ class ConsoleManager:
         if not session:
             return None
 
-        new_data = session.buffer[session.read_position:]
+        new_data = session.buffer[session.read_position :]
         session.read_position = len(session.buffer)
         session.update_activity()
         session.accessed_terminal = True  # Mark terminal as accessed
@@ -314,14 +317,14 @@ class ConsoleManager:
                 "host": s.host,
                 "port": s.port,
                 "created_at": s.created_at.isoformat(),
-                "buffer_size": len(s.buffer)
+                "buffer_size": len(s.buffer),
             }
             for sid, s in self.sessions.items()
         }
 
     # Node-name based convenience methods
 
-    def get_session_id(self, node_name: str) -> Optional[str]:
+    def get_session_id(self, node_name: str) -> str | None:
         """Get session ID for a node
 
         Args:
@@ -361,7 +364,7 @@ class ConsoleManager:
             return False
         return await self.send(session_id, data)
 
-    def get_output_by_node(self, node_name: str) -> Optional[str]:
+    def get_output_by_node(self, node_name: str) -> str | None:
         """Get console output by node name
 
         Args:
@@ -375,7 +378,7 @@ class ConsoleManager:
             return None
         return self.get_output(session_id)
 
-    def get_diff_by_node(self, node_name: str) -> Optional[str]:
+    def get_diff_by_node(self, node_name: str) -> str | None:
         """Get new console output by node name
 
         Args:

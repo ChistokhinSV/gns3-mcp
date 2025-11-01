@@ -2,8 +2,9 @@
 
 Provides tools for creating and managing drawing objects (shapes, text, lines).
 """
+
 import json
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from error_utils import create_error_response, validation_error
 from export_tools import create_ellipse_svg, create_line_svg, create_rectangle_svg, create_text_svg
@@ -24,14 +25,14 @@ async def list_drawings_impl(app: "AppContext") -> str:
 
         drawing_models = [
             DrawingInfo(
-                drawing_id=d['drawing_id'],
-                project_id=d['project_id'],
-                x=d['x'],
-                y=d['y'],
-                z=d.get('z', 0),
-                rotation=d.get('rotation', 0),
-                svg=d['svg'],
-                locked=d.get('locked', False)
+                drawing_id=d["drawing_id"],
+                project_id=d["project_id"],
+                x=d["x"],
+                y=d["y"],
+                z=d.get("z", 0),
+                rotation=d.get("rotation", 0),
+                svg=d["svg"],
+                locked=d.get("locked", False),
             )
             for d in drawings
         ]
@@ -44,32 +45,34 @@ async def list_drawings_impl(app: "AppContext") -> str:
             error_code=ErrorCode.GNS3_API_ERROR.value,
             details=str(e),
             suggested_action="Check that GNS3 server is running and a project is currently open",
-            context={"project_id": app.current_project_id, "exception": str(e)}
+            context={"project_id": app.current_project_id, "exception": str(e)},
         )
 
 
-async def create_drawing_impl(app: "AppContext",
-                              drawing_type: str,
-                              x: int,
-                              y: int,
-                              z: int = 0,
-                              # Rectangle/Ellipse parameters
-                              width: Optional[int] = None,
-                              height: Optional[int] = None,
-                              rx: Optional[int] = None,
-                              ry: Optional[int] = None,
-                              fill_color: str = "#ffffff",
-                              border_color: str = "#000000",
-                              border_width: int = 2,
-                              # Line parameters
-                              x2: Optional[int] = None,
-                              y2: Optional[int] = None,
-                              # Text parameters
-                              text: Optional[str] = None,
-                              font_size: int = 10,
-                              font_weight: str = "normal",
-                              font_family: str = "TypeWriter",
-                              color: str = "#000000") -> str:
+async def create_drawing_impl(
+    app: "AppContext",
+    drawing_type: str,
+    x: int,
+    y: int,
+    z: int = 0,
+    # Rectangle/Ellipse parameters
+    width: int | None = None,
+    height: int | None = None,
+    rx: int | None = None,
+    ry: int | None = None,
+    fill_color: str = "#ffffff",
+    border_color: str = "#000000",
+    border_width: int = 2,
+    # Line parameters
+    x2: int | None = None,
+    y2: int | None = None,
+    # Text parameters
+    text: str | None = None,
+    font_size: int = 10,
+    font_weight: str = "normal",
+    font_family: str = "TypeWriter",
+    color: str = "#000000",
+) -> str:
     """Create a drawing object (rectangle, ellipse, line, or text)
 
     Args:
@@ -138,7 +141,7 @@ async def create_drawing_impl(app: "AppContext",
                     error_code=ErrorCode.MISSING_PARAMETER.value,
                     details="Rectangle requires 'width' and 'height' parameters",
                     suggested_action="Provide width and height parameters",
-                    context={"drawing_type": drawing_type, "width": width, "height": height}
+                    context={"drawing_type": drawing_type, "width": width, "height": height},
                 )
 
             svg = create_rectangle_svg(width, height, fill_color, border_color, border_width)
@@ -151,7 +154,7 @@ async def create_drawing_impl(app: "AppContext",
                     error_code=ErrorCode.MISSING_PARAMETER.value,
                     details="Ellipse requires 'rx' and 'ry' parameters",
                     suggested_action="Provide rx and ry parameters (horizontal and vertical radii)",
-                    context={"drawing_type": drawing_type, "rx": rx, "ry": ry}
+                    context={"drawing_type": drawing_type, "rx": rx, "ry": ry},
                 )
 
             svg = create_ellipse_svg(rx, ry, fill_color, border_color, border_width)
@@ -164,7 +167,7 @@ async def create_drawing_impl(app: "AppContext",
                     error_code=ErrorCode.MISSING_PARAMETER.value,
                     details="Line requires 'x2' and 'y2' parameters (offset from start point)",
                     suggested_action="Provide x2 and y2 parameters to define line endpoint",
-                    context={"drawing_type": drawing_type, "x2": x2, "y2": y2}
+                    context={"drawing_type": drawing_type, "x2": x2, "y2": y2},
                 )
 
             svg = create_line_svg(x2, y2, color, border_width)
@@ -177,7 +180,7 @@ async def create_drawing_impl(app: "AppContext",
                     error_code=ErrorCode.MISSING_PARAMETER.value,
                     details="Text drawing requires 'text' parameter",
                     suggested_action="Provide text parameter with the text content to display",
-                    context={"drawing_type": drawing_type}
+                    context={"drawing_type": drawing_type},
                 )
 
             svg = create_text_svg(text, font_size, font_weight, font_family, color)
@@ -185,21 +188,16 @@ async def create_drawing_impl(app: "AppContext",
 
         else:
             from error_utils import validation_error
+
             return validation_error(
                 message=f"Invalid drawing type '{drawing_type}'",
                 parameter="drawing_type",
                 value=drawing_type,
-                valid_values=["rectangle", "ellipse", "line", "text"]
+                valid_values=["rectangle", "ellipse", "line", "text"],
             )
 
         # Create drawing in GNS3
-        drawing_data = {
-            "x": x,
-            "y": y,
-            "z": z,
-            "svg": svg,
-            "rotation": 0
-        }
+        drawing_data = {"x": x, "y": y, "z": z, "svg": svg, "rotation": 0}
 
         result = await app.gns3.create_drawing(app.current_project_id, drawing_data)
 
@@ -211,18 +209,20 @@ async def create_drawing_impl(app: "AppContext",
             error_code=ErrorCode.OPERATION_FAILED.value,
             details=str(e),
             suggested_action="Check drawing parameters are valid and GNS3 server is accessible",
-            context={"drawing_type": drawing_type, "x": x, "y": y, "z": z, "exception": str(e)}
+            context={"drawing_type": drawing_type, "x": x, "y": y, "z": z, "exception": str(e)},
         )
 
 
-async def update_drawing_impl(app: "AppContext",
-                              drawing_id: str,
-                              x: Optional[int] = None,
-                              y: Optional[int] = None,
-                              z: Optional[int] = None,
-                              rotation: Optional[int] = None,
-                              svg: Optional[str] = None,
-                              locked: Optional[bool] = None) -> str:
+async def update_drawing_impl(
+    app: "AppContext",
+    drawing_id: str,
+    x: int | None = None,
+    y: int | None = None,
+    z: int | None = None,
+    rotation: int | None = None,
+    svg: str | None = None,
+    locked: bool | None = None,
+) -> str:
     """Update properties of an existing drawing object
 
     Args:
@@ -269,7 +269,7 @@ async def update_drawing_impl(app: "AppContext",
                 error_code=ErrorCode.MISSING_PARAMETER.value,
                 details="Provide at least one parameter to update (x, y, z, rotation, svg, locked)",
                 suggested_action="Specify at least one parameter: x, y, z, rotation, svg, or locked",
-                context={"drawing_id": drawing_id}
+                context={"drawing_id": drawing_id},
             )
 
         # Update drawing in GNS3
@@ -283,7 +283,7 @@ async def update_drawing_impl(app: "AppContext",
             error_code=ErrorCode.OPERATION_FAILED.value,
             details=str(e),
             suggested_action="Verify drawing ID exists and update parameters are valid",
-            context={"drawing_id": drawing_id, "update_data": update_data, "exception": str(e)}
+            context={"drawing_id": drawing_id, "update_data": update_data, "exception": str(e)},
         )
 
 
@@ -306,13 +306,18 @@ async def delete_drawing_impl(app: "AppContext", drawing_id: str) -> str:
             error_code=ErrorCode.OPERATION_FAILED.value,
             details=str(e),
             suggested_action="Verify drawing ID exists using list_drawings() or resource projects://{id}/drawings/",
-            context={"drawing_id": drawing_id, "project_id": app.current_project_id, "exception": str(e)}
+            context={
+                "drawing_id": drawing_id,
+                "project_id": app.current_project_id,
+                "exception": str(e),
+            },
         )
 
 
 # ============================================================================
 # Batch Drawing Operations
 # ============================================================================
+
 
 async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) -> str:
     """Create multiple drawing objects in batch with validation
@@ -407,6 +412,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
         ])
     """
     import time
+
     start_time = time.time()
 
     # Validation: Check all drawings first
@@ -418,7 +424,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
             return validation_error(
                 parameter="drawings",
                 details=f"Drawing {idx} missing required field 'drawing_type'",
-                valid_values=list(VALID_TYPES)
+                valid_values=list(VALID_TYPES),
             )
 
         drawing_type = drawing["drawing_type"].lower()
@@ -426,7 +432,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
             return validation_error(
                 parameter=f"drawings[{idx}].drawing_type",
                 details=f"Invalid drawing type: {drawing['drawing_type']}",
-                valid_values=list(VALID_TYPES)
+                valid_values=list(VALID_TYPES),
             )
 
         if "x" not in drawing:
@@ -435,7 +441,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
                 error_code=ErrorCode.MISSING_PARAMETER.value,
                 details="All drawings must specify 'x' coordinate",
                 suggested_action="Add 'x' field to drawing",
-                context={"drawing_index": idx, "drawing": drawing}
+                context={"drawing_index": idx, "drawing": drawing},
             )
 
         if "y" not in drawing:
@@ -444,7 +450,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
                 error_code=ErrorCode.MISSING_PARAMETER.value,
                 details="All drawings must specify 'y' coordinate",
                 suggested_action="Add 'y' field to drawing",
-                context={"drawing_index": idx, "drawing": drawing}
+                context={"drawing_index": idx, "drawing": drawing},
             )
 
         # Type-specific validation
@@ -455,7 +461,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
                     error_code=ErrorCode.MISSING_PARAMETER.value,
                     details="Rectangle requires 'width' and 'height' parameters",
                     suggested_action="Add width and height fields to drawing",
-                    context={"drawing_index": idx, "drawing_type": drawing_type}
+                    context={"drawing_index": idx, "drawing_type": drawing_type},
                 )
 
         elif drawing_type == "ellipse":
@@ -465,7 +471,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
                     error_code=ErrorCode.MISSING_PARAMETER.value,
                     details="Ellipse requires 'rx' and 'ry' parameters",
                     suggested_action="Add rx and ry fields to drawing",
-                    context={"drawing_index": idx, "drawing_type": drawing_type}
+                    context={"drawing_index": idx, "drawing_type": drawing_type},
                 )
 
         elif drawing_type == "line":
@@ -475,7 +481,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
                     error_code=ErrorCode.MISSING_PARAMETER.value,
                     details="Line requires 'x2' and 'y2' parameters",
                     suggested_action="Add x2 and y2 fields to drawing",
-                    context={"drawing_index": idx, "drawing_type": drawing_type}
+                    context={"drawing_index": idx, "drawing_type": drawing_type},
                 )
 
         elif drawing_type == "text":
@@ -485,7 +491,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
                     error_code=ErrorCode.MISSING_PARAMETER.value,
                     details="Text drawing requires 'text' parameter",
                     suggested_action="Add text field to drawing",
-                    context={"drawing_index": idx, "drawing_type": drawing_type}
+                    context={"drawing_index": idx, "drawing_type": drawing_type},
                 )
 
     # Validation passed - create all drawings sequentially
@@ -520,7 +526,7 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
                 font_size=drawing.get("font_size", 10),
                 font_weight=drawing.get("font_weight", "normal"),
                 font_family=drawing.get("font_family", "TypeWriter"),
-                color=drawing.get("color", "#000000")
+                color=drawing.get("color", "#000000"),
             )
 
             # Parse result to extract drawing_id
@@ -528,31 +534,38 @@ async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) ->
             drawing_id = result_data.get("drawing_id")
 
             # Drawing created successfully
-            results.append({
-                "drawing_index": idx,
-                "success": True,
-                "drawing_type": drawing_type,
-                "drawing_id": drawing_id,
-                "result": result_data
-            })
+            results.append(
+                {
+                    "drawing_index": idx,
+                    "success": True,
+                    "drawing_type": drawing_type,
+                    "drawing_id": drawing_id,
+                    "result": result_data,
+                }
+            )
             completed_indices.append(idx)
 
         except Exception as e:
             # Drawing creation failed
-            results.append({
-                "drawing_index": idx,
-                "success": False,
-                "drawing_type": drawing_type,
-                "error": str(e)
-            })
+            results.append(
+                {
+                    "drawing_index": idx,
+                    "success": False,
+                    "drawing_type": drawing_type,
+                    "error": str(e),
+                }
+            )
             failed_indices.append(idx)
 
     execution_time = time.time() - start_time
 
-    return json.dumps({
-        "completed": completed_indices,
-        "failed": failed_indices,
-        "results": results,
-        "total_drawings": len(drawings),
-        "execution_time": round(execution_time, 2)
-    }, indent=2)
+    return json.dumps(
+        {
+            "completed": completed_indices,
+            "failed": failed_indices,
+            "results": results,
+            "total_drawings": len(drawings),
+            "execution_time": round(execution_time, 2),
+        },
+        indent=2,
+    )

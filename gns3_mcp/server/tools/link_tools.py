@@ -2,6 +2,7 @@
 
 Provides tools for viewing and managing network links (connections) between nodes.
 """
+
 import json
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List
@@ -41,16 +42,16 @@ async def get_links_impl(app: "AppContext") -> str:
         nodes = await app.gns3.get_nodes(app.current_project_id)
 
         # Create node ID to name mapping
-        node_map = {n['node_id']: n['name'] for n in nodes}
+        node_map = {n["node_id"]: n["name"] for n in nodes}
 
         # Convert to LinkInfo models
         link_models = []
         warnings = []
 
         for link in links:
-            link_id = link['link_id']
-            link_type = link.get('link_type', 'ethernet')
-            link_nodes = link.get('nodes', [])
+            link_id = link["link_id"]
+            link_type = link.get("link_type", "ethernet")
+            link_nodes = link.get("nodes", [])
 
             # Check for corrupted links
             if len(link_nodes) < 2:
@@ -74,26 +75,26 @@ async def get_links_impl(app: "AppContext") -> str:
                 link_id=link_id,
                 link_type=link_type,
                 node_a=LinkEndpoint(
-                    node_id=node_a['node_id'],
-                    node_name=node_map.get(node_a['node_id'], 'Unknown'),
-                    adapter_number=node_a.get('adapter_number', 0),
-                    port_number=node_a.get('port_number', 0),
-                    adapter_type=node_a.get('adapter_type'),
-                    port_name=node_a.get('name')
+                    node_id=node_a["node_id"],
+                    node_name=node_map.get(node_a["node_id"], "Unknown"),
+                    adapter_number=node_a.get("adapter_number", 0),
+                    port_number=node_a.get("port_number", 0),
+                    adapter_type=node_a.get("adapter_type"),
+                    port_name=node_a.get("name"),
                 ),
                 node_b=LinkEndpoint(
-                    node_id=node_b['node_id'],
-                    node_name=node_map.get(node_b['node_id'], 'Unknown'),
-                    adapter_number=node_b.get('adapter_number', 0),
-                    port_number=node_b.get('port_number', 0),
-                    adapter_type=node_b.get('adapter_type'),
-                    port_name=node_b.get('name')
+                    node_id=node_b["node_id"],
+                    node_name=node_map.get(node_b["node_id"], "Unknown"),
+                    adapter_number=node_b.get("adapter_number", 0),
+                    port_number=node_b.get("port_number", 0),
+                    adapter_type=node_b.get("adapter_type"),
+                    port_name=node_b.get("name"),
                 ),
-                capturing=link.get('capturing', False),
-                capture_file_name=link.get('capture_file_name'),
-                capture_file_path=link.get('capture_file_path'),
-                capture_compute_id=link.get('capture_compute_id'),
-                suspend=link.get('suspend', False)
+                capturing=link.get("capturing", False),
+                capture_file_name=link.get("capture_file_name"),
+                capture_file_path=link.get("capture_file_path"),
+                capture_compute_id=link.get("capture_compute_id"),
+                suspend=link.get("suspend", False),
             )
 
             link_models.append(link_info)
@@ -101,7 +102,7 @@ async def get_links_impl(app: "AppContext") -> str:
         # Build response
         response = {
             "links": [link.model_dump() for link in link_models],
-            "warnings": warnings if warnings else None
+            "warnings": warnings if warnings else None,
         }
 
         return json.dumps(response, indent=2)
@@ -112,7 +113,7 @@ async def get_links_impl(app: "AppContext") -> str:
             error_code=ErrorCode.GNS3_API_ERROR.value,
             details=str(e),
             suggested_action="Check that GNS3 server is running and a project is currently open",
-            context={"project_id": app.current_project_id, "exception": str(e)}
+            context={"project_id": app.current_project_id, "exception": str(e)},
         )
 
 
@@ -157,7 +158,7 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
                 error_code=ErrorCode.INVALID_PARAMETER.value,
                 details=validation_error,
                 suggested_action="Check operation format: connect operations need node_a, node_b, port_a, port_b, adapter_a, adapter_b; disconnect operations need link_id",
-                context={"validation_error": validation_error, "operations": connections}
+                context={"validation_error": validation_error, "operations": connections},
             )
 
         # Fetch topology data ONCE (not in loop - fixes N+1 issue)
@@ -172,8 +173,8 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
         for idx, op in enumerate(parsed_ops):
             if isinstance(op, ConnectOperation):
                 # Resolve adapter_a
-                adapter_a_num, port_a_num, port_a_name, error = validator.resolve_adapter_identifier(
-                    op.node_a, op.adapter_a
+                adapter_a_num, port_a_num, port_a_name, error = (
+                    validator.resolve_adapter_identifier(op.node_a, op.adapter_a)
                 )
                 if error:
                     return create_error_response(
@@ -181,12 +182,16 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
                         error_code=ErrorCode.INVALID_ADAPTER.value,
                         details=error,
                         suggested_action="Use valid adapter name (e.g., 'eth0', 'GigabitEthernet0/0') or adapter number (0, 1, 2, ...)",
-                        context={"node_name": op.node_a, "adapter": op.adapter_a, "operation_index": idx}
+                        context={
+                            "node_name": op.node_a,
+                            "adapter": op.adapter_a,
+                            "operation_index": idx,
+                        },
                     )
 
                 # Resolve adapter_b
-                adapter_b_num, port_b_num, port_b_name, error = validator.resolve_adapter_identifier(
-                    op.node_b, op.adapter_b
+                adapter_b_num, port_b_num, port_b_name, error = (
+                    validator.resolve_adapter_identifier(op.node_b, op.adapter_b)
                 )
                 if error:
                     return create_error_response(
@@ -194,28 +199,32 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
                         error_code=ErrorCode.INVALID_ADAPTER.value,
                         details=error,
                         suggested_action="Use valid adapter name (e.g., 'eth0', 'GigabitEthernet0/0') or adapter number (0, 1, 2, ...)",
-                        context={"node_name": op.node_b, "adapter": op.adapter_b, "operation_index": idx}
+                        context={
+                            "node_name": op.node_b,
+                            "adapter": op.adapter_b,
+                            "operation_index": idx,
+                        },
                     )
 
                 # Store resolved values
-                resolved_ops.append({
-                    'op': op,
-                    'adapter_a_num': adapter_a_num,
-                    'port_a_num': port_a_num,
-                    'port_a_name': port_a_name,
-                    'adapter_b_num': adapter_b_num,
-                    'port_b_num': port_b_num,
-                    'port_b_name': port_b_name
-                })
+                resolved_ops.append(
+                    {
+                        "op": op,
+                        "adapter_a_num": adapter_a_num,
+                        "port_a_num": port_a_num,
+                        "port_a_name": port_a_name,
+                        "adapter_b_num": adapter_b_num,
+                        "port_b_num": port_b_num,
+                        "port_b_name": port_b_name,
+                    }
+                )
 
                 # Validate with resolved numbers
                 validation_error = validator.validate_connect(
-                    op.node_a, op.node_b,
-                    op.port_a, op.port_b,
-                    adapter_a_num, adapter_b_num
+                    op.node_a, op.node_b, op.port_a, op.port_b, adapter_a_num, adapter_b_num
                 )
             else:  # DisconnectOperation
-                resolved_ops.append({'op': op})
+                resolved_ops.append({"op": op})
                 validation_error = validator.validate_disconnect(op.link_id)
 
             if validation_error:
@@ -237,7 +246,7 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
                     error_code=error_code,
                     details=validation_error,
                     suggested_action="Check get_links() to see current topology and verify node names, ports, and adapters",
-                    context={"operation_index": idx, "operation": op.model_dump()}
+                    context={"operation_index": idx, "operation": op.model_dump()},
                 )
 
         logger.info(f"All {len(parsed_ops)} operations validated successfully")
@@ -245,10 +254,10 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
         # PHASE 2: EXECUTE ALL operations (all validated - safe to proceed)
         completed = []
         failed = None
-        node_map = {n['name']: n for n in nodes}
+        node_map = {n["name"]: n for n in nodes}
 
         for idx, resolved in enumerate(resolved_ops):
-            op = resolved['op']
+            op = resolved["op"]
             try:
                 if isinstance(op, ConnectOperation):
                     # Build link spec with resolved adapter numbers
@@ -259,54 +268,53 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
                         "nodes": [
                             {
                                 "node_id": node_a["node_id"],
-                                "adapter_number": resolved['adapter_a_num'],
-                                "port_number": op.port_a
+                                "adapter_number": resolved["adapter_a_num"],
+                                "port_number": op.port_a,
                             },
                             {
                                 "node_id": node_b["node_id"],
-                                "adapter_number": resolved['adapter_b_num'],
-                                "port_number": op.port_b
-                            }
+                                "adapter_number": resolved["adapter_b_num"],
+                                "port_number": op.port_b,
+                            },
                         ]
                     }
 
                     result = await app.gns3.create_link(app.current_project_id, link_spec)
 
-                    completed.append(CompletedOperation(
-                        index=idx,
-                        action="connect",
-                        link_id=result.get("link_id"),
-                        node_a=op.node_a,
-                        node_b=op.node_b,
-                        port_a=op.port_a,
-                        port_b=op.port_b,
-                        adapter_a=resolved['adapter_a_num'],
-                        adapter_b=resolved['adapter_b_num'],
-                        port_a_name=resolved['port_a_name'],
-                        port_b_name=resolved['port_b_name']
-                    ))
+                    completed.append(
+                        CompletedOperation(
+                            index=idx,
+                            action="connect",
+                            link_id=result.get("link_id"),
+                            node_a=op.node_a,
+                            node_b=op.node_b,
+                            port_a=op.port_a,
+                            port_b=op.port_b,
+                            adapter_a=resolved["adapter_a_num"],
+                            adapter_b=resolved["adapter_b_num"],
+                            port_a_name=resolved["port_a_name"],
+                            port_b_name=resolved["port_b_name"],
+                        )
+                    )
 
-                    logger.info(f"Connected {op.node_a} {resolved['port_a_name']} (adapter {resolved['adapter_a_num']}) <-> "
-                              f"{op.node_b} {resolved['port_b_name']} (adapter {resolved['adapter_b_num']})")
+                    logger.info(
+                        f"Connected {op.node_a} {resolved['port_a_name']} (adapter {resolved['adapter_a_num']}) <-> "
+                        f"{op.node_b} {resolved['port_b_name']} (adapter {resolved['adapter_b_num']})"
+                    )
 
                 else:  # Disconnect
                     await app.gns3.delete_link(app.current_project_id, op.link_id)
 
-                    completed.append(CompletedOperation(
-                        index=idx,
-                        action="disconnect",
-                        link_id=op.link_id
-                    ))
+                    completed.append(
+                        CompletedOperation(index=idx, action="disconnect", link_id=op.link_id)
+                    )
 
                     logger.info(f"Disconnected link {op.link_id}")
 
             except Exception as e:
                 # Execution failed (should be rare after validation)
                 failed = FailedOperation(
-                    index=idx,
-                    action=op.action,
-                    operation=op.model_dump(),
-                    reason=str(e)
+                    index=idx, action=op.action, operation=op.model_dump(), reason=str(e)
                 )
                 logger.error(f"Operation {idx} failed during execution: {str(e)}")
                 break
@@ -321,5 +329,5 @@ async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any
             error_code=ErrorCode.OPERATION_FAILED.value,
             details=str(e),
             suggested_action="Check GNS3 server is accessible, verify operation format, and review GNS3 server logs",
-            context={"operations": connections, "exception": str(e)}
+            context={"operations": connections, "exception": str(e)},
         )

@@ -27,15 +27,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Optional
-
-from fastapi import Request
-from fastapi.responses import JSONResponse
+from typing import Annotated, Any, Dict, List
 
 from console_manager import ConsoleManager
 from export_tools import (
     export_topology_diagram,
 )
+from fastapi import Request
+from fastapi.responses import JSONResponse
 from fastmcp import Context, FastMCP
 from gns3_client import GNS3Client
 from models import (
@@ -81,16 +80,19 @@ from tools.project_tools import (
 # Read version from package __init__.py (single source of truth for PyPI package)
 try:
     from gns3_mcp import __version__
+
     VERSION = __version__
 except ImportError:
     # Fallback version if import fails (e.g., running directly without package installation)
     VERSION = f"{0}.{42}.{0}"
-    print(f"Warning: Could not import version from gns3_mcp package, using fallback")
+    print("Warning: Could not import version from gns3_mcp package, using fallback")
 
 # Read server instructions for AI guidance (v0.39.0)
 INSTRUCTIONS_PATH = Path(__file__).parent / "instructions.md"
 try:
-    SERVER_INSTRUCTIONS = INSTRUCTIONS_PATH.read_text(encoding="utf-8") if INSTRUCTIONS_PATH.exists() else None
+    SERVER_INSTRUCTIONS = (
+        INSTRUCTIONS_PATH.read_text(encoding="utf-8") if INSTRUCTIONS_PATH.exists() else None
+    )
 except Exception as e:
     SERVER_INSTRUCTIONS = None
     print(f"Warning: Could not read instructions.md: {e}")
@@ -98,8 +100,8 @@ except Exception as e:
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s: %(message)s',
-    datefmt='%H:%M:%S %d.%m.%Y'
+    format="[%(asctime)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S %d.%m.%Y",
 )
 logger = logging.getLogger(__name__)
 
@@ -109,19 +111,20 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AppContext:
     """Application context with GNS3 client, console manager, and resource manager"""
+
     gns3: GNS3Client
     console: ConsoleManager
-    resource_manager: Optional[ResourceManager] = None
+    resource_manager: ResourceManager | None = None
     current_project_id: str | None = None
-    cleanup_task: Optional[asyncio.Task] = field(default=None)
+    cleanup_task: asyncio.Task | None = field(default=None)
     # v0.38.0: Background authentication task (non-blocking startup)
-    auth_task: Optional[asyncio.Task] = field(default=None)
+    auth_task: asyncio.Task | None = field(default=None)
     # v0.26.0: Multi-proxy SSH support - maps node_name to proxy_url for routing
     ssh_proxy_mapping: Dict[str, str] = field(default_factory=dict)
 
 
 # Global app context for static resources (set during lifespan)
-_app: Optional[AppContext] = None
+_app: AppContext | None = None
 
 
 async def periodic_console_cleanup(console: ConsoleManager):
@@ -216,7 +219,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         username=args.username,
         password=password,
         use_https=use_https,
-        verify_ssl=verify_ssl
+        verify_ssl=verify_ssl,
     )
 
     # Initialize console manager first (no dependencies)
@@ -231,7 +234,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         gns3=gns3,
         console=console,
         current_project_id=None,  # Will be set by background auth task
-        cleanup_task=cleanup_task
+        cleanup_task=cleanup_task,
     )
 
     # Start background authentication task (non-blocking)
@@ -273,7 +276,8 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 
 # Helper Functions
 
-async def validate_current_project(app: AppContext) -> Optional[str]:
+
+async def validate_current_project(app: AppContext) -> str | None:
     """Validate that current project is still open, with auto-connect to opened projects
 
     If no project is connected but one is opened in GNS3, automatically connects to it.
@@ -294,268 +298,320 @@ async def validate_current_project(app: AppContext) -> Optional[str]:
             opened = [p for p in projects if p.get("status") == "opened"]
 
             if not opened:
-                return json.dumps(ErrorResponse(
-                    error="No project opened in GNS3",
-                    details="No projects are currently opened. Open a project in GNS3 or use open_project()",
-                    suggested_action="Open a project in GNS3 GUI, or call list_projects() then open_project(project_name)"
-                ).model_dump(), indent=2)
+                return json.dumps(
+                    ErrorResponse(
+                        error="No project opened in GNS3",
+                        details="No projects are currently opened. Open a project in GNS3 or use open_project()",
+                        suggested_action="Open a project in GNS3 GUI, or call list_projects() then open_project(project_name)",
+                    ).model_dump(),
+                    indent=2,
+                )
 
             # Auto-connect to the first opened project
             app.current_project_id = opened[0]["project_id"]
-            logger.info(f"Auto-connected to opened project: {opened[0]['name']} ({opened[0]['project_id']})")
+            logger.info(
+                f"Auto-connected to opened project: {opened[0]['name']} ({opened[0]['project_id']})"
+            )
 
             if len(opened) > 1:
-                logger.warning(f"Multiple projects opened ({len(opened)}), connected to: {opened[0]['name']}")
+                logger.warning(
+                    f"Multiple projects opened ({len(opened)}), connected to: {opened[0]['name']}"
+                )
 
             return None  # Successfully auto-connected
 
         # Validate that connected project still exists and is opened
-        project = next((p for p in projects
-                       if p['project_id'] == app.current_project_id), None)
+        project = next((p for p in projects if p["project_id"] == app.current_project_id), None)
 
         if not project:
             app.current_project_id = None
-            return json.dumps(ErrorResponse(
-                error="Project no longer exists",
-                details=f"Project ID {app.current_project_id} not found. Use list_projects() and open_project()",
-                suggested_action="Call list_projects() to see current projects, then open_project(project_name)"
-            ).model_dump(), indent=2)
+            return json.dumps(
+                ErrorResponse(
+                    error="Project no longer exists",
+                    details=f"Project ID {app.current_project_id} not found. Use list_projects() and open_project()",
+                    suggested_action="Call list_projects() to see current projects, then open_project(project_name)",
+                ).model_dump(),
+                indent=2,
+            )
 
-        if project['status'] != 'opened':
+        if project["status"] != "opened":
             app.current_project_id = None
-            return json.dumps(ErrorResponse(
-                error=f"Project is {project['status']}",
-                details=f"Project '{project['name']}' is not open. Use open_project() to reopen",
-                suggested_action=f"Call open_project('{project['name']}') to reopen this project"
-            ).model_dump(), indent=2)
+            return json.dumps(
+                ErrorResponse(
+                    error=f"Project is {project['status']}",
+                    details=f"Project '{project['name']}' is not open. Use open_project() to reopen",
+                    suggested_action=f"Call open_project('{project['name']}') to reopen this project",
+                ).model_dump(),
+                indent=2,
+            )
 
         return None
 
     except Exception as e:
-        return json.dumps(ErrorResponse(
-            error="Failed to validate project",
-            details=str(e),
-            suggested_action="Check GNS3 server connection and project state"
-        ).model_dump(), indent=2)
+        return json.dumps(
+            ErrorResponse(
+                error="Failed to validate project",
+                details=str(e),
+                suggested_action="Check GNS3 server connection and project state",
+            ).model_dump(),
+            indent=2,
+        )
 
 
 # Create MCP server (v0.39.0: Added instructions for AI guidance)
-mcp = FastMCP(
-    "GNS3 Lab Controller",
-    lifespan=app_lifespan,
-    instructions=SERVER_INSTRUCTIONS
-)
+mcp = FastMCP("GNS3 Lab Controller", lifespan=app_lifespan, instructions=SERVER_INSTRUCTIONS)
 
 
 # ============================================================================
 # MCP Resources - Browsable State
 # ============================================================================
 
+
 # Project resources
-@mcp.resource("projects://",
+@mcp.resource(
+    "projects://",
     name="Projects",
     title="GNS3 projects list",
     description="List all GNS3 projects with their statuses and IDs",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_projects() -> str:
     """List all GNS3 projects with their statuses and IDs"""
     return await _app.resource_manager.list_projects()
 
-@mcp.resource("projects://{project_id}",
+
+@mcp.resource(
+    "projects://{project_id}",
     name="Project details",  # human-readable name
-    title="GNS3 project details", # human-readable name
-    description="Details for a specific GNS3 project", # defaults to docsctring
+    title="GNS3 project details",  # human-readable name
+    description="Details for a specific GNS3 project",  # defaults to docsctring
     mime_type="text/plain",
 )
 async def resource_project(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_project(project_id)
 
-@mcp.resource("nodes://{project_id}/",
+
+@mcp.resource(
+    "nodes://{project_id}/",
     name="Project nodes list",
     title="GNS3 project nodes list",
     description="List all nodes (devices) in a specific GNS3 project with status and basic info",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_nodes(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_nodes(project_id)
 
-@mcp.resource("nodes://{project_id}/{node_id}",
+
+@mcp.resource(
+    "nodes://{project_id}/{node_id}",
     name="Node details",
     title="GNS3 node details",
     description="Detailed information about a specific node including status, coordinates, console settings, and properties",
-    mime_type="application/json"
+    mime_type="application/json",
 )
 async def resource_node(ctx: Context, project_id: str, node_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_node(project_id, node_id)
 
-@mcp.resource("links://{project_id}/",
+
+@mcp.resource(
+    "links://{project_id}/",
     name="Project links",
     title="GNS3 project network links",
     description="List all network links (connections) between nodes in a specific project",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_links(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_links(project_id)
 
-@mcp.resource("templates://",
+
+@mcp.resource(
+    "templates://",
     name="Templates",
     title="GNS3 templates list",
     description="List all available GNS3 device templates (routers, switches, Docker containers, VMs)",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_templates() -> str:
     """List all available GNS3 templates"""
     return await _app.resource_manager.list_templates()
 
-@mcp.resource("drawings://{project_id}/",
+
+@mcp.resource(
+    "drawings://{project_id}/",
     name="Project drawings",
     title="GNS3 project drawing objects",
     description="List all drawing objects (rectangles, ellipses, lines, text labels) in a specific project",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_drawings(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_drawings(project_id)
 
+
 # REMOVED v0.29.0 - Snapshot resources removed (planned for future reimplementation)
 # Snapshot functionality requires additional work to properly handle GNS3 v3 API snapshot operations
 
-@mcp.resource("projects://{project_id}/readme",
+
+@mcp.resource(
+    "projects://{project_id}/readme",
     name="Project README",
     title="GNS3 project README/notes",
     description="Project documentation in markdown - IP schemes, credentials, architecture notes, troubleshooting guides",
-    mime_type="text/markdown"
+    mime_type="text/markdown",
 )
 async def resource_project_readme(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_project_readme(project_id)
 
-@mcp.resource("projects://{project_id}/topology_report",
+
+@mcp.resource(
+    "projects://{project_id}/topology_report",
     name="Topology Report",
     title="Unified topology report with nodes and links",
     description="v0.40.0: Comprehensive topology report showing nodes, links, statistics in table format with JSON data. Single call replaces multiple queries.",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_topology_report(ctx: Context, project_id: str) -> str:
     """Get unified topology report"""
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_topology_report(project_id)
 
-@mcp.resource("projects://{project_id}/sessions/console/",
+
+@mcp.resource(
+    "projects://{project_id}/sessions/console/",
     name="Project console sessions",
     title="Active console sessions for project",
     description="List all active console (telnet) sessions for nodes in a specific project",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_console_sessions(ctx: Context, project_id: str) -> str:
     """List console sessions for project nodes"""
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_console_sessions(project_id)
 
-@mcp.resource("projects://{project_id}/sessions/ssh/",
+
+@mcp.resource(
+    "projects://{project_id}/sessions/ssh/",
     name="Project SSH sessions",
     title="Active SSH sessions for project",
     description="List all active SSH sessions for nodes in a specific project",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_ssh_sessions(ctx: Context, project_id: str) -> str:
     """List SSH sessions for project nodes"""
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_ssh_sessions(project_id)
 
+
 # Template resources
-@mcp.resource("templates://{template_id}",
+@mcp.resource(
+    "templates://{template_id}",
     name="Template details",
     title="GNS3 template details",
     description="Detailed information about a specific template including properties, default settings, and usage notes",
-    mime_type="application/json"
+    mime_type="application/json",
 )
 async def resource_template(ctx: Context, template_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_template(template_id)
 
-@mcp.resource("nodes://{project_id}/{node_id}/template",
+
+@mcp.resource(
+    "nodes://{project_id}/{node_id}/template",
     name="Node template usage",
     title="Template usage notes for node",
     description="Template-specific configuration hints and usage notes for this node instance",
-    mime_type="text/markdown"
+    mime_type="text/markdown",
 )
 async def resource_node_template(ctx: Context, project_id: str, node_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_node_template_usage(project_id, node_id)
 
+
 # Session list resources (support query param: ?project_id=xxx)
-@mcp.resource("sessions://console/",
+@mcp.resource(
+    "sessions://console/",
     name="Console sessions",
     title="All console sessions",
     description="List all console sessions (optionally filtered by ?project_id=xxx query parameter)",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_console_sessions_all() -> str:
     return await _app.resource_manager.list_console_sessions()
 
-@mcp.resource("sessions://ssh/",
+
+@mcp.resource(
+    "sessions://ssh/",
     name="SSH sessions",
     title="All SSH sessions",
     description="List all SSH sessions (optionally filtered by ?project_id=xxx query parameter)",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_ssh_sessions_all() -> str:
     return await _app.resource_manager.list_ssh_sessions()
 
+
 # Console session resources (node-specific templates only)
-@mcp.resource("sessions://console/{node_name}",
+@mcp.resource(
+    "sessions://console/{node_name}",
     name="Console session",
     title="Console session for node",
     description="Console session state and buffer for a specific node - connection status and recent output",
-    mime_type="application/json"
+    mime_type="application/json",
 )
 async def resource_console_session(ctx: Context, node_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_console_session(node_name)
 
+
 # SSH session resources (node-specific templates only)
-@mcp.resource("sessions://ssh/{node_name}",
+@mcp.resource(
+    "sessions://ssh/{node_name}",
     name="SSH session",
     title="SSH session for node",
     description="SSH session state for a specific node - connection status, device type, and proxy routing",
-    mime_type="application/json"
+    mime_type="application/json",
 )
 async def resource_ssh_session(ctx: Context, node_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_ssh_session(node_name)
 
-@mcp.resource("sessions://ssh/{node_name}/history",
+
+@mcp.resource(
+    "sessions://ssh/{node_name}/history",
     name="SSH command history",
     title="SSH command history for node",
     description="Command history for a specific node's SSH session - chronological list of executed commands",
-    mime_type="application/json"
+    mime_type="application/json",
 )
 async def resource_ssh_history(ctx: Context, node_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_ssh_history(node_name)
 
-@mcp.resource("sessions://ssh/{node_name}/buffer",
+
+@mcp.resource(
+    "sessions://ssh/{node_name}/buffer",
     name="SSH output buffer",
     title="SSH output buffer for node",
     description="Accumulated SSH output buffer for a specific node - recent command outputs and console text",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_ssh_buffer(ctx: Context, node_name: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.get_ssh_buffer(node_name)
 
+
 # SSH proxy resources
-@mcp.resource("proxies:///status",
+@mcp.resource(
+    "proxies:///status",
     name="Main proxy status",
     title="SSH proxy service status",
     description="Health status and version of the main SSH proxy on GNS3 host (default proxy for ssh_configure)",
-    mime_type="application/json"
+    mime_type="application/json",
 )
 async def resource_proxy_status() -> str:
     """Get SSH proxy service status (main proxy on GNS3 host)
@@ -565,11 +621,13 @@ async def resource_proxy_status() -> str:
     """
     return await _app.resource_manager.get_proxy_status()
 
-@mcp.resource("proxies://",
+
+@mcp.resource(
+    "proxies://",
     name="Lab proxy registry",
     title="Discovered lab SSH proxies",
     description="All discovered SSH proxy containers in GNS3 lab projects - use proxy_id for routing through isolated networks",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_proxy_registry() -> str:
     """Discover lab SSH proxies via Docker API (v0.26.0 Multi-Proxy Support)
@@ -592,11 +650,13 @@ async def resource_proxy_registry() -> str:
     """
     return await _app.resource_manager.get_proxy_registry()
 
-@mcp.resource("proxies://sessions",
+
+@mcp.resource(
+    "proxies://sessions",
     name="All proxy sessions",
     title="SSH sessions across all proxies",
     description="Aggregated list of ALL active SSH sessions from main proxy and lab proxies - global lab infrastructure view",
-    mime_type="text/plain"
+    mime_type="text/plain",
 )
 async def resource_proxy_sessions() -> str:
     """List all SSH sessions across all proxies (v0.26.0 Multi-Proxy Aggregation)
@@ -612,12 +672,14 @@ async def resource_proxy_sessions() -> str:
     """
     return await _app.resource_manager.list_proxy_sessions()
 
+
 # Proxy resource templates (project-scoped)
-@mcp.resource("proxies://project/{project_id}",
+@mcp.resource(
+    "proxies://project/{project_id}",
     name="Project proxies",
     title="Lab proxies for project",
     description="SSH proxy containers running in a specific GNS3 project - filtered view of proxy registry",
-    mime_type="application/json"
+    mime_type="application/json",
 )
 async def resource_project_proxies(ctx: Context, project_id: str) -> str:
     """List lab proxies for specific project (filtered view of registry)
@@ -628,11 +690,13 @@ async def resource_project_proxies(ctx: Context, project_id: str) -> str:
     app: AppContext = ctx.request_context.lifespan_context
     return await app.resource_manager.list_project_proxies(project_id)
 
-@mcp.resource("proxies://{proxy_id}",
+
+@mcp.resource(
+    "proxies://{proxy_id}",
     name="Proxy details",
     title="Lab proxy details",
     description="Detailed information about a specific lab proxy - container details, network config, connection info",
-    mime_type="application/json"
+    mime_type="application/json",
 )
 async def resource_proxy(ctx: Context, proxy_id: str) -> str:
     """Get detailed information about a specific lab proxy
@@ -645,11 +709,12 @@ async def resource_proxy(ctx: Context, proxy_id: str) -> str:
 
 
 # Diagram resources
-@mcp.resource("diagrams://{project_id}/topology",
+@mcp.resource(
+    "diagrams://{project_id}/topology",
     name="Topology diagram",
     title="Visual topology diagram (SVG/PNG)",
     description="Generated topology diagram as image - shows nodes, links, status indicators. Only access if agent can process visual information.",
-    mime_type="image/svg+xml"
+    mime_type="image/svg+xml",
 )
 async def resource_topology_diagram(ctx: Context, project_id: str) -> str:
     """Generate topology diagram as SVG image (agent-friendly access)
@@ -678,10 +743,7 @@ async def resource_topology_diagram(ctx: Context, project_id: str) -> str:
         return content
 
     except Exception as e:
-        error_response = ErrorResponse(
-            error="Failed to generate topology diagram",
-            details=str(e)
-        )
+        error_response = ErrorResponse(error="Failed to generate topology diagram", details=str(e))
         return json.dumps(error_response.model_dump(), indent=2)
 
 
@@ -689,17 +751,21 @@ async def resource_topology_diagram(ctx: Context, project_id: str) -> str:
 # MCP Prompts - Guided Workflows
 # ============================================================================
 
+
 @mcp.prompt(
     name="SSH Setup Workflow",
     title="Enable SSH on network devices",
     description="Device-specific SSH configuration for 6 device types with multi-proxy support",
-    tags={"workflow", "ssh", "setup", "device-access", "guided"}
+    tags={"workflow", "ssh", "setup", "device-access", "guided"},
 )
 async def ssh_setup(
     node_name: Annotated[str, "Target node name to configure"],
-    device_type: Annotated[str, "Device type (cisco_ios, cisco_nxos, mikrotik_routeros, juniper_junos, arista_eos, linux)"],
+    device_type: Annotated[
+        str,
+        "Device type (cisco_ios, cisco_nxos, mikrotik_routeros, juniper_junos, arista_eos, linux)",
+    ],
     username: Annotated[str, "SSH username to create"] = "admin",
-    password: Annotated[str, "SSH password to set"] = "admin"
+    password: Annotated[str, "SSH password to set"] = "admin",
 ) -> str:
     """SSH Setup Workflow - Enable SSH access on network devices
 
@@ -718,11 +784,13 @@ async def ssh_setup(
     name="Topology Discovery Workflow",
     title="Discover and visualize network topology",
     description="Discover nodes, links, templates, drawings using resources - includes visual diagram guidance for agents",
-    tags={"workflow", "discovery", "visualization", "read-only", "guided"}
+    tags={"workflow", "discovery", "visualization", "read-only", "guided"},
 )
 async def topology_discovery(
-    project_name: Annotated[Optional[str], "Optional project name to focus on (default: guide user to select)"] = None,
-    include_export: Annotated[bool, "Include export/visualization steps (default: True)"] = True
+    project_name: Annotated[
+        str | None, "Optional project name to focus on (default: guide user to select)"
+    ] = None,
+    include_export: Annotated[bool, "Include export/visualization steps (default: True)"] = True,
 ) -> str:
     """Topology Discovery Workflow - Discover and visualize network topology
 
@@ -740,11 +808,13 @@ async def topology_discovery(
     name="Troubleshooting Workflow",
     title="Systematic network troubleshooting",
     description="OSI model-based troubleshooting with README checks, diagnostic tools, log collection",
-    tags={"workflow", "troubleshooting", "diagnostics", "guided"}
+    tags={"workflow", "troubleshooting", "diagnostics", "guided"},
 )
 async def troubleshooting(
-    node_name: Annotated[Optional[str], "Optional node name to focus troubleshooting on"] = None,
-    issue_type: Annotated[Optional[str], "Optional issue category (connectivity, console, ssh, performance)"] = None
+    node_name: Annotated[str | None, "Optional node name to focus troubleshooting on"] = None,
+    issue_type: Annotated[
+        str | None, "Optional issue category (connectivity, console, ssh, performance)"
+    ] = None,
 ) -> str:
     """Network Troubleshooting Workflow - Systematic network issue diagnosis
 
@@ -763,13 +833,13 @@ async def troubleshooting(
     name="Lab Setup Workflow",
     title="Automated lab topology creation",
     description="Create complete topologies (star/mesh/linear/ring/ospf/bgp) with nodes, links, IPs, and README documentation",
-    tags={"workflow", "topology", "automation", "creates-resource", "guided"}
+    tags={"workflow", "topology", "automation", "creates-resource", "guided"},
 )
 async def lab_setup(
     topology_type: Annotated[str, "Topology type (star, mesh, linear, ring, ospf, bgp)"],
     device_count: Annotated[int, "Number of devices (spokes for star, areas for OSPF, AS for BGP)"],
     template_name: Annotated[str, "GNS3 template to use"] = "Alpine Linux",
-    project_name: Annotated[str, "Name for the new project"] = "Lab Topology"
+    project_name: Annotated[str, "Name for the new project"] = "Lab Topology",
 ) -> str:
     """Lab Setup Workflow - Automated lab topology creation
 
@@ -795,7 +865,7 @@ async def lab_setup(
     name="Node Setup Workflow",
     title="Complete node addition workflow",
     description="End-to-end node setup: create, configure IP, document in README, establish SSH, connect to network",
-    tags={"workflow", "setup", "node", "automation", "guided"}
+    tags={"workflow", "setup", "node", "automation", "guided"},
 )
 async def node_setup(
     node_name: Annotated[str, "Name for the new node (e.g., 'Router1')"],
@@ -804,7 +874,7 @@ async def node_setup(
     subnet_mask: Annotated[str, "Subnet mask"] = "255.255.255.0",
     device_type: Annotated[str, "Device type for SSH"] = "cisco_ios",
     username: Annotated[str, "SSH username to create"] = "admin",
-    password: Annotated[str, "SSH password to set"] = "admin"
+    password: Annotated[str, "SSH password to set"] = "admin",
 ) -> str:
     """Node Setup Workflow - Complete node addition workflow
 
@@ -823,13 +893,14 @@ async def node_setup(
         subnet_mask=subnet_mask,
         device_type=device_type,
         username=username,
-        password=password
+        password=password,
     )
 
 
 # ============================================================================
 # MCP Tools - Connection Management (v0.38.0)
 # ============================================================================
+
 
 @mcp.tool(
     name="check_gns3_connection",
@@ -862,7 +933,9 @@ async def check_gns3_connection(ctx: Context) -> str:
         "connected": gns3.is_connected,
         "server": gns3.base_url,
         "error": gns3.connection_error,
-        "last_attempt": gns3.last_auth_attempt.strftime("%H:%M:%S %d.%m.%Y") if gns3.last_auth_attempt else None
+        "last_attempt": (
+            gns3.last_auth_attempt.strftime("%H:%M:%S %d.%m.%Y") if gns3.last_auth_attempt else None
+        ),
     }
 
     return json.dumps(status, indent=2)
@@ -915,14 +988,14 @@ async def retry_gns3_connection(ctx: Context) -> str:
             "success": True,
             "message": "Successfully reconnected to GNS3 server",
             "server": gns3.base_url,
-            "error": None
+            "error": None,
         }
     else:
         result = {
             "success": False,
             "message": "Failed to reconnect to GNS3 server",
             "server": gns3.base_url,
-            "error": gns3.connection_error
+            "error": gns3.connection_error,
         }
 
     return json.dumps(result, indent=2)
@@ -932,10 +1005,11 @@ async def retry_gns3_connection(ctx: Context) -> str:
 # MCP Tools - Actions That Modify State
 # ============================================================================
 
+
 @mcp.tool(
     name="open_project",
     tags={"project", "management", "idempotent"},
-    annotations={"idempotent": True}
+    annotations={"idempotent": True},
 )
 async def open_project(
     ctx: Context,
@@ -952,12 +1026,12 @@ async def open_project(
 @mcp.tool(
     name="create_project",
     tags={"project", "management", "creates-resource", "idempotent"},
-    annotations={"idempotent": True, "creates_resource": True}
+    annotations={"idempotent": True, "creates_resource": True},
 )
 async def create_project(
     ctx: Context,
     name: Annotated[str, "Project name"],
-    path: Annotated[str | None, "Optional project directory path"] = None
+    path: Annotated[str | None, "Optional project directory path"] = None,
 ) -> str:
     """Create a new GNS3 project and auto-open it
 
@@ -974,7 +1048,7 @@ async def create_project(
 @mcp.tool(
     name="close_project",
     tags={"project", "management", "idempotent"},
-    annotations={"idempotent": True}
+    annotations={"idempotent": True},
 )
 async def close_project(ctx: Context) -> str:
     """Close the currently opened project
@@ -991,12 +1065,18 @@ async def close_project(ctx: Context) -> str:
 @mcp.tool(
     name="set_node_properties",
     tags={"node", "topology", "modifies-state", "bulk", "idempotent"},
-    annotations={"idempotent": True}
+    annotations={"idempotent": True},
 )
 async def set_node(
     ctx: Context,
-    node_name: Annotated[str, "Node name, wildcard pattern ('*', 'Router*', 'R[123]'), or JSON array ('[\"R1\",\"R2\"]')"],
-    action: Annotated[str | None, "Node action: 'start' (boot node), 'stop' (shutdown), 'suspend' (pause), 'reload' (reboot), 'restart' (stop then start)"] = None,
+    node_name: Annotated[
+        str,
+        "Node name, wildcard pattern ('*', 'Router*', 'R[123]'), or JSON array ('[\"R1\",\"R2\"]')",
+    ],
+    action: Annotated[
+        str | None,
+        "Node action: 'start' (boot node), 'stop' (shutdown), 'suspend' (pause), 'reload' (reboot), 'restart' (stop then start)",
+    ] = None,
     x: Annotated[int | None, "X coordinate (top-left corner of node icon)"] = None,
     y: Annotated[int | None, "Y coordinate (top-left corner of node icon)"] = None,
     z: Annotated[int | None, "Z-order layer for overlapping nodes"] = None,
@@ -1008,7 +1088,9 @@ async def set_node(
     hdd_disk_image: Annotated[str | None, "HDD disk image path (QEMU nodes only)"] = None,
     adapters: Annotated[int | None, "Network adapters count (QEMU nodes only)"] = None,
     console_type: Annotated[str | None, "Console type: telnet/vnc/spice"] = None,
-    parallel: Annotated[bool, "Execute operations concurrently (default: True for start/stop/suspend)"] = True
+    parallel: Annotated[
+        bool, "Execute operations concurrently (default: True for start/stop/suspend)"
+    ] = True,
 ) -> str:
     """Configure node properties and/or control node state
 
@@ -1048,22 +1130,31 @@ async def set_node(
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await set_node_impl(
-        app, node_name, action, x, y, z, locked, ports,
-        name, ram, cpus, hdd_disk_image, adapters, console_type,
+        app,
+        node_name,
+        action,
+        x,
+        y,
+        z,
+        locked,
+        ports,
+        name,
+        ram,
+        cpus,
+        hdd_disk_image,
+        adapters,
+        console_type,
         ctx=ctx,  # v0.39.0: Pass Context for progress notifications
-        parallel=parallel  # v0.40.0: Parallel execution support
+        parallel=parallel,  # v0.40.0: Parallel execution support
     )
 
 
-@mcp.tool(
-    name="send_console_data",
-    tags={"console", "device-access", "modifies-state"}
-)
+@mcp.tool(name="send_console_data", tags={"console", "device-access", "modifies-state"})
 async def console_send(
     ctx: Context,
     node_name: Annotated[str, "Name of the node (e.g., 'Router1')"],
     data: Annotated[str, "Data to send - include newline for commands (e.g., 'enable\\n')"],
-    raw: Annotated[bool, "Send data without escape sequence processing"] = False
+    raw: Annotated[bool, "Send data without escape sequence processing"] = False,
 ) -> str:
     """Send data to console (auto-connects if needed)
 
@@ -1107,19 +1198,22 @@ async def console_send(
 @mcp.tool(
     name="read_console_output",
     tags={"console", "device-access", "read-only"},
-    annotations={"read_only": True}
+    annotations={"read_only": True},
 )
 async def console_read(
     ctx: Context,
     node_name: Annotated[str, "Name of the node"],
-    mode: Annotated[str, "Read mode: 'diff' (only new output since last read), 'last_page' (current screen/prompt), 'num_pages' (paginated view), 'all' (entire buffer)"] = "diff",
+    mode: Annotated[
+        str,
+        "Read mode: 'diff' (only new output since last read), 'last_page' (current screen/prompt), 'num_pages' (paginated view), 'all' (entire buffer)",
+    ] = "diff",
     pages: Annotated[int, "Number of pages (only with mode='num_pages')"] = 1,
     pattern: Annotated[str | None, "Regex pattern to filter output"] = None,
     case_insensitive: Annotated[bool, "Case-insensitive matching (grep -i)"] = False,
     invert: Annotated[bool, "Invert match (grep -v)"] = False,
     before: Annotated[int, "Context lines before match (grep -B)"] = 0,
     after: Annotated[int, "Context lines after match (grep -A)"] = 0,
-    context: Annotated[int, "Context lines around match (grep -C)"] = 0
+    context: Annotated[int, "Context lines around match (grep -C)"] = 0,
 ) -> str:
     """Read console output with optional grep filtering (auto-connects if needed)
 
@@ -1157,18 +1251,17 @@ async def console_read(
         console_read("R1", mode="diff", pattern="GigabitEthernet", context=2)
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await read_console_impl(app, node_name, mode, pages, pattern, case_insensitive, invert, before, after, context)
+    return await read_console_impl(
+        app, node_name, mode, pages, pattern, case_insensitive, invert, before, after, context
+    )
 
 
 @mcp.tool(
     name="disconnect_console",
     tags={"console", "device-access", "idempotent"},
-    annotations={"idempotent": True}
+    annotations={"idempotent": True},
 )
-async def console_disconnect(
-    ctx: Context,
-    node_name: Annotated[str, "Name of the node"]
-) -> str:
+async def console_disconnect(ctx: Context, node_name: Annotated[str, "Name of the node"]) -> str:
     """Disconnect console session
 
     Returns: JSON with status
@@ -1177,14 +1270,11 @@ async def console_disconnect(
     return await disconnect_console_impl(app, node_name)
 
 
-@mcp.tool(
-    name="send_console_keystroke",
-    tags={"console", "device-access", "modifies-state"}
-)
+@mcp.tool(name="send_console_keystroke", tags={"console", "device-access", "modifies-state"})
 async def console_keystroke(
     ctx: Context,
     node_name: Annotated[str, "Name of the node"],
-    key: Annotated[str, "Special key to send (e.g., 'up', 'enter', 'ctrl_c')"]
+    key: Annotated[str, "Special key to send (e.g., 'up', 'enter', 'ctrl_c')"],
 ) -> str:
     """Send special keystroke to console (auto-connects if needed)
 
@@ -1217,17 +1307,14 @@ async def console_keystroke(
     return await send_keystroke_impl(app, node_name, key)
 
 
-@mcp.tool(
-    name="send_console_command_and_wait",
-    tags={"console", "device-access", "automation"}
-)
+@mcp.tool(name="send_console_command_and_wait", tags={"console", "device-access", "automation"})
 async def console_send_and_wait(
     ctx: Context,
     node_name: Annotated[str, "Name of the node"],
     command: Annotated[str, "Command to send (include \\n for newline)"],
     wait_pattern: Annotated[str | None, "Regex pattern to wait for (e.g., 'Router#')"] = None,
     timeout: Annotated[int, "Maximum seconds to wait for pattern"] = 30,
-    raw: Annotated[bool, "Send command without escape sequence processing"] = False
+    raw: Annotated[bool, "Send command without escape sequence processing"] = False,
 ) -> str:
     """Send command and wait for prompt pattern with timeout
 
@@ -1272,13 +1359,12 @@ async def console_send_and_wait(
     return await send_and_wait_console_impl(app, node_name, command, wait_pattern, timeout, raw)
 
 
-@mcp.tool(
-    name="console_batch_operations",
-    tags={"console", "device-access", "bulk", "automation"}
-)
+@mcp.tool(name="console_batch_operations", tags={"console", "device-access", "bulk", "automation"})
 async def console_batch(
     ctx: Context,
-    operations: Annotated[List[Dict[str, Any]], "List of console operations (send/send_and_wait/read/keystroke)"]
+    operations: Annotated[
+        List[Dict[str, Any]], "List of console operations (send/send_and_wait/read/keystroke)"
+    ],
 ) -> str:
     """Execute multiple console operations in batch with validation
 
@@ -1384,11 +1470,13 @@ async def console_batch(
 @mcp.tool(
     name="set_network_connections",
     tags={"network", "topology", "bulk", "modifies-state"},
-    annotations={"modifies_topology": True}
+    annotations={"modifies_topology": True},
 )
 async def set_connection(
     ctx: Context,
-    connections: Annotated[List[Dict[str, Any]], "List of connection operations (connect/disconnect)"]
+    connections: Annotated[
+        List[Dict[str, Any]], "List of connection operations (connect/disconnect)"
+    ],
 ) -> str:
     """Manage network connections (links) in batch with two-phase validation
 
@@ -1419,16 +1507,20 @@ async def set_connection(
 @mcp.tool(
     name="create_node",
     tags={"node", "topology", "creates-resource"},
-    annotations={"creates_resource": True, "modifies_topology": True}
+    annotations={"creates_resource": True, "modifies_topology": True},
 )
 async def create_node(
     ctx: Context,
     template_name: Annotated[str, "Template name (e.g., 'Alpine Linux', 'Cisco IOSv')"],
     x: Annotated[int, "X coordinate (horizontal position, left edge of icon)"],
     y: Annotated[int, "Y coordinate (vertical position, top edge of icon)"],
-    node_name: Annotated[str | None, "Custom name (defaults to template name with auto-number)"] = None,
+    node_name: Annotated[
+        str | None, "Custom name (defaults to template name with auto-number)"
+    ] = None,
     compute_id: Annotated[str, "Compute server ID"] = "local",
-    properties: Annotated[Dict[str, Any] | None, "Override template properties (e.g., {'ram': 512})"] = None
+    properties: Annotated[
+        Dict[str, Any] | None, "Override template properties (e.g., {'ram': 512})"
+    ] = None,
 ) -> str:
     """Create a new node from template at specified coordinates
 
@@ -1454,12 +1546,9 @@ async def create_node(
 @mcp.tool(
     name="delete_node",
     tags={"node", "topology", "destructive", "idempotent"},
-    annotations={"destructive": True, "idempotent": True, "modifies_topology": True}
+    annotations={"destructive": True, "idempotent": True, "modifies_topology": True},
 )
-async def delete_node(
-    ctx: Context,
-    node_name: Annotated[str, "Name of the node to delete"]
-) -> str:
+async def delete_node(ctx: Context, node_name: Annotated[str, "Name of the node to delete"]) -> str:
     """Delete a node from the current project
 
     WARNING: This operation is destructive and cannot be undone.
@@ -1475,14 +1564,11 @@ async def delete_node(
     return await delete_node_impl(app, node_name)
 
 
-@mcp.tool(
-    name="get_node_file",
-    tags={"node", "read-only"}
-)
+@mcp.tool(name="get_node_file", tags={"node", "read-only"})
 async def get_node_file(
     ctx: Context,
     node_name: Annotated[str, "Name of the Docker node"],
-    file_path: Annotated[str, "Path relative to container root (e.g., 'etc/network/interfaces')"]
+    file_path: Annotated[str, "Path relative to container root (e.g., 'etc/network/interfaces')"],
 ) -> str:
     """Read file from Docker node filesystem
 
@@ -1503,15 +1589,12 @@ async def get_node_file(
     return await get_node_file_impl(app, node_name, file_path)
 
 
-@mcp.tool(
-    name="write_node_file",
-    tags={"node", "modifies-state"}
-)
+@mcp.tool(name="write_node_file", tags={"node", "modifies-state"})
 async def write_node_file(
     ctx: Context,
     node_name: Annotated[str, "Name of the Docker node"],
     file_path: Annotated[str, "Path relative to container root (e.g., 'etc/network/interfaces')"],
-    content: Annotated[str, "File contents to write"]
+    content: Annotated[str, "File contents to write"],
 ) -> str:
     """Write file to Docker node filesystem
 
@@ -1537,12 +1620,12 @@ async def write_node_file(
 @mcp.tool(
     name="configure_node_network",
     tags={"network", "node", "modifies-state"},
-    annotations={"modifies_topology": True}
+    annotations={"modifies_topology": True},
 )
 async def configure_node_network(
     ctx: Context,
     node_name: Annotated[str, "Name of the Docker node"],
-    interfaces: Annotated[list, "List of interface configs (static/DHCP)"]
+    interfaces: Annotated[list, "List of interface configs (static/DHCP)"],
 ) -> str:
     """Configure network interfaces on Docker node
 
@@ -1597,13 +1680,11 @@ async def configure_node_network(
 
     return await configure_node_network_impl(app, node_name, interfaces)
 
-@mcp.tool(
-    name="get_project_readme",
-    tags={"documentation", "project", "read-only"}
-)
+
+@mcp.tool(name="get_project_readme", tags={"documentation", "project", "read-only"})
 async def get_project_readme(
     ctx: Context,
-    project_id: Annotated[str | None, "Project ID (uses current project if not specified)"] = None
+    project_id: Annotated[str | None, "Project ID (uses current project if not specified)"] = None,
 ) -> str:
     """Get project README/notes
 
@@ -1630,27 +1711,26 @@ async def get_project_readme(
 
     try:
         content = await app.gns3.get_project_readme(project_id)
-        return json.dumps({
-            "project_id": project_id,
-            "content": content if content else "# Project Notes\n\n(No notes yet)",
-            "format": "markdown"
-        }, indent=2)
+        return json.dumps(
+            {
+                "project_id": project_id,
+                "content": content if content else "# Project Notes\n\n(No notes yet)",
+                "format": "markdown",
+            },
+            indent=2,
+        )
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to get project README",
-            "project_id": project_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {"error": "Failed to get project README", "project_id": project_id, "details": str(e)},
+            indent=2,
+        )
 
 
-@mcp.tool(
-    name="update_project_readme",
-    tags={"documentation", "project", "modifies-state"}
-)
+@mcp.tool(name="update_project_readme", tags={"documentation", "project", "modifies-state"})
 async def update_project_readme(
     ctx: Context,
     content: Annotated[str, "Markdown content to save"],
-    project_id: Annotated[str | None, "Project ID (uses current project if not specified)"] = None
+    project_id: Annotated[str | None, "Project ID (uses current project if not specified)"] = None,
 ) -> str:
     """Update project README/notes
 
@@ -1687,23 +1767,24 @@ async def update_project_readme(
     try:
         success = await app.gns3.update_project_readme(project_id, content)
         if success:
-            return json.dumps({
-                "success": True,
-                "project_id": project_id,
-                "message": "README updated successfully",
-                "content_length": len(content)
-            }, indent=2)
+            return json.dumps(
+                {
+                    "success": True,
+                    "project_id": project_id,
+                    "message": "README updated successfully",
+                    "content_length": len(content),
+                },
+                indent=2,
+            )
         else:
-            return json.dumps({
-                "error": "Failed to update README",
-                "project_id": project_id
-            }, indent=2)
+            return json.dumps(
+                {"error": "Failed to update README", "project_id": project_id}, indent=2
+            )
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to update README",
-            "project_id": project_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {"error": "Failed to update README", "project_id": project_id, "details": str(e)},
+            indent=2,
+        )
 
 
 # export_topology_diagram tool now registered from export_tools module
@@ -1712,7 +1793,7 @@ mcp.tool(
     name="export_topology_diagram",
     description="Export topology diagram to SVG/PNG files on disk. For agents: use diagrams://{project_id}/topology resource for direct access without saving files.",
     tags={"topology", "visualization", "export", "file-io", "idempotent"},
-    annotations={"idempotent": True, "read_only": True, "creates_resource": True}
+    annotations={"idempotent": True, "read_only": True, "creates_resource": True},
 )(export_topology_diagram)
 
 
@@ -1720,14 +1801,18 @@ mcp.tool(
 # Drawing Tools
 # ============================================================================
 
+
 @mcp.tool(
     name="create_drawing",
     tags={"drawing", "topology", "visualization", "creates-resource"},
-    annotations={"creates_resource": True}
+    annotations={"creates_resource": True},
 )
 async def create_drawing(
     ctx: Context,
-    drawing_type: Annotated[str, "Shape type: 'rectangle' (box), 'ellipse' (circle/oval), 'line' (connector), 'text' (label)"],
+    drawing_type: Annotated[
+        str,
+        "Shape type: 'rectangle' (box), 'ellipse' (circle/oval), 'line' (connector), 'text' (label)",
+    ],
     x: Annotated[int, "X coordinate (start point for line, top-left for others)"],
     y: Annotated[int, "Y coordinate (start point for line, top-left for others)"],
     z: Annotated[int, "Z-order/layer (default: 0 for shapes, 1 for text)"] = 0,
@@ -1744,7 +1829,7 @@ async def create_drawing(
     font_size: Annotated[int, "Font size in points (text only)"] = 10,
     font_weight: Annotated[str, "Font weight: 'normal' or 'bold' (text only)"] = "normal",
     font_family: Annotated[str, "Font family name (text only)"] = "TypeWriter",
-    color: Annotated[str, "Text color hex code (text only)"] = "#000000"
+    color: Annotated[str, "Text color hex code (text only)"] = "#000000",
 ) -> str:
     """Create a drawing object (rectangle, ellipse, line, or text)
 
@@ -1791,16 +1876,32 @@ async def create_drawing(
         return error
 
     return await create_drawing_impl(
-        app, drawing_type, x, y, z,
-        width, height, rx, ry, fill_color, border_color, border_width,
-        x2, y2, text, font_size, font_weight, font_family, color
+        app,
+        drawing_type,
+        x,
+        y,
+        z,
+        width,
+        height,
+        rx,
+        ry,
+        fill_color,
+        border_color,
+        border_width,
+        x2,
+        y2,
+        text,
+        font_size,
+        font_weight,
+        font_family,
+        color,
     )
 
 
 @mcp.tool(
     name="update_drawing",
     tags={"drawing", "topology", "visualization", "modifies-state"},
-    annotations={"idempotent": True}
+    annotations={"idempotent": True},
 )
 async def update_drawing(
     ctx: Context,
@@ -1810,7 +1911,7 @@ async def update_drawing(
     z: Annotated[int | None, "New Z-order/layer"] = None,
     rotation: Annotated[int | None, "New rotation angle in degrees"] = None,
     svg: Annotated[str | None, "New SVG content (for changing appearance)"] = None,
-    locked: Annotated[bool | None, "Lock/unlock drawing"] = None
+    locked: Annotated[bool | None, "Lock/unlock drawing"] = None,
 ) -> str:
     """Update properties of an existing drawing object
 
@@ -1828,11 +1929,10 @@ async def update_drawing(
 @mcp.tool(
     name="delete_drawing",
     tags={"drawing", "topology", "visualization", "destructive", "idempotent"},
-    annotations={"destructive": True, "idempotent": True}
+    annotations={"destructive": True, "idempotent": True},
 )
 async def delete_drawing(
-    ctx: Context,
-    drawing_id: Annotated[str, "ID of the drawing to delete"]
+    ctx: Context, drawing_id: Annotated[str, "ID of the drawing to delete"]
 ) -> str:
     """Delete a drawing object from the current project
 
@@ -1854,8 +1954,7 @@ async def delete_drawing(
     tags={"drawing", "topology", "visualization", "bulk", "creates-resource"},
 )
 async def create_drawings_batch(
-    ctx: Context,
-    drawings: Annotated[list[dict], "List of drawing definitions to create"]
+    ctx: Context, drawings: Annotated[list[dict], "List of drawing definitions to create"]
 ) -> str:
     """Create multiple drawing objects in batch with validation
 
@@ -1918,16 +2017,19 @@ from tools.ssh_tools import (
 @mcp.tool(
     name="configure_ssh_session",
     tags={"ssh", "device-access", "automation", "idempotent"},
-    annotations={"idempotent": True}
+    annotations={"idempotent": True},
 )
 async def ssh_configure(
     ctx: Context,
     node_name: Annotated[str, "GNS3 node name (e.g., 'Router1') OR '@' for local execution"],
-    device_dict: Annotated[dict, "Netmiko config with device_type ('cisco_ios', 'cisco_nxos', 'arista_eos', 'juniper_junos', 'mikrotik_routeros', 'linux'), host, username, password"],
+    device_dict: Annotated[
+        dict,
+        "Netmiko config with device_type ('cisco_ios', 'cisco_nxos', 'arista_eos', 'juniper_junos', 'mikrotik_routeros', 'linux'), host, username, password",
+    ],
     persist: Annotated[bool, "Store credentials for reconnection"] = True,
     force: Annotated[bool, "Force recreation even if healthy session exists"] = False,
     proxy: Annotated[str, "Proxy to route through: 'host' (default) or proxy_id"] = "host",
-    session_timeout: Annotated[int, "Session timeout in seconds (default: 4 hours)"] = 14400
+    session_timeout: Annotated[int, "Session timeout in seconds (default: 4 hours)"] = 14400,
 ) -> str:
     """Configure SSH session to a network device in GNS3 lab
 
@@ -2007,20 +2109,21 @@ async def ssh_configure(
         ssh_configure("R1", device_dict, force=True)
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await configure_ssh_impl(app, node_name, device_dict, persist, force, proxy, session_timeout)
+    return await configure_ssh_impl(
+        app, node_name, device_dict, persist, force, proxy, session_timeout
+    )
 
 
-@mcp.tool(
-    name="execute_ssh_command",
-    tags={"ssh", "device-access", "automation"}
-)
+@mcp.tool(name="execute_ssh_command", tags={"ssh", "device-access", "automation"})
 async def ssh_command(
     ctx: Context,
     node_name: Annotated[str, "Node identifier (or '@' for local execution)"],
     command: Annotated[str | list, "Command(s) - string for show, list for config/bash script"],
-    expect_string: Annotated[str | None, "Regex pattern to wait for (overrides prompt detection)"] = None,
+    expect_string: Annotated[
+        str | None, "Regex pattern to wait for (overrides prompt detection)"
+    ] = None,
     read_timeout: Annotated[float, "Max seconds to wait for output"] = 30.0,
-    wait_timeout: Annotated[int, "Max wait for long commands (0 for async job_id)"] = 30
+    wait_timeout: Annotated[int, "Max wait for long commands (0 for async job_id)"] = 30,
 ) -> str:
     """Execute command(s) via SSH with auto-detection (show vs config)
 
@@ -2079,18 +2182,17 @@ async def ssh_command(
         return await ssh_send_config_set_impl(app, node_name, command, wait_timeout, ctx=ctx)
     else:
         # Show mode: single command (v0.39.0: pass Context for progress)
-        return await ssh_send_command_impl(app, node_name, command, expect_string, read_timeout, wait_timeout, ctx=ctx)
+        return await ssh_send_command_impl(
+            app, node_name, command, expect_string, read_timeout, wait_timeout, ctx=ctx
+        )
 
 
 @mcp.tool(
     name="disconnect_ssh_session",
     tags={"ssh", "device-access", "idempotent"},
-    annotations={"idempotent": True}
+    annotations={"idempotent": True},
 )
-async def ssh_disconnect(
-    ctx: Context,
-    node_name: Annotated[str, "Node identifier"]
-) -> str:
+async def ssh_disconnect(ctx: Context, node_name: Annotated[str, "Node identifier"]) -> str:
     """Disconnect SSH session
 
     Returns: JSON with status
@@ -2099,13 +2201,9 @@ async def ssh_disconnect(
     return await ssh_disconnect_impl(app, node_name)
 
 
-@mcp.tool(
-    name="ssh_batch_operations",
-    tags={"ssh", "device-access", "bulk", "automation"}
-)
+@mcp.tool(name="ssh_batch_operations", tags={"ssh", "device-access", "bulk", "automation"})
 async def ssh_batch(
-    ctx: Context,
-    operations: Annotated[list[dict], "List of SSH operations (command/disconnect)"]
+    ctx: Context, operations: Annotated[list[dict], "List of SSH operations (command/disconnect)"]
 ) -> str:
     """Execute multiple SSH operations in batch with validation
 
@@ -2330,28 +2428,38 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="localhost", help="GNS3 server host")
     parser.add_argument("--port", type=int, default=80, help="GNS3 server port")
     parser.add_argument("--username", default="admin", help="GNS3 username")
-    parser.add_argument("--password", default="", help="GNS3 password (or use PASSWORD/GNS3_PASSWORD env var)")
-    parser.add_argument("--use-https", action="store_true", help="Use HTTPS for GNS3 connection (or set GNS3_USE_HTTPS=true)")
-    parser.add_argument("--verify-ssl", default=True, type=lambda x: str(x).lower() != 'false',
-                        help="Verify GNS3 SSL certificate (default: true, set to 'false' for self-signed certs)")
+    parser.add_argument(
+        "--password", default="", help="GNS3 password (or use PASSWORD/GNS3_PASSWORD env var)"
+    )
+    parser.add_argument(
+        "--use-https",
+        action="store_true",
+        help="Use HTTPS for GNS3 connection (or set GNS3_USE_HTTPS=true)",
+    )
+    parser.add_argument(
+        "--verify-ssl",
+        default=True,
+        type=lambda x: str(x).lower() != "false",
+        help="Verify GNS3 SSL certificate (default: true, set to 'false' for self-signed certs)",
+    )
 
     # MCP transport mode arguments
     parser.add_argument(
         "--transport",
         choices=["stdio", "http", "sse"],
         default="stdio",
-        help="MCP transport mode: stdio (process-based, default), http (Streamable HTTP, recommended for network), sse (legacy SSE, deprecated)"
+        help="MCP transport mode: stdio (process-based, default), http (Streamable HTTP, recommended for network), sse (legacy SSE, deprecated)",
     )
     parser.add_argument(
         "--http-host",
         default="127.0.0.1",
-        help="HTTP server host (only for http/sse transport, default: 127.0.0.1)"
+        help="HTTP server host (only for http/sse transport, default: 127.0.0.1)",
     )
     parser.add_argument(
         "--http-port",
         type=int,
         default=8000,
-        help="HTTP server port (only for http/sse transport, default: 8000)"
+        help="HTTP server port (only for http/sse transport, default: 8000)",
     )
 
     args = parser.parse_args()
@@ -2367,7 +2475,10 @@ if __name__ == "__main__":
     elif args.transport == "http":
         # Streamable HTTP transport (recommended for network access)
         import uvicorn
-        print(f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp/")
+
+        print(
+            f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp/"
+        )
 
         # Create ASGI app for HTTP transport
         app = mcp.http_app()
@@ -2375,8 +2486,10 @@ if __name__ == "__main__":
         # Add API key authentication middleware (CWE-306 fix)
         api_key = os.getenv("MCP_API_KEY")
         if not api_key:
-            raise ValueError("MCP_API_KEY required for HTTP transport (set in .env). "
-                            "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\"")
+            raise ValueError(
+                "MCP_API_KEY required for HTTP transport (set in .env). "
+                'Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
+            )
 
         @app.middleware("http")
         async def verify_api_key(request: Request, call_next):
@@ -2393,33 +2506,26 @@ if __name__ == "__main__":
                     content={
                         "error": "Unauthorized",
                         "detail": "Invalid or missing MCP_API_KEY header. "
-                                 "Add header: 'MCP_API_KEY: <your-key-from-env>'"
-                    }
+                        "Add header: 'MCP_API_KEY: <your-key-from-env>'",
+                    },
                 )
             return await call_next(request)
 
-        print(f"✓ API key authentication enabled (MCP_API_KEY required)")
+        print("✓ API key authentication enabled (MCP_API_KEY required)")
 
         # Run with uvicorn
-        uvicorn.run(
-            app,
-            host=args.http_host,
-            port=args.http_port,
-            log_level="info"
-        )
+        uvicorn.run(app, host=args.http_host, port=args.http_port, log_level="info")
     elif args.transport == "sse":
         # Legacy SSE transport (deprecated, use HTTP instead)
         import uvicorn
+
         print("WARNING: SSE transport is deprecated. Consider using --transport http instead.")
-        print(f"Starting MCP server with SSE transport at http://{args.http_host}:{args.http_port}/sse")
+        print(
+            f"Starting MCP server with SSE transport at http://{args.http_host}:{args.http_port}/sse"
+        )
 
         # Create ASGI app for SSE transport
         app = mcp.sse_app()
 
         # Run with uvicorn
-        uvicorn.run(
-            app,
-            host=args.http_host,
-            port=args.http_port,
-            log_level="info"
-        )
+        uvicorn.run(app, host=args.http_host, port=args.http_port, log_level="info")

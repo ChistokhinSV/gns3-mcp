@@ -4,23 +4,20 @@ Interactive Console Test
 Tests console with actual command execution
 """
 
-import asyncio
-import telnetlib3
 import argparse
+import asyncio
 import logging
 import os
 from pathlib import Path
+
+import telnetlib3
 from dotenv import load_dotenv
 
 # Load .env
-env_path = Path(__file__).parent.parent / '.env'
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] %(message)s',
-    datefmt='%H:%M:%S'
-)
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
 
 
@@ -30,9 +27,7 @@ async def test_interactive_console(host: str, port: int):
     logger.info(f"Connecting to {host}:{port}...")
 
     try:
-        reader, writer = await telnetlib3.open_connection(
-            host, port, encoding='utf-8'
-        )
+        reader, writer = await telnetlib3.open_connection(host, port, encoding="utf-8")
 
         logger.info("Connected successfully")
         logger.info("=" * 70)
@@ -91,7 +86,7 @@ async def test_interactive_console(host: str, port: int):
         # Test 4: Send echo command
         logger.info("=" * 70)
         logger.info("TEST 4: Execute 'echo \"Test successful\"' command")
-        writer.write("echo \"Test successful\"\n")
+        writer.write('echo "Test successful"\n')
         await writer.drain()
         await asyncio.sleep(1)
 
@@ -115,7 +110,9 @@ async def test_interactive_console(host: str, port: int):
 
 async def main():
     parser = argparse.ArgumentParser(description="Interactive console test")
-    parser.add_argument("--host", default=os.getenv("GNS3_HOST", "192.168.1.20"), help="GNS3 server host")
+    parser.add_argument(
+        "--host", default=os.getenv("GNS3_HOST", "192.168.1.20"), help="GNS3 server host"
+    )
     parser.add_argument("--port", type=int, help="Console port (required)")
 
     args = parser.parse_args()

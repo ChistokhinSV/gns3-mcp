@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import httpx
 
@@ -18,9 +18,15 @@ logger = logging.getLogger(__name__)
 class GNS3Client:
     """Async client for GNS3 v3 API"""
 
-    def __init__(self, host: str = "localhost", port: int = 80,
-                 username: str = "admin", password: str = "",
-                 use_https: bool = False, verify_ssl: bool = True):
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 80,
+        username: str = "admin",
+        password: str = "",
+        use_https: bool = False,
+        verify_ssl: bool = True,
+    ):
         """Initialize GNS3 API client
 
         Args:
@@ -35,16 +41,17 @@ class GNS3Client:
         self.base_url = f"{scheme}://{host}:{port}"
         self.username = username
         self.password = password
-        self.token: Optional[str] = None
+        self.token: str | None = None
         # Connection status tracking (v0.38.0)
         self.is_connected: bool = False
-        self.connection_error: Optional[str] = None
-        self.last_auth_attempt: Optional[datetime] = None
+        self.connection_error: str | None = None
+        self.last_auth_attempt: datetime | None = None
         # Support HTTPS with self-signed certificates (CWE-319 fix)
         self.client = httpx.AsyncClient(timeout=30.0, verify=verify_ssl)
 
-    async def authenticate(self, retry: bool = False, retry_interval: int = 30,
-                          max_retries: Optional[int] = None) -> bool:
+    async def authenticate(
+        self, retry: bool = False, retry_interval: int = 30, max_retries: int | None = None
+    ) -> bool:
         """Authenticate and obtain JWT token
 
         POST /v3/access/users/authenticate
@@ -66,7 +73,7 @@ class GNS3Client:
             try:
                 response = await self.client.post(
                     f"{self.base_url}/v3/access/users/authenticate",
-                    json={"username": self.username, "password": self.password}
+                    json={"username": self.username, "password": self.password},
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -75,9 +82,13 @@ class GNS3Client:
                 self.is_connected = True
                 self.connection_error = None
                 if attempt > 1:
-                    logger.info(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication succeeded on attempt {attempt}")
+                    logger.info(
+                        f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication succeeded on attempt {attempt}"
+                    )
                 else:
-                    logger.info(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authenticated to GNS3 server at {self.base_url}")
+                    logger.info(
+                        f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authenticated to GNS3 server at {self.base_url}"
+                    )
                 return True
             except Exception as e:
                 # Update connection status on failure
@@ -85,7 +96,9 @@ class GNS3Client:
                 self.connection_error = self._extract_error(e)
 
                 if not retry or (max_retries is not None and attempt > max_retries):
-                    logger.error(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication failed: {e}")
+                    logger.error(
+                        f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication failed: {e}"
+                    )
                     return False
 
                 # Log retry attempt
@@ -93,8 +106,12 @@ class GNS3Client:
                 if max_retries is not None:
                     retry_msg = f"attempt {attempt}/{max_retries}"
 
-                logger.warning(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication failed ({retry_msg}): {e}")
-                logger.info(f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Retrying in {retry_interval} seconds...")
+                logger.warning(
+                    f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Authentication failed ({retry_msg}): {e}"
+                )
+                logger.info(
+                    f"[{datetime.now().strftime('%H:%M:%S %d.%m.%Y')}] Retrying in {retry_interval} seconds..."
+                )
 
                 await asyncio.sleep(retry_interval)
 
@@ -142,14 +159,11 @@ class GNS3Client:
     async def get_projects(self) -> List[Dict[str, Any]]:
         """GET /v3/projects - list all projects"""
         await self._ensure_authenticated()
-        response = await self.client.get(
-            f"{self.base_url}/v3/projects",
-            headers=self._headers()
-        )
+        response = await self.client.get(f"{self.base_url}/v3/projects", headers=self._headers())
         response.raise_for_status()
         return response.json()
 
-    async def create_project(self, name: str, path: Optional[str] = None) -> Dict[str, Any]:
+    async def create_project(self, name: str, path: str | None = None) -> Dict[str, Any]:
         """POST /v3/projects - create a new project
 
         Args:
@@ -164,9 +178,7 @@ class GNS3Client:
             payload["path"] = path
 
         response = await self.client.post(
-            f"{self.base_url}/v3/projects",
-            headers=self._headers(),
-            json=payload
+            f"{self.base_url}/v3/projects", headers=self._headers(), json=payload
         )
         response.raise_for_status()
         return response.json()
@@ -174,9 +186,7 @@ class GNS3Client:
     async def open_project(self, project_id: str) -> Dict[str, Any]:
         """POST /v3/projects/{id}/open - open a project"""
         response = await self.client.post(
-            f"{self.base_url}/v3/projects/{project_id}/open",
-            headers=self._headers(),
-            json={}
+            f"{self.base_url}/v3/projects/{project_id}/open", headers=self._headers(), json={}
         )
         response.raise_for_status()
         return response.json()
@@ -184,9 +194,7 @@ class GNS3Client:
     async def close_project(self, project_id: str) -> Dict[str, Any]:
         """POST /v3/projects/{id}/close - close a project"""
         response = await self.client.post(
-            f"{self.base_url}/v3/projects/{project_id}/close",
-            headers=self._headers(),
-            json={}
+            f"{self.base_url}/v3/projects/{project_id}/close", headers=self._headers(), json={}
         )
         response.raise_for_status()
         return response.json()
@@ -201,8 +209,7 @@ class GNS3Client:
             List of snapshot data dictionaries
         """
         response = await self.client.get(
-            f"{self.base_url}/v3/projects/{project_id}/snapshots",
-            headers=self._headers()
+            f"{self.base_url}/v3/projects/{project_id}/snapshots", headers=self._headers()
         )
         response.raise_for_status()
         return response.json()
@@ -210,8 +217,7 @@ class GNS3Client:
     async def get_nodes(self, project_id: str) -> List[Dict[str, Any]]:
         """GET /v3/projects/{id}/nodes - list all nodes in project"""
         response = await self.client.get(
-            f"{self.base_url}/v3/projects/{project_id}/nodes",
-            headers=self._headers()
+            f"{self.base_url}/v3/projects/{project_id}/nodes", headers=self._headers()
         )
         response.raise_for_status()
         return response.json()
@@ -219,8 +225,7 @@ class GNS3Client:
     async def get_links(self, project_id: str) -> List[Dict[str, Any]]:
         """GET /v3/projects/{id}/links - list all links in project"""
         response = await self.client.get(
-            f"{self.base_url}/v3/projects/{project_id}/links",
-            headers=self._headers()
+            f"{self.base_url}/v3/projects/{project_id}/links", headers=self._headers()
         )
         response.raise_for_status()
         return response.json()
@@ -230,7 +235,7 @@ class GNS3Client:
         response = await self.client.post(
             f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}/start",
             headers=self._headers(),
-            json={}
+            json={},
         )
         response.raise_for_status()
         # Handle empty response (204 No Content)
@@ -243,7 +248,7 @@ class GNS3Client:
         response = await self.client.post(
             f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}/stop",
             headers=self._headers(),
-            json={}
+            json={},
         )
         response.raise_for_status()
         # Handle empty response (204 No Content)
@@ -256,7 +261,7 @@ class GNS3Client:
         response = await self.client.post(
             f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}/suspend",
             headers=self._headers(),
-            json={}
+            json={},
         )
         response.raise_for_status()
         # Handle empty response (204 No Content)
@@ -269,7 +274,7 @@ class GNS3Client:
         response = await self.client.post(
             f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}/reload",
             headers=self._headers(),
-            json={}
+            json={},
         )
         response.raise_for_status()
         # Handle empty response (204 No Content)
@@ -277,8 +282,9 @@ class GNS3Client:
             return {}
         return response.json()
 
-    async def update_node(self, project_id: str, node_id: str,
-                         properties: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_node(
+        self, project_id: str, node_id: str, properties: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """PUT /v3/projects/{id}/nodes/{node_id} - update node properties
 
         Args:
@@ -289,13 +295,14 @@ class GNS3Client:
         response = await self.client.put(
             f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}",
             headers=self._headers(),
-            json=properties
+            json=properties,
         )
         response.raise_for_status()
         return response.json()
 
-    async def create_link(self, project_id: str, link_spec: Dict[str, Any],
-                         timeout: float = 10.0) -> Dict[str, Any]:
+    async def create_link(
+        self, project_id: str, link_spec: Dict[str, Any], timeout: float = 10.0
+    ) -> Dict[str, Any]:
         """POST /v3/projects/{id}/links - create a new link
 
         Args:
@@ -308,15 +315,14 @@ class GNS3Client:
                 f"{self.base_url}/v3/projects/{project_id}/links",
                 headers=self._headers(),
                 json=link_spec,
-                timeout=timeout
+                timeout=timeout,
             )
             response.raise_for_status()
             return response.json()
         except Exception as e:
             raise RuntimeError(f"Failed to create link: {self._extract_error(e)}") from e
 
-    async def delete_link(self, project_id: str, link_id: str,
-                         timeout: float = 10.0) -> None:
+    async def delete_link(self, project_id: str, link_id: str, timeout: float = 10.0) -> None:
         """DELETE /v3/projects/{id}/links/{link_id} - delete a link
 
         Args:
@@ -328,7 +334,7 @@ class GNS3Client:
             response = await self.client.delete(
                 f"{self.base_url}/v3/projects/{project_id}/links/{link_id}",
                 headers=self._headers(),
-                timeout=timeout
+                timeout=timeout,
             )
             response.raise_for_status()
         except Exception as e:
@@ -337,36 +343,32 @@ class GNS3Client:
     async def delete_node(self, project_id: str, node_id: str) -> None:
         """DELETE /v3/projects/{id}/nodes/{node_id} - delete a node"""
         response = await self.client.delete(
-            f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}",
-            headers=self._headers()
+            f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}", headers=self._headers()
         )
         response.raise_for_status()
 
     async def get_templates(self) -> List[Dict[str, Any]]:
         """GET /v3/templates - list all templates"""
-        response = await self.client.get(
-            f"{self.base_url}/v3/templates",
-            headers=self._headers()
-        )
+        response = await self.client.get(f"{self.base_url}/v3/templates", headers=self._headers())
         response.raise_for_status()
         return response.json()
 
     async def get_template(self, template_id: str) -> Dict[str, Any]:
         """GET /v3/templates/{id} - get template details"""
         response = await self.client.get(
-            f"{self.base_url}/v3/templates/{template_id}",
-            headers=self._headers()
+            f"{self.base_url}/v3/templates/{template_id}", headers=self._headers()
         )
         response.raise_for_status()
         return response.json()
 
-    async def create_node_from_template(self, project_id: str, template_id: str,
-                                       payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def create_node_from_template(
+        self, project_id: str, template_id: str, payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """POST /v3/projects/{id}/templates/{template_id} - create node from template"""
         response = await self.client.post(
             f"{self.base_url}/v3/projects/{project_id}/templates/{template_id}",
             headers=self._headers(),
-            json=payload
+            json=payload,
         )
         response.raise_for_status()
         return response.json()
@@ -374,8 +376,7 @@ class GNS3Client:
     async def get_drawings(self, project_id: str) -> List[Dict[str, Any]]:
         """GET /v3/projects/{id}/drawings - list all drawings"""
         response = await self.client.get(
-            f"{self.base_url}/v3/projects/{project_id}/drawings",
-            headers=self._headers()
+            f"{self.base_url}/v3/projects/{project_id}/drawings", headers=self._headers()
         )
         response.raise_for_status()
         return response.json()
@@ -385,18 +386,19 @@ class GNS3Client:
         response = await self.client.post(
             f"{self.base_url}/v3/projects/{project_id}/drawings",
             headers=self._headers(),
-            json=drawing_data
+            json=drawing_data,
         )
         response.raise_for_status()
         return response.json()
 
-    async def update_drawing(self, project_id: str, drawing_id: str,
-                            drawing_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_drawing(
+        self, project_id: str, drawing_id: str, drawing_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """PUT /v3/projects/{id}/drawings/{drawing_id} - update a drawing"""
         response = await self.client.put(
             f"{self.base_url}/v3/projects/{project_id}/drawings/{drawing_id}",
             headers=self._headers(),
-            json=drawing_data
+            json=drawing_data,
         )
         response.raise_for_status()
         return response.json()
@@ -405,7 +407,7 @@ class GNS3Client:
         """DELETE /v3/projects/{id}/drawings/{drawing_id} - delete a drawing"""
         response = await self.client.delete(
             f"{self.base_url}/v3/projects/{project_id}/drawings/{drawing_id}",
-            headers=self._headers()
+            headers=self._headers(),
         )
         response.raise_for_status()
 
@@ -422,12 +424,14 @@ class GNS3Client:
         """
         response = await self.client.get(
             f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}/files/{file_path}",
-            headers=self._headers()
+            headers=self._headers(),
         )
         response.raise_for_status()
         return response.text
 
-    async def write_node_file(self, project_id: str, node_id: str, file_path: str, content: str) -> None:
+    async def write_node_file(
+        self, project_id: str, node_id: str, file_path: str, content: str
+    ) -> None:
         """POST /v3/projects/{id}/nodes/{node_id}/files/{path} - write file to node filesystem
 
         Args:
@@ -439,15 +443,13 @@ class GNS3Client:
         response = await self.client.post(
             f"{self.base_url}/v3/projects/{project_id}/nodes/{node_id}/files/{file_path}",
             headers={**self._headers(), "Content-Type": "text/plain"},
-            content=content
+            content=content,
         )
         response.raise_for_status()
 
     async def get_version(self) -> Dict[str, Any]:
         """GET /v3/version - get GNS3 server version"""
-        response = await self.client.get(
-            f"{self.base_url}/v3/version"
-        )
+        response = await self.client.get(f"{self.base_url}/v3/version")
         response.raise_for_status()
         return response.json()
 
@@ -462,11 +464,11 @@ class GNS3Client:
         """
         # URL-encode the symbol_id to handle paths like ':/symbols/...'
         import urllib.parse
-        encoded_symbol = urllib.parse.quote(symbol_id, safe='')
+
+        encoded_symbol = urllib.parse.quote(symbol_id, safe="")
 
         response = await self.client.get(
-            f"{self.base_url}/v3/symbols/{encoded_symbol}/raw",
-            headers=self._headers()
+            f"{self.base_url}/v3/symbols/{encoded_symbol}/raw", headers=self._headers()
         )
         response.raise_for_status()
         return response.content
@@ -487,7 +489,7 @@ class GNS3Client:
         try:
             response = await self.client.get(
                 f"{self.base_url}/v3/projects/{project_id}/files/README.txt",
-                headers=self._headers()
+                headers=self._headers(),
             )
             if response.status_code == 404:
                 return ""  # README doesn't exist yet
@@ -518,7 +520,7 @@ class GNS3Client:
             response = await self.client.post(
                 f"{self.base_url}/v3/projects/{project_id}/files/README.txt",
                 headers=self._headers(),
-                content=content.encode('utf-8')
+                content=content.encode("utf-8"),
             )
             return response.status_code == 204
         except Exception as e:

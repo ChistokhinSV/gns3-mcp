@@ -42,7 +42,6 @@ DEVICE_CONFIGS = {
    console_send("{node_name}", "write memory\\n")
    ```
 """,
-
     "cisco_nxos": """
 **Cisco NX-OS SSH Setup:**
 
@@ -72,7 +71,6 @@ DEVICE_CONFIGS = {
    console_send("{node_name}", "copy running-config startup-config\\n")
    ```
 """,
-
     "mikrotik_routeros": """
 **MikroTik RouterOS SSH Setup:**
 
@@ -91,7 +89,6 @@ DEVICE_CONFIGS = {
    console_send("{node_name}", "/ip service set ssh port=22\\n")
    ```
 """,
-
     "juniper_junos": """
 **Juniper Junos SSH Setup:**
 
@@ -116,7 +113,6 @@ DEVICE_CONFIGS = {
    console_send("{node_name}", "commit and-quit\\n")
    ```
 """,
-
     "arista_eos": """
 **Arista EOS SSH Setup:**
 
@@ -143,7 +139,6 @@ DEVICE_CONFIGS = {
    console_send("{node_name}", "write memory\\n")
    ```
 """,
-
     "linux": """
 **Linux/Alpine SSH Setup:**
 
@@ -174,15 +169,12 @@ DEVICE_CONFIGS = {
    # OR
    console_send("{node_name}", "systemctl enable ssh\\n")  # SystemD
    ```
-"""
+""",
 }
 
 
 async def render_ssh_setup_prompt(
-    node_name: str,
-    device_type: str,
-    username: str = "admin",
-    password: str = "admin"
+    node_name: str, device_type: str, username: str = "admin", password: str = "admin"
 ) -> str:
     """Generate SSH setup workflow prompt with device-specific instructions
 
@@ -197,7 +189,9 @@ async def render_ssh_setup_prompt(
     """
 
     # Get device-specific instructions or provide generic guidance
-    device_instructions = DEVICE_CONFIGS.get(device_type, f"""
+    device_instructions = DEVICE_CONFIGS.get(
+        device_type,
+        f"""
 **Generic SSH Setup (device_type: {device_type}):**
 
 Device-specific instructions not available. General steps:
@@ -209,13 +203,12 @@ Device-specific instructions not available. General steps:
 6. Save configuration
 
 Refer to device documentation for specific commands.
-""")
+""",
+    )
 
     # Format instructions with parameters
     device_instructions = device_instructions.format(
-        node_name=node_name,
-        username=username,
-        password=password
+        node_name=node_name, username=username, password=password
     )
 
     workflow = f"""# SSH Setup Workflow for {node_name}

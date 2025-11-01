@@ -2,11 +2,12 @@
 
 Provides tools for interacting with node consoles via telnet.
 """
+
 import asyncio
 import json
 import re
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from error_utils import (
     console_connection_failed_error,
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from main import AppContext
 
 
-async def _auto_connect_console(app: "AppContext", node_name: str) -> Optional[str]:
+async def _auto_connect_console(app: "AppContext", node_name: str) -> str | None:
     """Auto-connect to console if not already connected
 
     Returns:
@@ -37,35 +38,30 @@ async def _auto_connect_console(app: "AppContext", node_name: str) -> Optional[s
 
     # Find node
     nodes = await app.gns3.get_nodes(app.current_project_id)
-    node = next((n for n in nodes if n['name'] == node_name), None)
+    node = next((n for n in nodes if n["name"] == node_name), None)
 
     if not node:
-        available_nodes = [n['name'] for n in nodes]
+        available_nodes = [n["name"] for n in nodes]
         return node_not_found_error(
-            node_name=node_name,
-            project_id=app.current_project_id,
-            available_nodes=available_nodes
+            node_name=node_name, project_id=app.current_project_id, available_nodes=available_nodes
         )
 
     # Check console type
-    console_type = node['console_type']
-    if console_type not in ['telnet']:
+    console_type = node["console_type"]
+    if console_type not in ["telnet"]:
         return validation_error(
             message=f"Console type '{console_type}' not supported",
             parameter="console_type",
             value=console_type,
-            valid_values=["telnet"]
+            valid_values=["telnet"],
         )
 
-    if not node['console']:
-        return node_stopped_error(
-            node_name=node_name,
-            operation="console access"
-        )
+    if not node["console"]:
+        return node_stopped_error(node_name=node_name, operation="console access")
 
     # Extract host from GNS3 client config
-    host = app.gns3.base_url.split('//')[1].split(':')[0]
-    port = node['console']
+    host = app.gns3.base_url.split("//")[1].split(":")[0]
+    port = node["console"]
 
     # Connect
     try:
@@ -73,10 +69,7 @@ async def _auto_connect_console(app: "AppContext", node_name: str) -> Optional[s
         return None
     except Exception as e:
         return console_connection_failed_error(
-            node_name=node_name,
-            host=host,
-            port=port,
-            details=str(e)
+            node_name=node_name, host=host, port=port, details=str(e)
         )
 
 
@@ -127,22 +120,22 @@ async def send_console_impl(app: "AppContext", node_name: str, data: str, raw: b
             error_code=ErrorCode.OPERATION_FAILED.value,
             details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending commands",
             suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
-            context={"node_name": node_name, "reason": "terminal_not_accessed"}
+            context={"node_name": node_name, "reason": "terminal_not_accessed"},
         )
 
     # Process escape sequences unless raw mode
     if not raw:
         # First handle escape sequences (backslash-escaped strings)
-        data = data.replace('\\r\\n', '\r\n')  # \r\n → CR+LF
-        data = data.replace('\\n', '\n')       # \n → LF
-        data = data.replace('\\r', '\r')       # \r → CR
-        data = data.replace('\\t', '\t')       # \t → tab
-        data = data.replace('\\x1b', '\x1b')   # \x1b → ESC
+        data = data.replace("\\r\\n", "\r\n")  # \r\n → CR+LF
+        data = data.replace("\\n", "\n")  # \n → LF
+        data = data.replace("\\r", "\r")  # \r → CR
+        data = data.replace("\\t", "\t")  # \t → tab
+        data = data.replace("\\x1b", "\x1b")  # \x1b → ESC
 
         # Then normalize all newlines to LF for Unix/Linux compatibility
         # This handles copy-pasted multi-line text
-        data = data.replace('\r\n', '\n')      # Normalize CRLF to LF
-        data = data.replace('\r', '\n')        # Normalize CR to LF
+        data = data.replace("\r\n", "\n")  # Normalize CRLF to LF
+        data = data.replace("\r", "\n")  # Normalize CR to LF
         # Note: Don't convert to CRLF - Unix/Linux devices expect LF only
         # Windows/Cisco devices handle LF correctly via telnet protocol
 
@@ -155,7 +148,7 @@ async def send_console_impl(app: "AppContext", node_name: str, data: str, raw: b
             error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
             details="Console session may have been disconnected",
             suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
-            context={"node_name": node_name}
+            context={"node_name": node_name},
         )
 
 
@@ -169,7 +162,7 @@ async def read_console_impl(
     invert: bool = False,
     before: int = 0,
     after: int = 0,
-    context: int = 0
+    context: int = 0,
 ) -> str:
     """Read console output (auto-connects if needed)
 
@@ -231,7 +224,7 @@ async def read_console_impl(
             error_code=ErrorCode.INVALID_PARAMETER.value,
             details=f"'pages' parameter (value: {pages}) can only be used with mode='num_pages' (current mode: '{mode}')",
             suggested_action="Either change mode to 'num_pages' or remove the 'pages' parameter",
-            context={"mode": mode, "pages": pages}
+            context={"mode": mode, "pages": pages},
         )
 
     # Validate mode parameter
@@ -240,7 +233,7 @@ async def read_console_impl(
             message=f"Invalid mode '{mode}'",
             parameter="mode",
             value=mode,
-            valid_values=["diff", "last_page", "num_pages", "all"]
+            valid_values=["diff", "last_page", "num_pages", "all"],
         )
 
     # Auto-connect if needed
@@ -256,7 +249,7 @@ async def read_console_impl(
         full_output = app.console.get_output_by_node(node_name)
         if full_output:
             lines = full_output.splitlines()
-            output = '\n'.join(lines[-25:]) if len(lines) > 25 else full_output
+            output = "\n".join(lines[-25:]) if len(lines) > 25 else full_output
         else:
             output = None
     elif mode == "num_pages":
@@ -265,7 +258,9 @@ async def read_console_impl(
         if full_output:
             lines = full_output.splitlines()
             lines_to_return = 25 * pages
-            output = '\n'.join(lines[-lines_to_return:]) if len(lines) > lines_to_return else full_output
+            output = (
+                "\n".join(lines[-lines_to_return:]) if len(lines) > lines_to_return else full_output
+            )
         else:
             output = None
     else:  # mode == "all"
@@ -281,7 +276,7 @@ async def read_console_impl(
             invert=invert,
             before=before,
             after=after,
-            context=context
+            context=context,
         )
 
     return output if output is not None else "No output available"
@@ -294,7 +289,7 @@ def _grep_filter(
     invert: bool = False,
     before: int = 0,
     after: int = 0,
-    context: int = 0
+    context: int = 0,
 ) -> str:
     """
     Filter text using grep-style pattern matching
@@ -358,7 +353,7 @@ def _grep_filter(
         line_num = idx + 1  # 1-indexed line numbers
         result.append(f"{line_num}: {lines[idx]}")
 
-    return '\n'.join(result)
+    return "\n".join(result)
 
 
 async def disconnect_console_impl(app: "AppContext", node_name: str) -> str:
@@ -372,11 +367,16 @@ async def disconnect_console_impl(app: "AppContext", node_name: str) -> str:
     """
     success = await app.console.disconnect_by_node(node_name)
 
-    return json.dumps({
-        "success": success,
-        "node_name": node_name,
-        "message": "Disconnected successfully" if success else "No active session for this node"
-    }, indent=2)
+    return json.dumps(
+        {
+            "success": success,
+            "node_name": node_name,
+            "message": (
+                "Disconnected successfully" if success else "No active session for this node"
+            ),
+        },
+        indent=2,
+    )
 
 
 async def get_console_status_impl(app: "AppContext", node_name: str) -> str:
@@ -428,13 +428,10 @@ async def get_console_status_impl(app: "AppContext", node_name: str) -> str:
             host=session_info.get("host"),
             port=session_info.get("port"),
             buffer_size=session_info.get("buffer_size"),
-            created_at=session_info.get("created_at")
+            created_at=session_info.get("created_at"),
         )
     else:
-        status = ConsoleStatus(
-            connected=False,
-            node_name=node_name
-        )
+        status = ConsoleStatus(connected=False, node_name=node_name)
 
     return json.dumps(status.model_dump(), indent=2)
 
@@ -443,9 +440,9 @@ async def send_and_wait_console_impl(
     app: "AppContext",
     node_name: str,
     command: str,
-    wait_pattern: Optional[str] = None,
+    wait_pattern: str | None = None,
     timeout: int = 30,
-    raw: bool = False
+    raw: bool = False,
 ) -> str:
     """Send command and wait for specific prompt pattern
 
@@ -511,12 +508,10 @@ async def send_and_wait_console_impl(
     # Auto-connect
     error = await _auto_connect_console(app, node_name)
     if error:
-        return json.dumps({
-            "error": error,
-            "output": "",
-            "pattern_found": False,
-            "timeout_occurred": False
-        }, indent=2)
+        return json.dumps(
+            {"error": error, "output": "", "pattern_found": False, "timeout_occurred": False},
+            indent=2,
+        )
 
     # Check if terminal has been accessed (read) before sending
     if not app.console.has_accessed_terminal_by_node(node_name):
@@ -525,22 +520,22 @@ async def send_and_wait_console_impl(
             error_code=ErrorCode.OPERATION_FAILED.value,
             details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending commands",
             suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
-            context={"node_name": node_name, "reason": "terminal_not_accessed"}
+            context={"node_name": node_name, "reason": "terminal_not_accessed"},
         )
 
     # Process escape sequences unless raw mode
     if not raw:
         # First handle escape sequences (backslash-escaped strings)
-        command = command.replace('\\r\\n', '\r\n')  # \r\n → CR+LF
-        command = command.replace('\\n', '\n')       # \n → LF
-        command = command.replace('\\r', '\r')       # \r → CR
-        command = command.replace('\\t', '\t')       # \t → tab
-        command = command.replace('\\x1b', '\x1b')   # \x1b → ESC
+        command = command.replace("\\r\\n", "\r\n")  # \r\n → CR+LF
+        command = command.replace("\\n", "\n")  # \n → LF
+        command = command.replace("\\r", "\r")  # \r → CR
+        command = command.replace("\\t", "\t")  # \t → tab
+        command = command.replace("\\x1b", "\x1b")  # \x1b → ESC
 
         # Then normalize all newlines to \r\n for console compatibility
-        command = command.replace('\r\n', '\n')      # Normalize CRLF to LF first
-        command = command.replace('\r', '\n')        # Normalize CR to LF
-        command = command.replace('\n', '\r\n')      # Convert all LF to CRLF
+        command = command.replace("\r\n", "\n")  # Normalize CRLF to LF first
+        command = command.replace("\r", "\n")  # Normalize CR to LF
+        command = command.replace("\n", "\r\n")  # Convert all LF to CRLF
 
     # Send command
     success = await app.console.send_by_node(node_name, command)
@@ -550,7 +545,7 @@ async def send_and_wait_console_impl(
             error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
             details="Console session may have been disconnected",
             suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
-            context={"node_name": node_name, "command": command[:100]}  # Truncate long commands
+            context={"node_name": node_name, "command": command[:100]},  # Truncate long commands
         )
 
     # Wait for pattern or timeout
@@ -568,7 +563,7 @@ async def send_and_wait_console_impl(
                 error_code=ErrorCode.INVALID_PARAMETER.value,
                 details=f"Pattern '{wait_pattern}' is not a valid regular expression",
                 suggested_action="Check regex syntax and escape special characters",
-                context={"wait_pattern": wait_pattern, "regex_error": str(e)}
+                context={"wait_pattern": wait_pattern, "regex_error": str(e)},
             )
 
         # Poll console every 0.5s
@@ -580,7 +575,7 @@ async def send_and_wait_console_impl(
                 accumulated_output.append(chunk)
 
             # Search the complete accumulated output so far
-            full_output_so_far = ''.join(accumulated_output)
+            full_output_so_far = "".join(accumulated_output)
             if pattern_re.search(full_output_so_far):
                 pattern_found = True
                 break
@@ -602,14 +597,17 @@ async def send_and_wait_console_impl(
     wait_time = time.time() - start_time
 
     # Return all accumulated output
-    final_output = ''.join(accumulated_output)
+    final_output = "".join(accumulated_output)
 
-    return json.dumps({
-        "output": final_output,
-        "pattern_found": pattern_found,
-        "timeout_occurred": timeout_occurred,
-        "wait_time": round(wait_time, 2)
-    }, indent=2)
+    return json.dumps(
+        {
+            "output": final_output,
+            "pattern_found": pattern_found,
+            "timeout_occurred": timeout_occurred,
+            "wait_time": round(wait_time, 2),
+        },
+        indent=2,
+    )
 
 
 async def send_keystroke_impl(app: "AppContext", node_name: str, key: str) -> str:
@@ -652,48 +650,45 @@ async def send_keystroke_impl(app: "AppContext", node_name: str, key: str) -> st
             error_code=ErrorCode.OPERATION_FAILED.value,
             details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending keystrokes",
             suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
-            context={"node_name": node_name, "reason": "terminal_not_accessed"}
+            context={"node_name": node_name, "reason": "terminal_not_accessed"},
         )
 
     # Map key names to escape sequences
     SPECIAL_KEYS = {
         # Navigation
-        'up': '\x1b[A',
-        'down': '\x1b[B',
-        'right': '\x1b[C',
-        'left': '\x1b[D',
-        'home': '\x1b[H',
-        'end': '\x1b[F',
-        'pageup': '\x1b[5~',
-        'pagedown': '\x1b[6~',
-
+        "up": "\x1b[A",
+        "down": "\x1b[B",
+        "right": "\x1b[C",
+        "left": "\x1b[D",
+        "home": "\x1b[H",
+        "end": "\x1b[F",
+        "pageup": "\x1b[5~",
+        "pagedown": "\x1b[6~",
         # Editing
-        'enter': '\r\n',
-        'backspace': '\x7f',
-        'delete': '\x1b[3~',
-        'tab': '\t',
-        'esc': '\x1b',
-
+        "enter": "\r\n",
+        "backspace": "\x7f",
+        "delete": "\x1b[3~",
+        "tab": "\t",
+        "esc": "\x1b",
         # Control sequences
-        'ctrl_c': '\x03',
-        'ctrl_d': '\x04',
-        'ctrl_z': '\x1a',
-        'ctrl_a': '\x01',
-        'ctrl_e': '\x05',
-
+        "ctrl_c": "\x03",
+        "ctrl_d": "\x04",
+        "ctrl_z": "\x1a",
+        "ctrl_a": "\x01",
+        "ctrl_e": "\x05",
         # Function keys
-        'f1': '\x1bOP',
-        'f2': '\x1bOQ',
-        'f3': '\x1bOR',
-        'f4': '\x1bOS',
-        'f5': '\x1b[15~',
-        'f6': '\x1b[17~',
-        'f7': '\x1b[18~',
-        'f8': '\x1b[19~',
-        'f9': '\x1b[20~',
-        'f10': '\x1b[21~',
-        'f11': '\x1b[23~',
-        'f12': '\x1b[24~',
+        "f1": "\x1bOP",
+        "f2": "\x1bOQ",
+        "f3": "\x1bOR",
+        "f4": "\x1bOS",
+        "f5": "\x1b[15~",
+        "f6": "\x1b[17~",
+        "f7": "\x1b[18~",
+        "f8": "\x1b[19~",
+        "f9": "\x1b[20~",
+        "f10": "\x1b[21~",
+        "f11": "\x1b[23~",
+        "f12": "\x1b[24~",
     }
 
     key_lower = key.lower()
@@ -702,7 +697,7 @@ async def send_keystroke_impl(app: "AppContext", node_name: str, key: str) -> st
             message=f"Unknown key '{key}'",
             parameter="key",
             value=key,
-            valid_values=sorted(SPECIAL_KEYS.keys())
+            valid_values=sorted(SPECIAL_KEYS.keys()),
         )
 
     keystroke = SPECIAL_KEYS[key_lower]
@@ -715,7 +710,7 @@ async def send_keystroke_impl(app: "AppContext", node_name: str, key: str) -> st
             error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
             details="Console session may have been disconnected",
             suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
-            context={"node_name": node_name, "key": key}
+            context={"node_name": node_name, "key": key},
         )
 
 
@@ -784,6 +779,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
         }
     """
     import time
+
     start_time = time.time()
 
     # Validation: Check all operations first
@@ -795,14 +791,14 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
             return validation_error(
                 parameter="operations",
                 details=f"Operation {idx} missing required field 'type'",
-                valid_values=list(VALID_TYPES)
+                valid_values=list(VALID_TYPES),
             )
 
         if op["type"] not in VALID_TYPES:
             return validation_error(
                 parameter=f"operations[{idx}].type",
                 details=f"Invalid operation type: {op['type']}",
-                valid_values=list(VALID_TYPES)
+                valid_values=list(VALID_TYPES),
             )
 
         if "node_name" not in op:
@@ -811,7 +807,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                 error_code=ErrorCode.INVALID_PARAMETER.value,
                 details="All operations must specify 'node_name'",
                 suggested_action="Add 'node_name' field to operation",
-                context={"operation_index": idx, "operation": op}
+                context={"operation_index": idx, "operation": op},
             )
 
         # Type-specific validation
@@ -825,7 +821,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     error_code=ErrorCode.INVALID_PARAMETER.value,
                     details="send operations require 'data' parameter",
                     suggested_action="Add 'data' field to operation",
-                    context={"operation_index": idx, "node_name": node_name}
+                    context={"operation_index": idx, "node_name": node_name},
                 )
 
         elif op_type == "send_and_wait":
@@ -835,7 +831,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     error_code=ErrorCode.INVALID_PARAMETER.value,
                     details="send_and_wait operations require 'command' parameter",
                     suggested_action="Add 'command' field to operation",
-                    context={"operation_index": idx, "node_name": node_name}
+                    context={"operation_index": idx, "node_name": node_name},
                 )
 
         elif op_type == "keystroke":
@@ -845,7 +841,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     error_code=ErrorCode.INVALID_PARAMETER.value,
                     details="keystroke operations require 'key' parameter",
                     suggested_action="Add 'key' field to operation",
-                    context={"operation_index": idx, "node_name": node_name}
+                    context={"operation_index": idx, "node_name": node_name},
                 )
 
     # Validation passed - execute all operations sequentially
@@ -860,12 +856,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
         try:
             # Execute operation based on type
             if op_type == "send":
-                result = await send_console_impl(
-                    app,
-                    node_name,
-                    op["data"],
-                    op.get("raw", False)
-                )
+                result = await send_console_impl(app, node_name, op["data"], op.get("raw", False))
 
             elif op_type == "send_and_wait":
                 result = await send_and_wait_console_impl(
@@ -874,7 +865,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     op["command"],
                     op.get("wait_pattern"),
                     op.get("timeout", 30),
-                    op.get("raw", False)
+                    op.get("raw", False),
                 )
 
             elif op_type == "read":
@@ -888,15 +879,11 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     op.get("invert", False),
                     op.get("before", 0),
                     op.get("after", 0),
-                    op.get("context", 0)
+                    op.get("context", 0),
                 )
 
             elif op_type == "keystroke":
-                result = await send_keystroke_impl(
-                    app,
-                    node_name,
-                    op["key"]
-                )
+                result = await send_keystroke_impl(app, node_name, op["key"])
 
             # Check if result is an error (error responses are JSON strings with "error" field)
             try:
@@ -904,56 +891,67 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                 if isinstance(result_dict, dict) and "error" in result_dict:
                     # Operation failed
                     failed_indices.append(idx)
-                    results.append({
-                        "operation_index": idx,
-                        "success": False,
-                        "operation_type": op_type,
-                        "node_name": node_name,
-                        "error": result_dict
-                    })
+                    results.append(
+                        {
+                            "operation_index": idx,
+                            "success": False,
+                            "operation_type": op_type,
+                            "node_name": node_name,
+                            "error": result_dict,
+                        }
+                    )
                 else:
                     # Operation succeeded
                     completed_indices.append(idx)
-                    results.append({
+                    results.append(
+                        {
+                            "operation_index": idx,
+                            "success": True,
+                            "operation_type": op_type,
+                            "node_name": node_name,
+                            "result": result_dict if isinstance(result_dict, dict) else result,
+                        }
+                    )
+            except (json.JSONDecodeError, TypeError):
+                # Non-JSON result (like "Sent successfully" string)
+                completed_indices.append(idx)
+                results.append(
+                    {
                         "operation_index": idx,
                         "success": True,
                         "operation_type": op_type,
                         "node_name": node_name,
-                        "result": result_dict if isinstance(result_dict, dict) else result
-                    })
-            except (json.JSONDecodeError, TypeError):
-                # Non-JSON result (like "Sent successfully" string)
-                completed_indices.append(idx)
-                results.append({
-                    "operation_index": idx,
-                    "success": True,
-                    "operation_type": op_type,
-                    "node_name": node_name,
-                    "result": result
-                })
+                        "result": result,
+                    }
+                )
 
         except Exception as e:
             # Unexpected error during execution
             failed_indices.append(idx)
-            results.append({
-                "operation_index": idx,
-                "success": False,
-                "operation_type": op_type,
-                "node_name": node_name,
-                "error": {
-                    "error": str(e),
-                    "error_code": ErrorCode.INTERNAL_ERROR.value,
-                    "details": f"Unexpected error executing {op_type} operation",
-                    "suggested_action": "Check operation parameters and node status"
+            results.append(
+                {
+                    "operation_index": idx,
+                    "success": False,
+                    "operation_type": op_type,
+                    "node_name": node_name,
+                    "error": {
+                        "error": str(e),
+                        "error_code": ErrorCode.INTERNAL_ERROR.value,
+                        "details": f"Unexpected error executing {op_type} operation",
+                        "suggested_action": "Check operation parameters and node status",
+                    },
                 }
-            })
+            )
 
     execution_time = time.time() - start_time
 
-    return json.dumps({
-        "completed": completed_indices,
-        "failed": failed_indices,
-        "results": results,
-        "total_operations": len(operations),
-        "execution_time": round(execution_time, 2)
-    }, indent=2)
+    return json.dumps(
+        {
+            "completed": completed_indices,
+            "failed": failed_indices,
+            "results": results,
+            "total_operations": len(operations),
+            "execution_time": round(execution_time, 2),
+        },
+        indent=2,
+    )

@@ -5,25 +5,24 @@ Tests console functionality through the MCP server's console_manager
 """
 
 import asyncio
-import sys
 import os
+import sys
 from pathlib import Path
 
 # Add server directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'mcp-server' / 'server'))
+sys.path.insert(0, str(Path(__file__).parent.parent / "mcp-server" / "server"))
+
+import logging
 
 from console_manager import ConsoleManager
-import logging
 from dotenv import load_dotenv
 
 # Load .env
-env_path = Path(__file__).parent.parent / '.env'
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] %(message)s',
-    datefmt='%H:%M:%S %d.%m.%Y'
+    level=logging.INFO, format="[%(asctime)s] %(message)s", datefmt="%H:%M:%S %d.%m.%Y"
 )
 logger = logging.getLogger(__name__)
 
@@ -128,6 +127,7 @@ async def test_console_manager(host: str, port: int, node_name: str):
     except Exception as e:
         logger.error(f"\n✗ TEST FAILED: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

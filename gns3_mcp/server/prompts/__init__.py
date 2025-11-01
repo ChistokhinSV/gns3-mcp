@@ -11,9 +11,9 @@ from .topology_discovery import render_topology_discovery_prompt
 from .troubleshooting import render_troubleshooting_prompt
 
 __all__ = [
-    'render_ssh_setup_prompt',
-    'render_topology_discovery_prompt',
-    'render_troubleshooting_prompt',
-    'render_lab_setup_prompt',
-    'render_node_setup_prompt'
+    "render_ssh_setup_prompt",
+    "render_topology_discovery_prompt",
+    "render_troubleshooting_prompt",
+    "render_lab_setup_prompt",
+    "render_node_setup_prompt",
 ]

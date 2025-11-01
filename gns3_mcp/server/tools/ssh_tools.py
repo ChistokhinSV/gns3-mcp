@@ -13,7 +13,7 @@ Workflow:
 
 import json
 import os
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List
 
 import httpx
 from error_utils import create_error_response, validation_error
@@ -32,6 +32,7 @@ SSH_PROXY_URL = os.getenv("SSH_PROXY_URL", f"http://{_gns3_host}:8022")
 # ============================================================================
 # Proxy URL Resolution
 # ============================================================================
+
 
 def _get_proxy_url_for_node(app: "AppContext", node_name: str) -> str:
     """
@@ -105,10 +106,9 @@ async def _resolve_proxy_url(proxy: str) -> str:
 # Local Execution (v0.28.0)
 # ============================================================================
 
+
 async def execute_local_command(
-    proxy_url: str,
-    command: str | List[str],
-    timeout: float = 30.0
+    proxy_url: str, command: str | List[str], timeout: float = 30.0
 ) -> str:
     """
     Execute command(s) locally on SSH proxy container
@@ -129,30 +129,37 @@ async def execute_local_command(
                     "command": command,
                     "timeout": int(timeout),
                     "working_dir": "/opt/gns3-ssh-proxy",
-                    "shell": True
-                }
+                    "shell": True,
+                },
             )
 
             if response.status_code == 200:
                 return json.dumps(response.json(), indent=2)
             else:
                 error_data = response.json()
-                return json.dumps({
-                    "error": "Local execution failed",
-                    "details": error_data.get("detail", str(error_data))
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": "Local execution failed",
+                        "details": error_data.get("detail", str(error_data)),
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "Local execution failed",
-                "details": str(e),
-                "suggestion": "Ensure SSH proxy service supports local execution (v0.2.2+)"
-            }, indent=2)
+            return json.dumps(
+                {
+                    "error": "Local execution failed",
+                    "details": str(e),
+                    "suggestion": "Ensure SSH proxy service supports local execution (v0.2.2+)",
+                },
+                indent=2,
+            )
 
 
 # ============================================================================
 # Session Management
 # ============================================================================
+
 
 async def configure_ssh_impl(
     app: "AppContext",
@@ -161,7 +168,7 @@ async def configure_ssh_impl(
     persist: bool = True,
     force: bool = False,
     proxy: str = "host",
-    session_timeout: int = 14400
+    session_timeout: int = 14400,
 ) -> str:
     """
     Configure SSH session for network device
@@ -224,11 +231,14 @@ async def configure_ssh_impl(
     try:
         proxy_url = await _resolve_proxy_url(proxy)
     except ValueError as e:
-        return json.dumps({
-            "error": "Proxy resolution failed",
-            "details": str(e),
-            "suggestion": "Check gns3://proxy/registry for available proxies"
-        }, indent=2)
+        return json.dumps(
+            {
+                "error": "Proxy resolution failed",
+                "details": str(e),
+                "suggestion": "Check gns3://proxy/registry for available proxies",
+            },
+            indent=2,
+        )
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -239,8 +249,8 @@ async def configure_ssh_impl(
                     "device": device_dict,
                     "persist": persist,
                     "force_recreate": force,  # v0.1.6: Allow forced recreation
-                    "session_timeout": session_timeout  # v0.27.0: Per-session timeout
-                }
+                    "session_timeout": session_timeout,  # v0.27.0: Per-session timeout
+                },
             )
 
             # Success - SSH connection established
@@ -260,58 +270,71 @@ async def configure_ssh_impl(
                 error_data = response.json()
             except Exception:
                 # JSON parsing failed - return raw response
-                return json.dumps({
-                    "error": f"HTTP {response.status_code}",
-                    "details": response.text,
-                    "suggestion": "Unexpected response format from SSH proxy"
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": f"HTTP {response.status_code}",
+                        "details": response.text,
+                        "suggestion": "Unexpected response format from SSH proxy",
+                    },
+                    indent=2,
+                )
 
             # Extract error details from FastAPI HTTPException response
             detail = error_data.get("detail", {})
 
             # Handle structured error response
             if isinstance(detail, dict):
-                return json.dumps({
-                    "error": detail.get("error", f"HTTP {response.status_code} error"),
-                    "details": detail.get("details"),
-                    "ssh_connection_error": detail.get("ssh_connection_error")
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": detail.get("error", f"HTTP {response.status_code} error"),
+                        "details": detail.get("details"),
+                        "ssh_connection_error": detail.get("ssh_connection_error"),
+                    },
+                    indent=2,
+                )
             else:
                 # detail is a string or other type
-                return json.dumps({
-                    "error": f"HTTP {response.status_code} error",
-                    "details": str(detail)
-                }, indent=2)
+                return json.dumps(
+                    {"error": f"HTTP {response.status_code} error", "details": str(detail)},
+                    indent=2,
+                )
 
         except httpx.RequestError as e:
             # Network/connection errors
-            return json.dumps({
-                "error": "Failed to connect to SSH proxy service",
-                "details": str(e),
-                "suggestion": "Ensure SSH proxy service is running: docker ps | grep gns3-ssh-proxy"
-            }, indent=2)
+            return json.dumps(
+                {
+                    "error": "Failed to connect to SSH proxy service",
+                    "details": str(e),
+                    "suggestion": "Ensure SSH proxy service is running: docker ps | grep gns3-ssh-proxy",
+                },
+                indent=2,
+            )
 
         except Exception as e:
             # Unexpected errors
-            return json.dumps({
-                "error": "Unexpected error",
-                "details": str(e),
-                "suggestion": "Check SSH proxy logs for details"
-            }, indent=2)
+            return json.dumps(
+                {
+                    "error": "Unexpected error",
+                    "details": str(e),
+                    "suggestion": "Check SSH proxy logs for details",
+                },
+                indent=2,
+            )
 
 
 # ============================================================================
 # Command Execution
 # ============================================================================
 
+
 async def ssh_send_command_impl(
     app: "AppContext",
     node_name: str,
     command: str,
-    expect_string: Optional[str] = None,
+    expect_string: str | None = None,
     read_timeout: float = 30.0,
     wait_timeout: int = 30,
-    ctx: Optional[Context] = None
+    ctx: Context | None = None,
 ) -> str:
     """
     Execute show command via SSH with adaptive async
@@ -360,7 +383,7 @@ async def ssh_send_command_impl(
         await ctx.report_progress(
             progress=0,
             total=wait_timeout,
-            message=f"Executing SSH command (timeout: {wait_timeout}s)..."
+            message=f"Executing SSH command (timeout: {wait_timeout}s)...",
         )
 
     async with httpx.AsyncClient(timeout=read_timeout + wait_timeout + 10) as client:
@@ -374,8 +397,8 @@ async def ssh_send_command_impl(
                     "read_timeout": read_timeout,
                     "wait_timeout": wait_timeout,
                     "strip_prompt": True,
-                    "strip_command": True
-                }
+                    "strip_command": True,
+                },
             )
 
             if response.status_code == 200:
@@ -383,9 +406,7 @@ async def ssh_send_command_impl(
                 # Progress notification for completion (v0.39.0)
                 if ctx and wait_timeout > 10:
                     await ctx.report_progress(
-                        progress=wait_timeout,
-                        total=wait_timeout,
-                        message="SSH command completed"
+                        progress=wait_timeout, total=wait_timeout, message="SSH command completed"
                     )
                 return json.dumps(result, indent=2)
             else:
@@ -393,14 +414,15 @@ async def ssh_send_command_impl(
                 # Progress notification for error (v0.39.0)
                 if ctx and wait_timeout > 10:
                     await ctx.report_progress(
-                        progress=wait_timeout,
-                        total=wait_timeout,
-                        message="SSH command failed"
+                        progress=wait_timeout, total=wait_timeout, message="SSH command failed"
                     )
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "Command failed"),
-                    "details": error_data.get("detail", {}).get("details")
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": error_data.get("detail", {}).get("error", "Command failed"),
+                        "details": error_data.get("detail", {}).get("details"),
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
             # Progress notification for exception (v0.39.0)
@@ -408,12 +430,9 @@ async def ssh_send_command_impl(
                 await ctx.report_progress(
                     progress=wait_timeout,
                     total=wait_timeout,
-                    message="SSH command failed (exception)"
+                    message="SSH command failed (exception)",
                 )
-            return json.dumps({
-                "error": "SSH command failed",
-                "details": str(e)
-            }, indent=2)
+            return json.dumps({"error": "SSH command failed", "details": str(e)}, indent=2)
 
 
 async def ssh_send_config_set_impl(
@@ -421,7 +440,7 @@ async def ssh_send_config_set_impl(
     node_name: str,
     config_commands: List[str],
     wait_timeout: int = 30,
-    ctx: Optional[Context] = None
+    ctx: Context | None = None,
 ) -> str:
     """
     Send configuration commands via SSH
@@ -471,7 +490,7 @@ async def ssh_send_config_set_impl(
         await ctx.report_progress(
             progress=0,
             total=wait_timeout,
-            message=f"Executing SSH config commands (timeout: {wait_timeout}s)..."
+            message=f"Executing SSH config commands (timeout: {wait_timeout}s)...",
         )
 
     async with httpx.AsyncClient(timeout=wait_timeout + 60) as client:
@@ -482,8 +501,8 @@ async def ssh_send_config_set_impl(
                     "node_name": node_name,
                     "config_commands": config_commands,
                     "wait_timeout": wait_timeout,
-                    "exit_config_mode": True
-                }
+                    "exit_config_mode": True,
+                },
             )
 
             if response.status_code == 200:
@@ -493,7 +512,7 @@ async def ssh_send_config_set_impl(
                     await ctx.report_progress(
                         progress=wait_timeout,
                         total=wait_timeout,
-                        message="SSH config commands completed"
+                        message="SSH config commands completed",
                     )
                 return json.dumps(result, indent=2)
             else:
@@ -503,12 +522,15 @@ async def ssh_send_config_set_impl(
                     await ctx.report_progress(
                         progress=wait_timeout,
                         total=wait_timeout,
-                        message="SSH config commands failed"
+                        message="SSH config commands failed",
                     )
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "Config failed"),
-                    "details": error_data.get("detail", {}).get("details")
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": error_data.get("detail", {}).get("error", "Config failed"),
+                        "details": error_data.get("detail", {}).get("details"),
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
             # Progress notification for exception (v0.39.0)
@@ -516,23 +538,18 @@ async def ssh_send_config_set_impl(
                 await ctx.report_progress(
                     progress=wait_timeout,
                     total=wait_timeout,
-                    message="SSH config commands failed (exception)"
+                    message="SSH config commands failed (exception)",
                 )
-            return json.dumps({
-                "error": "SSH config failed",
-                "details": str(e)
-            }, indent=2)
+            return json.dumps({"error": "SSH config failed", "details": str(e)}, indent=2)
 
 
 # ============================================================================
 # Buffer Reading (Storage System 1)
 # ============================================================================
 
+
 async def ssh_read_buffer_impl(
-    app: "AppContext",
-    node_name: str,
-    mode: str = "diff",
-    pages: int = 1
+    app: "AppContext", node_name: str, mode: str = "diff", pages: int = 1
 ) -> str:
     """
     Read continuous buffer (all commands combined)
@@ -557,35 +574,32 @@ async def ssh_read_buffer_impl(
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.get(
-                f"{proxy_url}/ssh/buffer/{node_name}",
-                params={"mode": mode, "pages": pages}
+                f"{proxy_url}/ssh/buffer/{node_name}", params={"mode": mode, "pages": pages}
             )
 
             if response.status_code == 200:
                 return json.dumps(response.json(), indent=2)
             else:
                 error_data = response.json()
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "Buffer read failed"),
-                    "details": error_data.get("detail", {}).get("details")
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": error_data.get("detail", {}).get("error", "Buffer read failed"),
+                        "details": error_data.get("detail", {}).get("details"),
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "Buffer read failed",
-                "details": str(e)
-            }, indent=2)
+            return json.dumps({"error": "Buffer read failed", "details": str(e)}, indent=2)
 
 
 # ============================================================================
 # Command History (Storage System 2)
 # ============================================================================
 
+
 async def ssh_get_history_impl(
-    app: "AppContext",
-    node_name: str,
-    limit: int = 50,
-    search: Optional[str] = None
+    app: "AppContext", node_name: str, limit: int = 50, search: str | None = None
 ) -> str:
     """
     List command history in execution order
@@ -616,32 +630,27 @@ async def ssh_get_history_impl(
             if search:
                 params["search"] = search
 
-            response = await client.get(
-                f"{proxy_url}/ssh/history/{node_name}",
-                params=params
-            )
+            response = await client.get(f"{proxy_url}/ssh/history/{node_name}", params=params)
 
             if response.status_code == 200:
                 return json.dumps(response.json(), indent=2)
             else:
                 error_data = response.json()
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "History retrieval failed"),
-                    "details": error_data.get("detail", {}).get("details")
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": error_data.get("detail", {}).get(
+                            "error", "History retrieval failed"
+                        ),
+                        "details": error_data.get("detail", {}).get("details"),
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "History retrieval failed",
-                "details": str(e)
-            }, indent=2)
+            return json.dumps({"error": "History retrieval failed", "details": str(e)}, indent=2)
 
 
-async def ssh_get_command_output_impl(
-    app: "AppContext",
-    node_name: str,
-    job_id: str
-) -> str:
+async def ssh_get_command_output_impl(app: "AppContext", node_name: str, job_id: str) -> str:
     """
     Get specific command's full output
 
@@ -668,34 +677,30 @@ async def ssh_get_command_output_impl(
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = await client.get(
-                f"{proxy_url}/ssh/history/{node_name}/{job_id}"
-            )
+            response = await client.get(f"{proxy_url}/ssh/history/{node_name}/{job_id}")
 
             if response.status_code == 200:
                 return json.dumps(response.json(), indent=2)
             else:
                 error_data = response.json()
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "Job not found"),
-                    "details": error_data.get("detail", {}).get("details")
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": error_data.get("detail", {}).get("error", "Job not found"),
+                        "details": error_data.get("detail", {}).get("details"),
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "Job retrieval failed",
-                "details": str(e)
-            }, indent=2)
+            return json.dumps({"error": "Job retrieval failed", "details": str(e)}, indent=2)
 
 
 # ============================================================================
 # Session Status
 # ============================================================================
 
-async def ssh_get_status_impl(
-    app: "AppContext",
-    node_name: str
-) -> str:
+
+async def ssh_get_status_impl(app: "AppContext", node_name: str) -> str:
     """
     Check SSH session status
 
@@ -707,35 +712,27 @@ async def ssh_get_status_impl(
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = await client.get(
-                f"{proxy_url}/ssh/status/{node_name}"
-            )
+            response = await client.get(f"{proxy_url}/ssh/status/{node_name}")
 
             if response.status_code == 200:
                 return json.dumps(response.json(), indent=2)
             else:
                 # Should not happen, but handle gracefully
-                return json.dumps({
-                    "connected": False,
-                    "node_name": node_name,
-                    "error": "Status check failed"
-                }, indent=2)
+                return json.dumps(
+                    {"connected": False, "node_name": node_name, "error": "Status check failed"},
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "Status check failed",
-                "details": str(e)
-            }, indent=2)
+            return json.dumps({"error": "Status check failed", "details": str(e)}, indent=2)
 
 
 # ============================================================================
 # Session Cleanup
 # ============================================================================
 
-async def ssh_disconnect_impl(
-    app: "AppContext",
-    node_name: str
-) -> str:
+
+async def ssh_disconnect_impl(app: "AppContext", node_name: str) -> str:
     """
     Disconnect SSH session for specific node
 
@@ -755,44 +752,40 @@ async def ssh_disconnect_impl(
         try:
             # Use cleanup endpoint to disconnect specific node
             # Keep all nodes EXCEPT the one we want to disconnect
-            response = await client.delete(
-                f"{proxy_url}/ssh/session/{node_name}"
-            )
+            response = await client.delete(f"{proxy_url}/ssh/session/{node_name}")
 
             if response.status_code == 200:
                 # Clean up proxy mapping (v0.26.0)
                 app.ssh_proxy_mapping.pop(node_name, None)
 
-                return json.dumps({
-                    "status": "success",
-                    "message": f"Disconnected SSH session for {node_name}"
-                }, indent=2)
+                return json.dumps(
+                    {"status": "success", "message": f"Disconnected SSH session for {node_name}"},
+                    indent=2,
+                )
             elif response.status_code == 404:
                 # Clean up proxy mapping even if session not found (v0.26.0)
                 app.ssh_proxy_mapping.pop(node_name, None)
 
-                return json.dumps({
-                    "status": "success",
-                    "message": f"No active SSH session for {node_name}"
-                }, indent=2)
+                return json.dumps(
+                    {"status": "success", "message": f"No active SSH session for {node_name}"},
+                    indent=2,
+                )
             else:
                 error_data = response.json()
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "Disconnect failed"),
-                    "details": error_data.get("detail", {}).get("details")
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": error_data.get("detail", {}).get("error", "Disconnect failed"),
+                        "details": error_data.get("detail", {}).get("details"),
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "Disconnect failed",
-                "details": str(e)
-            }, indent=2)
+            return json.dumps({"error": "Disconnect failed", "details": str(e)}, indent=2)
 
 
 async def ssh_cleanup_sessions_impl(
-    app: "AppContext",
-    keep_nodes: List[str] = None,
-    clean_all: bool = False
+    app: "AppContext", keep_nodes: List[str] = None, clean_all: bool = False
 ) -> str:
     """
     Clean orphaned/all SSH sessions
@@ -820,36 +813,31 @@ async def ssh_cleanup_sessions_impl(
         try:
             response = await client.post(
                 f"{SSH_PROXY_URL}/ssh/cleanup",
-                json={
-                    "keep_nodes": keep_nodes,
-                    "clean_all": clean_all
-                }
+                json={"keep_nodes": keep_nodes, "clean_all": clean_all},
             )
 
             if response.status_code == 200:
                 return json.dumps(response.json(), indent=2)
             else:
                 error_data = response.json()
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "Cleanup failed"),
-                    "details": error_data.get("detail", {}).get("details")
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": error_data.get("detail", {}).get("error", "Cleanup failed"),
+                        "details": error_data.get("detail", {}).get("details"),
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "Cleanup failed",
-                "details": str(e)
-            }, indent=2)
+            return json.dumps({"error": "Cleanup failed", "details": str(e)}, indent=2)
 
 
 # ============================================================================
 # Job Status (for async polling)
 # ============================================================================
 
-async def ssh_get_job_status_impl(
-    app: "AppContext",
-    job_id: str
-) -> str:
+
+async def ssh_get_job_status_impl(app: "AppContext", job_id: str) -> str:
     """
     Check job status by job_id (for async polling)
 
@@ -872,29 +860,28 @@ async def ssh_get_job_status_impl(
     """
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = await client.get(
-                f"{SSH_PROXY_URL}/ssh/job/{job_id}"
-            )
+            response = await client.get(f"{SSH_PROXY_URL}/ssh/job/{job_id}")
 
             if response.status_code == 200:
                 return json.dumps(response.json(), indent=2)
             else:
                 error_data = response.json()
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "Job not found"),
-                    "details": error_data.get("detail", {}).get("details")
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": error_data.get("detail", {}).get("error", "Job not found"),
+                        "details": error_data.get("detail", {}).get("details"),
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "Job status check failed",
-                "details": str(e)
-            }, indent=2)
+            return json.dumps({"error": "Job status check failed", "details": str(e)}, indent=2)
 
 
 # ============================================================================
 # Batch SSH Operations
 # ============================================================================
+
 
 async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
     """Execute multiple SSH operations in batch with validation
@@ -990,6 +977,7 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
         ])
     """
     import time
+
     start_time = time.time()
 
     # Validation: Check all operations first
@@ -1001,14 +989,14 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
             return validation_error(
                 parameter="operations",
                 details=f"Operation {idx} missing required field 'type'",
-                valid_values=list(VALID_TYPES)
+                valid_values=list(VALID_TYPES),
             )
 
         if op["type"] not in VALID_TYPES:
             return validation_error(
                 parameter=f"operations[{idx}].type",
                 details=f"Invalid operation type: {op['type']}",
-                valid_values=list(VALID_TYPES)
+                valid_values=list(VALID_TYPES),
             )
 
         if "node_name" not in op:
@@ -1017,7 +1005,7 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                 error_code=ErrorCode.INVALID_PARAMETER.value,
                 details="All operations must specify 'node_name'",
                 suggested_action="Add 'node_name' field to operation",
-                context={"operation_index": idx, "operation": op}
+                context={"operation_index": idx, "operation": op},
             )
 
         # Type-specific validation
@@ -1031,7 +1019,7 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     error_code=ErrorCode.INVALID_PARAMETER.value,
                     details="send_command operations require 'command' parameter",
                     suggested_action="Add 'command' field to operation",
-                    context={"operation_index": idx, "node_name": node_name}
+                    context={"operation_index": idx, "node_name": node_name},
                 )
 
         elif op_type == "send_config_set":
@@ -1041,7 +1029,7 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     error_code=ErrorCode.INVALID_PARAMETER.value,
                     details="send_config_set operations require 'config_commands' parameter (list of strings)",
                     suggested_action="Add 'config_commands' field to operation",
-                    context={"operation_index": idx, "node_name": node_name}
+                    context={"operation_index": idx, "node_name": node_name},
                 )
             if not isinstance(op["config_commands"], list):
                 return create_error_response(
@@ -1049,7 +1037,7 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     error_code=ErrorCode.INVALID_PARAMETER.value,
                     details=f"Expected list, got {type(op['config_commands']).__name__}",
                     suggested_action="Provide config_commands as a list of strings",
-                    context={"operation_index": idx, "node_name": node_name}
+                    context={"operation_index": idx, "node_name": node_name},
                 )
 
     # Validation passed - execute all operations sequentially
@@ -1073,7 +1061,7 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     op.get("wait_timeout", 30),
                     op.get("strip_prompt", True),
                     op.get("strip_command", True),
-                    op.get("proxy", "host")
+                    op.get("proxy", "host"),
                 )
 
             elif op_type == "send_config_set":
@@ -1083,7 +1071,7 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     op["config_commands"],
                     op.get("wait_timeout", 30),
                     op.get("exit_config_mode", True),
-                    op.get("proxy", "host")
+                    op.get("proxy", "host"),
                 )
 
             elif op_type == "read_buffer":
@@ -1098,36 +1086,43 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     op.get("before", 0),
                     op.get("after", 0),
                     op.get("context", 0),
-                    op.get("proxy", "host")
+                    op.get("proxy", "host"),
                 )
 
             # Operation succeeded
-            results.append({
-                "operation_index": idx,
-                "success": True,
-                "operation_type": op_type,
-                "node_name": node_name,
-                "result": json.loads(result) if isinstance(result, str) else result
-            })
+            results.append(
+                {
+                    "operation_index": idx,
+                    "success": True,
+                    "operation_type": op_type,
+                    "node_name": node_name,
+                    "result": json.loads(result) if isinstance(result, str) else result,
+                }
+            )
             completed_indices.append(idx)
 
         except Exception as e:
             # Operation failed
-            results.append({
-                "operation_index": idx,
-                "success": False,
-                "operation_type": op_type,
-                "node_name": node_name,
-                "error": str(e)
-            })
+            results.append(
+                {
+                    "operation_index": idx,
+                    "success": False,
+                    "operation_type": op_type,
+                    "node_name": node_name,
+                    "error": str(e),
+                }
+            )
             failed_indices.append(idx)
 
     execution_time = time.time() - start_time
 
-    return json.dumps({
-        "completed": completed_indices,
-        "failed": failed_indices,
-        "results": results,
-        "total_operations": len(operations),
-        "execution_time": round(execution_time, 2)
-    }, indent=2)
+    return json.dumps(
+        {
+            "completed": completed_indices,
+            "failed": failed_indices,
+            "results": results,
+            "total_operations": len(operations),
+            "execution_time": round(execution_time, 2),
+        },
+        indent=2,
+    )

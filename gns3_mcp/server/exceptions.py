@@ -17,7 +17,7 @@ Example Usage:
         return format_error(...)
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 class GNS3Error(Exception):
@@ -37,8 +37,8 @@ class GNS3Error(Exception):
         self,
         message: str,
         error_code: str,
-        details: Optional[Dict[str, Any]] = None,
-        suggestions: Optional[List[str]] = None,
+        details: Dict[str, Any] | None = None,
+        suggestions: List[str] | None = None,
     ):
         self.message = message
         self.error_code = error_code
@@ -84,8 +84,8 @@ class GNS3NetworkError(GNS3Error):
     def __init__(
         self,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
-        suggestions: Optional[List[str]] = None,
+        details: Dict[str, Any] | None = None,
+        suggestions: List[str] | None = None,
     ):
         default_suggestions = [
             "Verify GNS3 server is running",
@@ -124,7 +124,7 @@ class GNS3APIError(GNS3Error):
         status_code: int,
         message: str,
         response_text: str = "",
-        suggestions: Optional[List[str]] = None,
+        suggestions: List[str] | None = None,
     ):
         self.status_code = status_code
         self.response_text = response_text
@@ -157,7 +157,7 @@ class GNS3AuthError(GNS3Error):
         )
     """
 
-    def __init__(self, message: str, suggestions: Optional[List[str]] = None):
+    def __init__(self, message: str, suggestions: List[str] | None = None):
         default_suggestions = [
             "Check username and password configuration",
             "Verify GNS3 server authentication settings",
@@ -192,7 +192,7 @@ class NodeNotFoundError(GNS3Error):
         self,
         node_name: str,
         project_id: str,
-        available_nodes: Optional[List[str]] = None,
+        available_nodes: List[str] | None = None,
     ):
         self.node_name = node_name
         self.project_id = project_id
@@ -227,9 +227,7 @@ class ProjectNotFoundError(GNS3Error):
         )
     """
 
-    def __init__(
-        self, project_name: str, available_projects: Optional[List[str]] = None
-    ):
+    def __init__(self, project_name: str, available_projects: List[str] | None = None):
         self.project_name = project_name
 
         suggestions = [f"Check project name spelling: '{project_name}'"]
@@ -312,7 +310,7 @@ class ConsoleError(GNS3Error):
         )
     """
 
-    def __init__(self, node_name: str, message: str, suggestions: Optional[List[str]] = None):
+    def __init__(self, node_name: str, message: str, suggestions: List[str] | None = None):
         default_suggestions = [
             f"Verify node '{node_name}' is started",
             "Wait 30-60 seconds after starting node",
@@ -343,7 +341,7 @@ class SSHError(GNS3Error):
         )
     """
 
-    def __init__(self, node_name: str, message: str, suggestions: Optional[List[str]] = None):
+    def __init__(self, node_name: str, message: str, suggestions: List[str] | None = None):
         default_suggestions = [
             f"Verify SSH is configured on '{node_name}'",
             "Check credentials in device_dict parameter",
@@ -374,9 +372,9 @@ class ValidationError(GNS3Error):
     def __init__(
         self,
         message: str,
-        field: Optional[str] = None,
-        value: Optional[Any] = None,
-        valid_values: Optional[List[str]] = None,
+        field: str | None = None,
+        value: Any | None = None,
+        valid_values: List[str] | None = None,
     ):
         details = {}
         if field:

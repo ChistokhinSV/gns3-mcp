@@ -7,4 +7,4 @@ Resources replace query tools for better IDE integration and discoverability.
 
 from .resource_manager import ResourceManager
 
-__all__ = ['ResourceManager']
+__all__ = ["ResourceManager"]

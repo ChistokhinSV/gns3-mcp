@@ -2,11 +2,12 @@
 
 Tests two-phase validation logic for network topology changes.
 """
+
 import pytest
 from link_validator import LinkValidator
 
-
 # ===== Test Data Fixtures =====
+
 
 @pytest.fixture
 def sample_nodes():
@@ -20,7 +21,7 @@ def sample_nodes():
                 {"adapter_number": 0, "port_number": 0, "name": "eth0"},
                 {"adapter_number": 0, "port_number": 1, "name": "eth1"},
                 {"adapter_number": 1, "port_number": 0, "name": "GigabitEthernet0/0"},
-            ]
+            ],
         },
         {
             "node_id": "node-2",
@@ -29,14 +30,14 @@ def sample_nodes():
             "ports": [
                 {"adapter_number": 0, "port_number": 0, "name": "eth0"},
                 {"adapter_number": 0, "port_number": 1, "name": "eth1"},
-            ]
+            ],
         },
         {
             "node_id": "node-3",
             "name": "Switch1",
             "node_type": "ethernet_switch",
             # No ports info (some node types don't expose this)
-        }
+        },
     ]
 
 
@@ -48,8 +49,8 @@ def sample_links():
             "link_id": "link-1",
             "nodes": [
                 {"node_id": "node-1", "adapter_number": 0, "port_number": 0},
-                {"node_id": "node-2", "adapter_number": 0, "port_number": 0}
-            ]
+                {"node_id": "node-2", "adapter_number": 0, "port_number": 0},
+            ],
         }
     ]
 
@@ -61,6 +62,7 @@ def validator(sample_nodes, sample_links):
 
 
 # ===== Initialization Tests =====
+
 
 class TestLinkValidatorInit:
     """Tests for LinkValidator initialization"""
@@ -92,6 +94,7 @@ class TestLinkValidatorInit:
 
 # ===== Port Usage Map Tests =====
 
+
 class TestPortUsageMap:
     """Tests for _build_port_usage_map"""
 
@@ -116,6 +119,7 @@ class TestPortUsageMap:
 
 
 # ===== Adapter Name Resolution Tests =====
+
 
 class TestAdapterNameResolution:
     """Tests for adapter name mapping and resolution"""
@@ -172,24 +176,25 @@ class TestAdapterNameResolution:
 
 # ===== Connect Validation Tests =====
 
+
 class TestValidateConnect:
     """Tests for validate_connect"""
 
     def test_valid_connect(self, validator):
         """Test validating a valid connection"""
         error = validator.validate_connect(
-            "Router1", "Router2",
-            port_a=1, port_b=1,  # Both eth1, currently free
-            adapter_a=0, adapter_b=0
+            "Router1",
+            "Router2",
+            port_a=1,
+            port_b=1,  # Both eth1, currently free
+            adapter_a=0,
+            adapter_b=0,
         )
         assert error is None
 
     def test_connect_node_not_found(self, validator):
         """Test connecting non-existent node"""
-        error = validator.validate_connect(
-            "InvalidNode", "Router2",
-            port_a=0, port_b=1
-        )
+        error = validator.validate_connect("InvalidNode", "Router2", port_a=0, port_b=1)
         assert error is not None
         assert "InvalidNode" in error
         assert "not found" in error
@@ -197,9 +202,12 @@ class TestValidateConnect:
     def test_connect_port_in_use(self, validator):
         """Test connecting to already-used port"""
         error = validator.validate_connect(
-            "Router1", "Router2",
-            port_a=0, port_b=1,  # Router1 eth0 already connected
-            adapter_a=0, adapter_b=0
+            "Router1",
+            "Router2",
+            port_a=0,
+            port_b=1,  # Router1 eth0 already connected
+            adapter_a=0,
+            adapter_b=0,
         )
         assert error is not None
         assert "already connected" in error
@@ -208,9 +216,12 @@ class TestValidateConnect:
     def test_connect_port_doesnt_exist(self, validator):
         """Test connecting to non-existent port"""
         error = validator.validate_connect(
-            "Router1", "Router2",
-            port_a=99, port_b=1,  # Port 99 doesn't exist
-            adapter_a=0, adapter_b=0
+            "Router1",
+            "Router2",
+            port_a=99,
+            port_b=1,  # Port 99 doesn't exist
+            adapter_a=0,
+            adapter_b=0,
         )
         assert error is not None
         assert "no port" in error
@@ -220,14 +231,13 @@ class TestValidateConnect:
         """Test connecting node without port information (should succeed)"""
         # Switch1 has no port info, validation should skip
         error = validator.validate_connect(
-            "Switch1", "Router1",
-            port_a=0, port_b=1,
-            adapter_a=0, adapter_b=0
+            "Switch1", "Router1", port_a=0, port_b=1, adapter_a=0, adapter_b=0
         )
         assert error is None  # No error since Switch1 has no port validation
 
 
 # ===== Disconnect Validation Tests =====
+
 
 class TestValidateDisconnect:
     """Tests for validate_disconnect"""
@@ -246,6 +256,7 @@ class TestValidateDisconnect:
 
 
 # ===== Port Availability Tests =====
+
 
 class TestCheckPortAvailable:
     """Tests for _check_port_available"""
@@ -271,6 +282,7 @@ class TestCheckPortAvailable:
 
 # ===== Find Link Using Port Tests =====
 
+
 class TestFindLinkUsingPort:
     """Tests for _find_link_using_port"""
 
@@ -286,6 +298,7 @@ class TestFindLinkUsingPort:
 
 
 # ===== Port Exists Validation Tests =====
+
 
 class TestValidatePortExists:
     """Tests for _validate_port_exists"""
@@ -312,11 +325,7 @@ class TestValidatePortExists:
 
     def test_empty_ports_list(self, sample_nodes):
         """Test validating port when ports list is empty"""
-        nodes = [{
-            "node_id": "node-empty",
-            "name": "EmptyNode",
-            "ports": []
-        }]
+        nodes = [{"node_id": "node-empty", "name": "EmptyNode", "ports": []}]
         validator = LinkValidator(nodes, [])
         node = validator.nodes["EmptyNode"]
         error = validator._validate_port_exists(node, 0, 0, "EmptyNode")
@@ -324,6 +333,7 @@ class TestValidatePortExists:
 
 
 # ===== Get Port Info Tests =====
+
 
 class TestGetPortInfo:
     """Tests for get_port_info"""
@@ -352,6 +362,7 @@ class TestGetPortInfo:
 
 # ===== Edge Cases Tests =====
 
+
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions"""
 
@@ -365,26 +376,26 @@ class TestEdgeCases:
                     {"adapter_number": 0, "port_number": 0, "name": "eth0"},
                     {"adapter_number": 0, "port_number": 1, "name": "eth1"},
                     {"adapter_number": 0, "port_number": 2, "name": "eth2"},
-                ]
+                ],
             },
             {"node_id": "node-2", "name": "Router2", "ports": []},
-            {"node_id": "node-3", "name": "Router3", "ports": []}
+            {"node_id": "node-3", "name": "Router3", "ports": []},
         ]
         links = [
             {
                 "link_id": "link-1",
                 "nodes": [
                     {"node_id": "node-1", "adapter_number": 0, "port_number": 0},
-                    {"node_id": "node-2", "adapter_number": 0, "port_number": 0}
-                ]
+                    {"node_id": "node-2", "adapter_number": 0, "port_number": 0},
+                ],
             },
             {
                 "link_id": "link-2",
                 "nodes": [
                     {"node_id": "node-1", "adapter_number": 0, "port_number": 1},
-                    {"node_id": "node-3", "adapter_number": 0, "port_number": 0}
-                ]
-            }
+                    {"node_id": "node-3", "adapter_number": 0, "port_number": 0},
+                ],
+            },
         ]
         validator = LinkValidator(nodes, links)
 
@@ -395,12 +406,15 @@ class TestEdgeCases:
 
     def test_adapter_name_truncation_long_list(self):
         """Test adapter name error message truncates long port lists"""
-        nodes = [{
-            "node_id": "node-1",
-            "name": "BigSwitch",
-            "ports": [{"adapter_number": 0, "port_number": i, "name": f"port{i}"}
-                     for i in range(20)]
-        }]
+        nodes = [
+            {
+                "node_id": "node-1",
+                "name": "BigSwitch",
+                "ports": [
+                    {"adapter_number": 0, "port_number": i, "name": f"port{i}"} for i in range(20)
+                ],
+            }
+        ]
         validator = LinkValidator(nodes, [])
 
         # Try to resolve non-existent port - should show truncated list
@@ -413,15 +427,15 @@ class TestEdgeCases:
         """Test handling links with missing node fields"""
         nodes = [
             {"node_id": "node-1", "name": "Router1", "ports": []},
-            {"node_id": "node-2", "name": "Router2", "ports": []}
+            {"node_id": "node-2", "name": "Router2", "ports": []},
         ]
         links = [
             {
                 "link_id": "link-incomplete",
                 "nodes": [
                     {"node_id": "node-1"},  # Missing adapter_number, port_number
-                    {"node_id": "node-2", "adapter_number": 0}  # Missing port_number
-                ]
+                    {"node_id": "node-2", "adapter_number": 0},  # Missing port_number
+                ],
             }
         ]
         validator = LinkValidator(nodes, links)

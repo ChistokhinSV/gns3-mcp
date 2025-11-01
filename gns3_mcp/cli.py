@@ -44,37 +44,26 @@ Environment variables (.env file):
   GNS3_USER       GNS3 username (default: admin)
   GNS3_PASSWORD   GNS3 password (required)
   MCP_API_KEY     API key for HTTP mode authentication (auto-generated if missing)
-        """
+        """,
     )
 
     # GNS3 connection arguments
     parser.add_argument(
-        "--host",
-        help="GNS3 server hostname or IP address (default: from .env or 'localhost')"
+        "--host", help="GNS3 server hostname or IP address (default: from .env or 'localhost')"
     )
-    parser.add_argument(
-        "--port",
-        type=int,
-        help="GNS3 server API port (default: from .env or 80)"
-    )
-    parser.add_argument(
-        "--username",
-        help="GNS3 username (default: from .env or 'admin')"
-    )
-    parser.add_argument(
-        "--password",
-        help="GNS3 password (default: from .env)"
-    )
+    parser.add_argument("--port", type=int, help="GNS3 server API port (default: from .env or 80)")
+    parser.add_argument("--username", help="GNS3 username (default: from .env or 'admin')")
+    parser.add_argument("--password", help="GNS3 password (default: from .env)")
     parser.add_argument(
         "--use-https",
         action="store_true",
-        help="Use HTTPS for GNS3 connection (or set GNS3_USE_HTTPS=true in .env)"
+        help="Use HTTPS for GNS3 connection (or set GNS3_USE_HTTPS=true in .env)",
     )
     parser.add_argument(
         "--verify-ssl",
         default=True,
-        type=lambda x: str(x).lower() != 'false',
-        help="Verify GNS3 SSL certificate (default: true, set to 'false' for self-signed certs)"
+        type=lambda x: str(x).lower() != "false",
+        help="Verify GNS3 SSL certificate (default: true, set to 'false' for self-signed certs)",
     )
 
     # MCP transport mode arguments
@@ -82,33 +71,27 @@ Environment variables (.env file):
         "--transport",
         choices=["stdio", "http", "sse"],
         default="stdio",
-        help="MCP transport mode (default: stdio). stdio=process-based, http=Streamable HTTP, sse=legacy SSE"
+        help="MCP transport mode (default: stdio). stdio=process-based, http=Streamable HTTP, sse=legacy SSE",
     )
     parser.add_argument(
         "--http-host",
         default="127.0.0.1",
-        help="HTTP server host for http/sse transport (default: 127.0.0.1)"
+        help="HTTP server host for http/sse transport (default: 127.0.0.1)",
     )
     parser.add_argument(
         "--http-port",
         type=int,
         default=8000,
-        help="HTTP server port for http/sse transport (default: 8000)"
+        help="HTTP server port for http/sse transport (default: 8000)",
     )
 
     # Environment file argument
     parser.add_argument(
-        "--env-file",
-        type=Path,
-        help="Path to .env file (default: .env in current directory)"
+        "--env-file", type=Path, help="Path to .env file (default: .env in current directory)"
     )
 
     # Version argument
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {_get_version()}"
-    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {_get_version()}")
 
     args = parser.parse_args()
 
@@ -122,23 +105,26 @@ Environment variables (.env file):
             sys.exit(1)
     else:
         # Try current directory
-        env_file = Path.cwd() / '.env'
+        env_file = Path.cwd() / ".env"
         if env_file.exists():
             load_dotenv(env_file)
 
     # Apply defaults from environment with fallback values
     if args.host is None:
-        args.host = os.getenv('GNS3_HOST', 'localhost')
+        args.host = os.getenv("GNS3_HOST", "localhost")
     if args.port is None:
-        args.port = int(os.getenv('GNS3_PORT', '80'))
+        args.port = int(os.getenv("GNS3_PORT", "80"))
     if args.username is None:
-        args.username = os.getenv('GNS3_USER', 'admin')
+        args.username = os.getenv("GNS3_USER", "admin")
     if args.password is None:
-        args.password = os.getenv('GNS3_PASSWORD', '')
+        args.password = os.getenv("GNS3_PASSWORD", "")
 
     # Validate required parameters
     if not args.password:
-        print("Error: GNS3 password required (set GNS3_PASSWORD in .env or use --password)", file=sys.stderr)
+        print(
+            "Error: GNS3 password required (set GNS3_PASSWORD in .env or use --password)",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Import MCP server (after .env is loaded)
@@ -168,18 +154,15 @@ Environment variables (.env file):
             print("Try: pip install 'gns3-mcp[http]'", file=sys.stderr)
             sys.exit(1)
 
-        print(f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp/")
+        print(
+            f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp/"
+        )
 
         # Create ASGI app for HTTP transport
         app = mcp.http_app()
 
         # Run with uvicorn
-        uvicorn.run(
-            app,
-            host=args.http_host,
-            port=args.http_port,
-            log_level="info"
-        )
+        uvicorn.run(app, host=args.http_host, port=args.http_port, log_level="info")
 
     elif args.transport == "sse":
         # Legacy SSE transport (deprecated, use HTTP instead)
@@ -191,28 +174,26 @@ Environment variables (.env file):
             sys.exit(1)
 
         print("WARNING: SSE transport is deprecated. Consider using --transport http instead.")
-        print(f"Starting MCP server with SSE transport at http://{args.http_host}:{args.http_port}/sse")
+        print(
+            f"Starting MCP server with SSE transport at http://{args.http_host}:{args.http_port}/sse"
+        )
 
         # Create ASGI app for SSE transport
         app = mcp.sse_app()
 
         # Run with uvicorn
-        uvicorn.run(
-            app,
-            host=args.http_host,
-            port=args.http_port,
-            log_level="info"
-        )
+        uvicorn.run(app, host=args.http_host, port=args.http_port, log_level="info")
 
 
 def _get_version() -> str:
     """Get package version from __init__.py"""
     try:
         from gns3_mcp import __version__
+
         return __version__
     except ImportError:
         return "unknown"
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

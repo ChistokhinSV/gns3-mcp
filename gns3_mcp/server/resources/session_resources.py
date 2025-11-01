@@ -6,7 +6,7 @@ Handles resources for console and SSH sessions, including history and buffers.
 
 import json
 import os
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List
 
 import httpx
 from error_utils import create_error_response
@@ -40,7 +40,7 @@ def format_table(data: List[Dict[str, Any]], columns: List[str]) -> str:
     return tabulate(rows, headers=columns, tablefmt="simple")
 
 
-async def list_console_sessions_impl(app: "AppContext", project_id: Optional[str] = None) -> str:
+async def list_console_sessions_impl(app: "AppContext", project_id: str | None = None) -> str:
     """
     List all active console sessions (optionally filtered by project)
 
@@ -81,7 +81,10 @@ async def list_console_sessions_impl(app: "AppContext", project_id: Optional[str
                     }
                 )
 
-        return format_table(sessions, columns=["node_name", "connected", "host", "port", "buffer_size", "created_at"])
+        return format_table(
+            sessions,
+            columns=["node_name", "connected", "host", "port", "buffer_size", "created_at"],
+        )
     except Exception as e:
         return f"Error: Failed to list console sessions\nDetails: {str(e)}"
 
@@ -102,34 +105,41 @@ async def get_console_session_impl(app: "AppContext", node_name: str) -> str:
         session_info = app.console.sessions.get(node_name)
 
         if not session_info:
-            return json.dumps({
-                "connected": False,
+            return json.dumps(
+                {
+                    "connected": False,
+                    "node_name": node_name,
+                    "session_id": None,
+                    "host": None,
+                    "port": None,
+                    "buffer_size": 0,
+                    "created_at": None,
+                },
+                indent=2,
+            )
+
+        return json.dumps(
+            {
+                "connected": session_info.connected,
                 "node_name": node_name,
-                "session_id": None,
-                "host": None,
-                "port": None,
-                "buffer_size": 0,
-                "created_at": None
-            }, indent=2)
-
-        return json.dumps({
-            "connected": session_info.connected,
-            "node_name": node_name,
-            "session_id": session_info.session_id,
-            "host": session_info.host,
-            "port": session_info.port,
-            "buffer_size": len(session_info.buffer),
-            "created_at": session_info.created_at.isoformat() if session_info.created_at else None
-        }, indent=2)
+                "session_id": session_info.session_id,
+                "host": session_info.host,
+                "port": session_info.port,
+                "buffer_size": len(session_info.buffer),
+                "created_at": (
+                    session_info.created_at.isoformat() if session_info.created_at else None
+                ),
+            },
+            indent=2,
+        )
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to get console session",
-            "node_name": node_name,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {"error": "Failed to get console session", "node_name": node_name, "details": str(e)},
+            indent=2,
+        )
 
 
-async def list_ssh_sessions_impl(app: "AppContext", project_id: Optional[str] = None) -> str:
+async def list_ssh_sessions_impl(app: "AppContext", project_id: str | None = None) -> str:
     """
     List all active SSH sessions (optionally filtered by project) (Multi-Proxy Aggregation v0.26.0)
 
@@ -254,23 +264,31 @@ async def get_ssh_session_impl(app: "AppContext", node_name: str) -> str:
                 return json.dumps(result, indent=2)
             else:
                 # Should not happen, but handle gracefully
-                return json.dumps({
-                    "connected": False,
-                    "node_name": node_name,
-                    "proxy_url": proxy_url,
-                    "error": "Status check failed"
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "connected": False,
+                        "node_name": node_name,
+                        "proxy_url": proxy_url,
+                        "error": "Status check failed",
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "Failed to get SSH session status",
-                "node_name": node_name,
-                "proxy_url": proxy_url,
-                "details": str(e)
-            }, indent=2)
+            return json.dumps(
+                {
+                    "error": "Failed to get SSH session status",
+                    "node_name": node_name,
+                    "proxy_url": proxy_url,
+                    "details": str(e),
+                },
+                indent=2,
+            )
 
 
-async def get_ssh_history_impl(app: "AppContext", node_name: str, limit: int = 50, search: Optional[str] = None) -> str:
+async def get_ssh_history_impl(
+    app: "AppContext", node_name: str, limit: int = 50, search: str | None = None
+) -> str:
     """
     Get SSH command history for a specific node (Multi-Proxy Aware v0.26.0)
 
@@ -295,10 +313,7 @@ async def get_ssh_history_impl(app: "AppContext", node_name: str, limit: int = 5
             if search:
                 params["search"] = search
 
-            response = await client.get(
-                f"{proxy_url}/ssh/history/{node_name}",
-                params=params
-            )
+            response = await client.get(f"{proxy_url}/ssh/history/{node_name}", params=params)
 
             if response.status_code == 200:
                 result = response.json()
@@ -306,22 +321,32 @@ async def get_ssh_history_impl(app: "AppContext", node_name: str, limit: int = 5
                 return json.dumps(result, indent=2)
             else:
                 error_data = response.json()
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "History retrieval failed"),
-                    "details": error_data.get("detail", {}).get("details"),
-                    "proxy_url": proxy_url
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": error_data.get("detail", {}).get(
+                            "error", "History retrieval failed"
+                        ),
+                        "details": error_data.get("detail", {}).get("details"),
+                        "proxy_url": proxy_url,
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "Failed to get SSH command history",
-                "node_name": node_name,
-                "proxy_url": proxy_url,
-                "details": str(e)
-            }, indent=2)
+            return json.dumps(
+                {
+                    "error": "Failed to get SSH command history",
+                    "node_name": node_name,
+                    "proxy_url": proxy_url,
+                    "details": str(e),
+                },
+                indent=2,
+            )
 
 
-async def get_ssh_buffer_impl(app: "AppContext", node_name: str, mode: str = "diff", pages: int = 1) -> str:
+async def get_ssh_buffer_impl(
+    app: "AppContext", node_name: str, mode: str = "diff", pages: int = 1
+) -> str:
     """
     Get SSH continuous buffer for a specific node (Multi-Proxy Aware v0.26.0)
 
@@ -343,8 +368,7 @@ async def get_ssh_buffer_impl(app: "AppContext", node_name: str, mode: str = "di
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.get(
-                f"{proxy_url}/ssh/buffer/{node_name}",
-                params={"mode": mode, "pages": pages}
+                f"{proxy_url}/ssh/buffer/{node_name}", params={"mode": mode, "pages": pages}
             )
 
             if response.status_code == 200:
@@ -353,19 +377,25 @@ async def get_ssh_buffer_impl(app: "AppContext", node_name: str, mode: str = "di
                 return json.dumps(result, indent=2)
             else:
                 error_data = response.json()
-                return json.dumps({
-                    "error": error_data.get("detail", {}).get("error", "Buffer read failed"),
-                    "details": error_data.get("detail", {}).get("details"),
-                    "proxy_url": proxy_url
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": error_data.get("detail", {}).get("error", "Buffer read failed"),
+                        "details": error_data.get("detail", {}).get("details"),
+                        "proxy_url": proxy_url,
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "error": "Failed to read SSH buffer",
-                "node_name": node_name,
-                "proxy_url": proxy_url,
-                "details": str(e)
-            }, indent=2)
+            return json.dumps(
+                {
+                    "error": "Failed to read SSH buffer",
+                    "node_name": node_name,
+                    "proxy_url": proxy_url,
+                    "details": str(e),
+                },
+                indent=2,
+            )
 
 
 async def get_proxy_status_impl(app: "AppContext") -> str:
@@ -383,26 +413,35 @@ async def get_proxy_status_impl(app: "AppContext") -> str:
 
             if response.status_code == 200:
                 data = response.json()
-                return json.dumps({
-                    "status": "running",
-                    "url": SSH_PROXY_URL,
-                    "version": data.get("version", "unknown"),
-                    "health": "healthy"
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "running",
+                        "url": SSH_PROXY_URL,
+                        "version": data.get("version", "unknown"),
+                        "health": "healthy",
+                    },
+                    indent=2,
+                )
             else:
-                return json.dumps({
-                    "status": "unhealthy",
-                    "url": SSH_PROXY_URL,
-                    "error": "Non-200 response from health check"
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "unhealthy",
+                        "url": SSH_PROXY_URL,
+                        "error": "Non-200 response from health check",
+                    },
+                    indent=2,
+                )
 
         except Exception as e:
-            return json.dumps({
-                "status": "unreachable",
-                "url": SSH_PROXY_URL,
-                "error": str(e),
-                "suggestion": "Ensure SSH proxy service is running: docker ps | grep gns3-ssh-proxy"
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "unreachable",
+                    "url": SSH_PROXY_URL,
+                    "error": str(e),
+                    "suggestion": "Ensure SSH proxy service is running: docker ps | grep gns3-ssh-proxy",
+                },
+                indent=2,
+            )
 
 
 async def get_proxy_registry_impl(app: "AppContext") -> str:
@@ -444,9 +483,7 @@ async def get_proxy_registry_impl(app: "AppContext") -> str:
             # Combine host + lab proxies
             all_proxies = [host_proxy] + lab_proxies
 
-            return format_table(
-                all_proxies, columns=["proxy_id", "hostname", "type", "url"]
-            )
+            return format_table(all_proxies, columns=["proxy_id", "hostname", "type", "url"])
 
         except Exception as e:
             # Return just host proxy on error
@@ -598,14 +635,17 @@ async def get_proxy_impl(app: "AppContext", proxy_id: str) -> str:
                     error_code=ErrorCode.PROXY_NOT_FOUND,
                     details="The specified proxy_id does not exist in the registry",
                     suggested_action="Check available proxies with gns3://proxies resource",
-                    context={"proxy_id": proxy_id, "available_proxies": [p.get("proxy_id") for p in proxies]}
+                    context={
+                        "proxy_id": proxy_id,
+                        "available_proxies": [p.get("proxy_id") for p in proxies],
+                    },
                 )
             else:
                 return create_error_response(
                     error="Failed to fetch proxy registry",
                     error_code=ErrorCode.PROXY_SERVICE_UNREACHABLE,
                     details=f"HTTP {response.status_code} from proxy registry endpoint",
-                    suggested_action="Ensure SSH proxy service is running on port 8022"
+                    suggested_action="Ensure SSH proxy service is running on port 8022",
                 )
 
         except Exception as e:
@@ -613,5 +653,5 @@ async def get_proxy_impl(app: "AppContext", proxy_id: str) -> str:
                 error="Failed to communicate with proxy service",
                 error_code=ErrorCode.PROXY_SERVICE_UNREACHABLE,
                 details=str(e),
-                suggested_action="Ensure SSH proxy service is running with Docker socket mounted"
+                suggested_action="Ensure SSH proxy service is running with Docker socket mounted",
             )

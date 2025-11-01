@@ -2,19 +2,20 @@
 Quick helper to list GNS3 nodes and their console ports
 """
 
-import asyncio
-import httpx
 import argparse
+import asyncio
 import logging
 import os
 from pathlib import Path
+
+import httpx
 from dotenv import load_dotenv
 
 # Load .env from parent directory
-env_path = Path(__file__).parent.parent / '.env'
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +29,7 @@ async def list_nodes(host: str, port: int, username: str, password: str):
         logger.info(f"Connecting to GNS3 at {base_url}...")
         auth_response = await client.post(
             f"{base_url}/v3/access/users/authenticate",
-            json={"username": username, "password": password}
+            json={"username": username, "password": password},
         )
         token = auth_response.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
@@ -50,8 +51,7 @@ async def list_nodes(host: str, port: int, username: str, password: str):
 
         # Get nodes
         nodes_response = await client.get(
-            f"{base_url}/v3/projects/{project_id}/nodes",
-            headers=headers
+            f"{base_url}/v3/projects/{project_id}/nodes", headers=headers
         )
         nodes = nodes_response.json()
 
@@ -75,7 +75,9 @@ async def list_nodes(host: str, port: int, username: str, password: str):
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default=os.getenv("GNS3_HOST", "192.168.1.20"), help="GNS3 host")
-    parser.add_argument("--port", type=int, default=int(os.getenv("GNS3_PORT", "80")), help="GNS3 port")
+    parser.add_argument(
+        "--port", type=int, default=int(os.getenv("GNS3_PORT", "80")), help="GNS3 port"
+    )
     parser.add_argument("--username", default=os.getenv("USER", "admin"), help="Username")
     parser.add_argument("--password", default=os.getenv("PASSWORD"), help="Password")
 

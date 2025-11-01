@@ -79,21 +79,17 @@ async def get_project_impl(app: "AppContext", project_id: str) -> str:
     """
     try:
         projects = await app.gns3.get_projects()
-        project = next((p for p in projects if p['project_id'] == project_id), None)
+        project = next((p for p in projects if p["project_id"] == project_id), None)
 
         if not project:
-            return json.dumps({
-                "error": "Project not found",
-                "project_id": project_id
-            }, indent=2)
+            return json.dumps({"error": "Project not found", "project_id": project_id}, indent=2)
 
         return json.dumps(project, indent=2)
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to get project",
-            "project_id": project_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {"error": "Failed to get project", "project_id": project_id, "details": str(e)},
+            indent=2,
+        )
 
 
 async def list_nodes_impl(app: "AppContext", project_id: str) -> str:
@@ -111,13 +107,10 @@ async def list_nodes_impl(app: "AppContext", project_id: str) -> str:
     try:
         # Verify project exists
         projects = await app.gns3.get_projects()
-        project = next((p for p in projects if p['project_id'] == project_id), None)
+        project = next((p for p in projects if p["project_id"] == project_id), None)
 
         if not project:
-            return json.dumps({
-                "error": "Project not found",
-                "project_id": project_id
-            }, indent=2)
+            return json.dumps({"error": "Project not found", "project_id": project_id}, indent=2)
 
         # Get nodes
         nodes = await app.gns3.get_nodes(project_id)
@@ -161,49 +154,51 @@ async def get_node_impl(app: "AppContext", project_id: str, node_id: str) -> str
     try:
         # Get all nodes
         nodes = await app.gns3.get_nodes(project_id)
-        node = next((n for n in nodes if n['node_id'] == node_id), None)
+        node = next((n for n in nodes if n["node_id"] == node_id), None)
 
         if not node:
-            return json.dumps({
-                "error": "Node not found",
-                "project_id": project_id,
-                "node_id": node_id
-            }, indent=2)
+            return json.dumps(
+                {"error": "Node not found", "project_id": project_id, "node_id": node_id}, indent=2
+            )
 
         # Return full NodeInfo format
         from models import NodeInfo
-        props = node.get('properties', {})
+
+        props = node.get("properties", {})
         info = NodeInfo(
-            node_id=node['node_id'],
-            name=node['name'],
-            node_type=node['node_type'],
-            status=node['status'],
-            console_type=node['console_type'],
-            console=node.get('console'),
-            console_host=node.get('console_host'),
-            compute_id=node.get('compute_id', 'local'),
-            x=node.get('x', 0),
-            y=node.get('y', 0),
-            z=node.get('z', 0),
-            locked=node.get('locked', False),
-            ports=node.get('ports'),
-            label=node.get('label'),
-            symbol=node.get('symbol'),
-            ram=props.get('ram'),
-            cpus=props.get('cpus'),
-            adapters=props.get('adapters'),
-            hdd_disk_image=props.get('hdd_disk_image'),
-            hda_disk_image=props.get('hda_disk_image')
+            node_id=node["node_id"],
+            name=node["name"],
+            node_type=node["node_type"],
+            status=node["status"],
+            console_type=node["console_type"],
+            console=node.get("console"),
+            console_host=node.get("console_host"),
+            compute_id=node.get("compute_id", "local"),
+            x=node.get("x", 0),
+            y=node.get("y", 0),
+            z=node.get("z", 0),
+            locked=node.get("locked", False),
+            ports=node.get("ports"),
+            label=node.get("label"),
+            symbol=node.get("symbol"),
+            ram=props.get("ram"),
+            cpus=props.get("cpus"),
+            adapters=props.get("adapters"),
+            hdd_disk_image=props.get("hdd_disk_image"),
+            hda_disk_image=props.get("hda_disk_image"),
         ).model_dump()
 
         return json.dumps(info, indent=2)
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to get node",
-            "project_id": project_id,
-            "node_id": node_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {
+                "error": "Failed to get node",
+                "project_id": project_id,
+                "node_id": node_id,
+                "details": str(e),
+            },
+            indent=2,
+        )
 
 
 async def list_links_impl(app: "AppContext", project_id: str) -> str:
@@ -221,55 +216,57 @@ async def list_links_impl(app: "AppContext", project_id: str) -> str:
     try:
         # Verify project exists
         projects = await app.gns3.get_projects()
-        project = next((p for p in projects if p['project_id'] == project_id), None)
+        project = next((p for p in projects if p["project_id"] == project_id), None)
 
         if not project:
-            return json.dumps({
-                "error": "Project not found",
-                "project_id": project_id
-            }, indent=2)
+            return json.dumps({"error": "Project not found", "project_id": project_id}, indent=2)
 
         # Get links and nodes
         links = await app.gns3.get_links(project_id)
         nodes = await app.gns3.get_nodes(project_id)
 
         # Build node lookup
-        node_lookup = {n['node_id']: n for n in nodes}
+        node_lookup = {n["node_id"]: n for n in nodes}
 
         # Build link info with port names
         from models import LinkInfo
+
         link_infos = []
 
         for link in links:
-            nodes_data = link.get('nodes', [])
+            nodes_data = link.get("nodes", [])
             if len(nodes_data) >= 2:
-                node_a_id = nodes_data[0].get('node_id')
-                node_b_id = nodes_data[1].get('node_id')
+                node_a_id = nodes_data[0].get("node_id")
+                node_b_id = nodes_data[1].get("node_id")
                 node_a = node_lookup.get(node_a_id)
                 node_b = node_lookup.get(node_b_id)
 
                 if node_a and node_b:
                     # Get port names from node ports
-                    port_a_num = nodes_data[0].get('port_number', 0)
-                    port_b_num = nodes_data[1].get('port_number', 0)
-                    adapter_a_num = nodes_data[0].get('adapter_number', 0)
-                    adapter_b_num = nodes_data[1].get('adapter_number', 0)
+                    port_a_num = nodes_data[0].get("port_number", 0)
+                    port_b_num = nodes_data[1].get("port_number", 0)
+                    adapter_a_num = nodes_data[0].get("adapter_number", 0)
+                    adapter_b_num = nodes_data[1].get("adapter_number", 0)
 
                     port_a_name = None
                     port_b_name = None
 
-                    if node_a.get('ports'):
-                        for port in node_a['ports']:
-                            if (port.get('adapter_number') == adapter_a_num and
-                                port.get('port_number') == port_a_num):
-                                port_a_name = port.get('name')
+                    if node_a.get("ports"):
+                        for port in node_a["ports"]:
+                            if (
+                                port.get("adapter_number") == adapter_a_num
+                                and port.get("port_number") == port_a_num
+                            ):
+                                port_a_name = port.get("name")
                                 break
 
-                    if node_b.get('ports'):
-                        for port in node_b['ports']:
-                            if (port.get('adapter_number') == adapter_b_num and
-                                port.get('port_number') == port_b_num):
-                                port_b_name = port.get('name')
+                    if node_b.get("ports"):
+                        for port in node_b["ports"]:
+                            if (
+                                port.get("adapter_number") == adapter_b_num
+                                and port.get("port_number") == port_b_num
+                            ):
+                                port_b_name = port.get("name")
                                 break
 
                     # Build LinkEndpoint objects
@@ -277,41 +274,39 @@ async def list_links_impl(app: "AppContext", project_id: str) -> str:
 
                     endpoint_a = LinkEndpoint(
                         node_id=node_a_id,
-                        node_name=node_a['name'],
+                        node_name=node_a["name"],
                         adapter_number=adapter_a_num,
                         port_number=port_a_num,
-                        port_name=port_a_name
+                        port_name=port_a_name,
                     )
 
                     endpoint_b = LinkEndpoint(
                         node_id=node_b_id,
-                        node_name=node_b['name'],
+                        node_name=node_b["name"],
                         adapter_number=adapter_b_num,
                         port_number=port_b_num,
-                        port_name=port_b_name
+                        port_name=port_b_name,
                     )
 
                     link_info = LinkInfo(
-                        link_id=link['link_id'],
-                        link_type=link.get('link_type', 'ethernet'),
+                        link_id=link["link_id"],
+                        link_type=link.get("link_type", "ethernet"),
                         node_a=endpoint_a,
                         node_b=endpoint_b,
-                        capturing=link.get('capturing', False),
-                        capture_file_name=link.get('capture_file_name'),
-                        capture_file_path=link.get('capture_file_path'),
-                        capture_compute_id=link.get('capture_compute_id'),
-                        suspend=link.get('suspend', False)
+                        capturing=link.get("capturing", False),
+                        capture_file_name=link.get("capture_file_name"),
+                        capture_file_path=link.get("capture_file_path"),
+                        capture_compute_id=link.get("capture_compute_id"),
+                        suspend=link.get("suspend", False),
                     ).model_dump()
 
                     link_infos.append(link_info)
 
         return json.dumps(link_infos, indent=2)
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to list links",
-            "project_id": project_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {"error": "Failed to list links", "project_id": project_id, "details": str(e)}, indent=2
+        )
 
 
 async def list_templates_impl(app: "AppContext") -> str:
@@ -342,7 +337,9 @@ async def list_templates_impl(app: "AppContext") -> str:
             for t in templates
         ]
 
-        return format_table(template_infos, columns=["name", "category", "node_type", "builtin", "uri"])
+        return format_table(
+            template_infos, columns=["name", "category", "node_type", "builtin", "uri"]
+        )
     except Exception as e:
         return f"Error: Failed to list templates\nDetails: {str(e)}"
 
@@ -378,11 +375,10 @@ async def get_template_impl(app: "AppContext", template_id: str) -> str:
 
         return json.dumps(template_info.to_detail_view(), indent=2)
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to get template",
-            "template_id": template_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {"error": "Failed to get template", "template_id": template_id, "details": str(e)},
+            indent=2,
+        )
 
 
 async def get_node_template_usage_impl(app: "AppContext", project_id: str, node_id: str) -> str:
@@ -400,42 +396,49 @@ async def get_node_template_usage_impl(app: "AppContext", project_id: str, node_
     """
     try:
         nodes = await app.gns3.get_nodes(project_id)
-        node = next((n for n in nodes if n['node_id'] == node_id), None)
+        node = next((n for n in nodes if n["node_id"] == node_id), None)
 
         if not node:
-            return json.dumps({
-                "error": "Node not found",
-                "project_id": project_id,
-                "node_id": node_id
-            }, indent=2)
+            return json.dumps(
+                {"error": "Node not found", "project_id": project_id, "node_id": node_id}, indent=2
+            )
 
-        template_id = node.get('template_id')
+        template_id = node.get("template_id")
         if not template_id:
-            return json.dumps({
-                "error": "Node has no associated template",
-                "node_id": node_id,
-                "node_name": node.get('name')
-            }, indent=2)
+            return json.dumps(
+                {
+                    "error": "Node has no associated template",
+                    "node_id": node_id,
+                    "node_name": node.get("name"),
+                },
+                indent=2,
+            )
 
         # Get template with usage
         template = await app.gns3.get_template(template_id)
 
-        return json.dumps({
-            "node_id": node_id,
-            "node_name": node.get('name'),
-            "template_id": template_id,
-            "template_name": template['name'],
-            "usage": template.get('usage', ''),
-            "category": template.get('category'),
-            "node_type": template.get('template_type')
-        }, indent=2)
+        return json.dumps(
+            {
+                "node_id": node_id,
+                "node_name": node.get("name"),
+                "template_id": template_id,
+                "template_name": template["name"],
+                "usage": template.get("usage", ""),
+                "category": template.get("category"),
+                "node_type": template.get("template_type"),
+            },
+            indent=2,
+        )
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to get node template usage",
-            "project_id": project_id,
-            "node_id": node_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {
+                "error": "Failed to get node template usage",
+                "project_id": project_id,
+                "node_id": node_id,
+                "details": str(e),
+            },
+            indent=2,
+        )
 
 
 async def list_drawings_impl(app: "AppContext", project_id: str) -> str:
@@ -453,38 +456,35 @@ async def list_drawings_impl(app: "AppContext", project_id: str) -> str:
     try:
         # Verify project exists
         projects = await app.gns3.get_projects()
-        project = next((p for p in projects if p['project_id'] == project_id), None)
+        project = next((p for p in projects if p["project_id"] == project_id), None)
 
         if not project:
-            return json.dumps({
-                "error": "Project not found",
-                "project_id": project_id
-            }, indent=2)
+            return json.dumps({"error": "Project not found", "project_id": project_id}, indent=2)
 
         # Get drawings
         drawings = await app.gns3.get_drawings(project_id)
 
         # Build drawing info
         from models import DrawingInfo
+
         drawing_infos = [
             DrawingInfo(
-                drawing_id=d['drawing_id'],
-                x=d.get('x', 0),
-                y=d.get('y', 0),
-                z=d.get('z', 0),
-                rotation=d.get('rotation', 0),
-                svg=d.get('svg', '')
+                drawing_id=d["drawing_id"],
+                x=d.get("x", 0),
+                y=d.get("y", 0),
+                z=d.get("z", 0),
+                rotation=d.get("rotation", 0),
+                svg=d.get("svg", ""),
             ).model_dump()
             for d in drawings
         ]
 
         return json.dumps(drawing_infos, indent=2)
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to list drawings",
-            "project_id": project_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {"error": "Failed to list drawings", "project_id": project_id, "details": str(e)},
+            indent=2,
+        )
 
 
 async def list_snapshots_impl(app: "AppContext", project_id: str) -> str:
@@ -502,36 +502,33 @@ async def list_snapshots_impl(app: "AppContext", project_id: str) -> str:
     try:
         # Verify project exists
         projects = await app.gns3.get_projects()
-        project = next((p for p in projects if p['project_id'] == project_id), None)
+        project = next((p for p in projects if p["project_id"] == project_id), None)
 
         if not project:
-            return json.dumps({
-                "error": "Project not found",
-                "project_id": project_id
-            }, indent=2)
+            return json.dumps({"error": "Project not found", "project_id": project_id}, indent=2)
 
         # Get snapshots
         snapshots = await app.gns3.get_snapshots(project_id)
 
         # Build snapshot info
         from models import SnapshotInfo
+
         snapshot_infos = [
             SnapshotInfo(
-                snapshot_id=s['snapshot_id'],
-                name=s['name'],
-                created_at=s.get('created_at', ''),
-                project_id=project_id
+                snapshot_id=s["snapshot_id"],
+                name=s["name"],
+                created_at=s.get("created_at", ""),
+                project_id=project_id,
             ).model_dump()
             for s in snapshots
         ]
 
         return json.dumps(snapshot_infos, indent=2)
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to list snapshots",
-            "project_id": project_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {"error": "Failed to list snapshots", "project_id": project_id, "details": str(e)},
+            indent=2,
+        )
 
 
 async def get_snapshot_impl(app: "AppContext", project_id: str, snapshot_id: str) -> str:
@@ -550,42 +547,46 @@ async def get_snapshot_impl(app: "AppContext", project_id: str, snapshot_id: str
     try:
         # Verify project exists
         projects = await app.gns3.get_projects()
-        project = next((p for p in projects if p['project_id'] == project_id), None)
+        project = next((p for p in projects if p["project_id"] == project_id), None)
 
         if not project:
-            return json.dumps({
-                "error": "Project not found",
-                "project_id": project_id
-            }, indent=2)
+            return json.dumps({"error": "Project not found", "project_id": project_id}, indent=2)
 
         # Get snapshots
         snapshots = await app.gns3.get_snapshots(project_id)
-        snapshot = next((s for s in snapshots if s['snapshot_id'] == snapshot_id), None)
+        snapshot = next((s for s in snapshots if s["snapshot_id"] == snapshot_id), None)
 
         if not snapshot:
-            return json.dumps({
-                "error": "Snapshot not found",
-                "project_id": project_id,
-                "snapshot_id": snapshot_id
-            }, indent=2)
+            return json.dumps(
+                {
+                    "error": "Snapshot not found",
+                    "project_id": project_id,
+                    "snapshot_id": snapshot_id,
+                },
+                indent=2,
+            )
 
         # Build snapshot info
         from models import SnapshotInfo
+
         snapshot_info = SnapshotInfo(
-            snapshot_id=snapshot['snapshot_id'],
-            name=snapshot['name'],
-            created_at=snapshot.get('created_at', ''),
-            project_id=project_id
+            snapshot_id=snapshot["snapshot_id"],
+            name=snapshot["name"],
+            created_at=snapshot.get("created_at", ""),
+            project_id=project_id,
         )
 
         return json.dumps(snapshot_info.model_dump(), indent=2)
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to get snapshot",
-            "project_id": project_id,
-            "snapshot_id": snapshot_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {
+                "error": "Failed to get snapshot",
+                "project_id": project_id,
+                "snapshot_id": snapshot_id,
+                "details": str(e),
+            },
+            indent=2,
+        )
 
 
 async def get_project_readme_impl(app: "AppContext", project_id: str):
@@ -600,17 +601,14 @@ async def get_project_readme_impl(app: "AppContext", project_id: str):
         if not content:
             content = "# Project Notes\n\n(No notes yet - use update_project_readme tool to add documentation)"
 
-        return json.dumps({
-            "project_id": project_id,
-            "content": content,
-            "format": "markdown"
-        }, indent=2)
+        return json.dumps(
+            {"project_id": project_id, "content": content, "format": "markdown"}, indent=2
+        )
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to get project README",
-            "project_id": project_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {"error": "Failed to get project README", "project_id": project_id, "details": str(e)},
+            indent=2,
+        )
 
 
 async def get_topology_report_impl(app: "AppContext", project_id: str):
@@ -635,17 +633,12 @@ async def get_topology_report_impl(app: "AppContext", project_id: str):
         nodes_task = app.gns3.get_nodes(project_id)
         links_task = app.gns3.get_links(project_id)
 
-        projects, nodes, links = await asyncio.gather(
-            projects_task, nodes_task, links_task
-        )
+        projects, nodes, links = await asyncio.gather(projects_task, nodes_task, links_task)
 
-        project = next((p for p in projects if p['project_id'] == project_id), None)
+        project = next((p for p in projects if p["project_id"] == project_id), None)
 
         if not project:
-            return json.dumps({
-                "error": "Project not found",
-                "project_id": project_id
-            }, indent=2)
+            return json.dumps({"error": "Project not found", "project_id": project_id}, indent=2)
 
         # Calculate statistics
         total_nodes = len(nodes)
@@ -654,64 +647,64 @@ async def get_topology_report_impl(app: "AppContext", project_id: str):
         # Count nodes by status
         status_counts = {}
         for node in nodes:
-            status = node.get('status', 'unknown')
+            status = node.get("status", "unknown")
             status_counts[status] = status_counts.get(status, 0) + 1
 
         # Count nodes by type
         type_counts = {}
         for node in nodes:
-            node_type = node.get('node_type', 'unknown')
+            node_type = node.get("node_type", "unknown")
             type_counts[node_type] = type_counts.get(node_type, 0) + 1
 
         # Build node connection map
-        node_connections = {node['name']: [] for node in nodes}
-        node_lookup = {n['node_id']: n for n in nodes}
+        node_connections = {node["name"]: [] for node in nodes}
+        node_lookup = {n["node_id"]: n for n in nodes}
 
         for link in links:
-            nodes_data = link.get('nodes', [])
+            nodes_data = link.get("nodes", [])
             if len(nodes_data) >= 2:
-                node_a_id = nodes_data[0].get('node_id')
-                node_b_id = nodes_data[1].get('node_id')
+                node_a_id = nodes_data[0].get("node_id")
+                node_b_id = nodes_data[1].get("node_id")
 
                 node_a = node_lookup.get(node_a_id)
                 node_b = node_lookup.get(node_b_id)
 
                 if node_a and node_b:
                     # Get port info
-                    port_a_num = nodes_data[0].get('port_number', 0)
-                    port_b_num = nodes_data[1].get('port_number', 0)
-                    adapter_a_num = nodes_data[0].get('adapter_number', 0)
-                    adapter_b_num = nodes_data[1].get('adapter_number', 0)
+                    port_a_num = nodes_data[0].get("port_number", 0)
+                    port_b_num = nodes_data[1].get("port_number", 0)
+                    adapter_a_num = nodes_data[0].get("adapter_number", 0)
+                    adapter_b_num = nodes_data[1].get("adapter_number", 0)
 
                     # Find port names
                     port_a_name = f"eth{adapter_a_num}/{port_a_num}"
                     port_b_name = f"eth{adapter_b_num}/{port_b_num}"
 
-                    if node_a.get('ports'):
-                        for port in node_a['ports']:
-                            if (port.get('adapter_number') == adapter_a_num and
-                                port.get('port_number') == port_a_num):
-                                port_a_name = port.get('name', port_a_name)
+                    if node_a.get("ports"):
+                        for port in node_a["ports"]:
+                            if (
+                                port.get("adapter_number") == adapter_a_num
+                                and port.get("port_number") == port_a_num
+                            ):
+                                port_a_name = port.get("name", port_a_name)
                                 break
 
-                    if node_b.get('ports'):
-                        for port in node_b['ports']:
-                            if (port.get('adapter_number') == adapter_b_num and
-                                port.get('port_number') == port_b_num):
-                                port_b_name = port.get('name', port_b_name)
+                    if node_b.get("ports"):
+                        for port in node_b["ports"]:
+                            if (
+                                port.get("adapter_number") == adapter_b_num
+                                and port.get("port_number") == port_b_num
+                            ):
+                                port_b_name = port.get("name", port_b_name)
                                 break
 
                     # Add connection records
-                    node_connections[node_a['name']].append({
-                        "port": port_a_name,
-                        "dest_node": node_b['name'],
-                        "dest_port": port_b_name
-                    })
-                    node_connections[node_b['name']].append({
-                        "port": port_b_name,
-                        "dest_node": node_a['name'],
-                        "dest_port": port_a_name
-                    })
+                    node_connections[node_a["name"]].append(
+                        {"port": port_a_name, "dest_node": node_b["name"], "dest_port": port_b_name}
+                    )
+                    node_connections[node_b["name"]].append(
+                        {"port": port_b_name, "dest_node": node_a["name"], "dest_port": port_a_name}
+                    )
 
         # Build table output
         report_lines = []
@@ -744,21 +737,25 @@ async def get_topology_report_impl(app: "AppContext", project_id: str):
         report_lines.append("NODES")
         report_lines.append("-" * 80)
         node_table_data = []
-        for node in sorted(nodes, key=lambda n: n['name']):
-            conn_count = len(node_connections[node['name']])
-            node_table_data.append([
-                node['name'],
-                node.get('node_type', 'unknown'),
-                node.get('status', 'unknown'),
-                f"{conn_count} links"
-            ])
+        for node in sorted(nodes, key=lambda n: n["name"]):
+            conn_count = len(node_connections[node["name"]])
+            node_table_data.append(
+                [
+                    node["name"],
+                    node.get("node_type", "unknown"),
+                    node.get("status", "unknown"),
+                    f"{conn_count} links",
+                ]
+            )
 
         if node_table_data:
-            report_lines.append(tabulate(
-                node_table_data,
-                headers=["Node Name", "Type", "Status", "Connections"],
-                tablefmt="simple"
-            ))
+            report_lines.append(
+                tabulate(
+                    node_table_data,
+                    headers=["Node Name", "Type", "Status", "Connections"],
+                    tablefmt="simple",
+                )
+            )
         else:
             report_lines.append("No nodes in project")
         report_lines.append("")
@@ -768,36 +765,34 @@ async def get_topology_report_impl(app: "AppContext", project_id: str):
         report_lines.append("-" * 80)
         link_table_data = []
         for link in links:
-            nodes_data = link.get('nodes', [])
+            nodes_data = link.get("nodes", [])
             if len(nodes_data) >= 2:
-                node_a_id = nodes_data[0].get('node_id')
-                node_b_id = nodes_data[1].get('node_id')
+                node_a_id = nodes_data[0].get("node_id")
+                node_b_id = nodes_data[1].get("node_id")
                 node_a = node_lookup.get(node_a_id)
                 node_b = node_lookup.get(node_b_id)
 
                 if node_a and node_b:
-                    port_a_num = nodes_data[0].get('port_number', 0)
-                    port_b_num = nodes_data[1].get('port_number', 0)
-                    adapter_a_num = nodes_data[0].get('adapter_number', 0)
-                    adapter_b_num = nodes_data[1].get('adapter_number', 0)
+                    port_a_num = nodes_data[0].get("port_number", 0)
+                    port_b_num = nodes_data[1].get("port_number", 0)
+                    adapter_a_num = nodes_data[0].get("adapter_number", 0)
+                    adapter_b_num = nodes_data[1].get("adapter_number", 0)
 
                     port_a_name = f"eth{adapter_a_num}/{port_a_num}"
                     port_b_name = f"eth{adapter_b_num}/{port_b_num}"
 
-                    link_table_data.append([
-                        node_a['name'],
-                        port_a_name,
-                        "→",
-                        node_b['name'],
-                        port_b_name
-                    ])
+                    link_table_data.append(
+                        [node_a["name"], port_a_name, "→", node_b["name"], port_b_name]
+                    )
 
         if link_table_data:
-            report_lines.append(tabulate(
-                link_table_data,
-                headers=["Source", "Port", "", "Destination", "Port"],
-                tablefmt="simple"
-            ))
+            report_lines.append(
+                tabulate(
+                    link_table_data,
+                    headers=["Source", "Port", "", "Destination", "Port"],
+                    tablefmt="simple",
+                )
+            )
         else:
             report_lines.append("No links in project")
         report_lines.append("")
@@ -805,37 +800,47 @@ async def get_topology_report_impl(app: "AppContext", project_id: str):
         # Build JSON output
         json_data = {
             "project": {
-                "name": project.get('name'),
+                "name": project.get("name"),
                 "project_id": project_id,
-                "status": project.get('status'),
-                "path": project.get('path')
+                "status": project.get("status"),
+                "path": project.get("path"),
             },
             "statistics": {
                 "total_nodes": total_nodes,
                 "total_links": total_links,
                 "status_breakdown": status_counts,
-                "type_breakdown": type_counts
+                "type_breakdown": type_counts,
             },
             "nodes": [
                 {
-                    "name": node['name'],
-                    "node_id": node['node_id'],
-                    "type": node.get('node_type'),
-                    "status": node.get('status'),
-                    "connections": node_connections[node['name']]
+                    "name": node["name"],
+                    "node_id": node["node_id"],
+                    "type": node.get("node_type"),
+                    "status": node.get("status"),
+                    "connections": node_connections[node["name"]],
                 }
-                for node in sorted(nodes, key=lambda n: n['name'])
+                for node in sorted(nodes, key=lambda n: n["name"])
             ],
             "links": [
                 {
-                    "link_id": link['link_id'],
-                    "link_type": link.get('link_type', 'ethernet'),
-                    "source_node": node_lookup[link['nodes'][0]['node_id']]['name'] if len(link.get('nodes', [])) >= 1 and link['nodes'][0]['node_id'] in node_lookup else 'unknown',
-                    "dest_node": node_lookup[link['nodes'][1]['node_id']]['name'] if len(link.get('nodes', [])) >= 2 and link['nodes'][1]['node_id'] in node_lookup else 'unknown'
+                    "link_id": link["link_id"],
+                    "link_type": link.get("link_type", "ethernet"),
+                    "source_node": (
+                        node_lookup[link["nodes"][0]["node_id"]]["name"]
+                        if len(link.get("nodes", [])) >= 1
+                        and link["nodes"][0]["node_id"] in node_lookup
+                        else "unknown"
+                    ),
+                    "dest_node": (
+                        node_lookup[link["nodes"][1]["node_id"]]["name"]
+                        if len(link.get("nodes", [])) >= 2
+                        and link["nodes"][1]["node_id"] in node_lookup
+                        else "unknown"
+                    ),
                 }
                 for link in links
-                if len(link.get('nodes', [])) >= 2
-            ]
+                if len(link.get("nodes", [])) >= 2
+            ],
         }
 
         # Combine table and JSON
@@ -847,8 +852,11 @@ async def get_topology_report_impl(app: "AppContext", project_id: str):
         return "\n".join(report_lines)
 
     except Exception as e:
-        return json.dumps({
-            "error": "Failed to generate topology report",
-            "project_id": project_id,
-            "details": str(e)
-        }, indent=2)
+        return json.dumps(
+            {
+                "error": "Failed to generate topology report",
+                "project_id": project_id,
+                "details": str(e),
+            },
+            indent=2,
+        )

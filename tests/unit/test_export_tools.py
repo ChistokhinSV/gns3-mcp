@@ -2,23 +2,18 @@
 
 Tests SVG generation and topology export functionality.
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from pathlib import Path
-import tempfile
-import os
 
+import pytest
 from export_tools import (
     add_font_fallbacks,
-    create_rectangle_svg,
-    create_text_svg,
     create_ellipse_svg,
     create_line_svg,
-    export_topology_diagram
+    create_rectangle_svg,
+    create_text_svg,
 )
 
-
 # ===== Font Fallbacks Tests =====
+
 
 class TestAddFontFallbacks:
     """Tests for add_font_fallbacks()"""
@@ -74,6 +69,7 @@ class TestAddFontFallbacks:
 
 # ===== Rectangle SVG Tests =====
 
+
 class TestCreateRectangleSvg:
     """Tests for create_rectangle_svg()"""
 
@@ -83,8 +79,8 @@ class TestCreateRectangleSvg:
 
         assert 'width="100"' in svg
         assert 'height="50"' in svg
-        assert '<svg' in svg
-        assert '</svg>' in svg
+        assert "<svg" in svg
+        assert "</svg>" in svg
 
     def test_rectangle_with_colors(self):
         """Test rectangle with custom colors"""
@@ -110,6 +106,7 @@ class TestCreateRectangleSvg:
 
 # ===== Text SVG Tests =====
 
+
 class TestCreateTextSvg:
     """Tests for create_text_svg()"""
 
@@ -118,32 +115,32 @@ class TestCreateTextSvg:
         svg = create_text_svg("Hello World")
 
         assert "Hello World" in svg
-        assert '<text' in svg
-        assert '</text>' in svg
+        assert "<text" in svg
+        assert "</text>" in svg
 
     def test_text_with_font_size(self):
         """Test text with custom font size"""
         svg = create_text_svg("Test", font_size=20)
 
-        assert 'font-size="20"' in svg or 'font-size:20' in svg
+        assert 'font-size="20"' in svg or "font-size:20" in svg
 
     def test_text_with_bold_weight(self):
         """Test text with bold weight"""
         svg = create_text_svg("Test", font_weight="bold")
 
-        assert 'font-weight="bold"' in svg or 'bold' in svg
+        assert 'font-weight="bold"' in svg or "bold" in svg
 
     def test_text_with_color(self):
         """Test text with custom color"""
         svg = create_text_svg("Test", color="#ff0000")
 
-        assert '#ff0000' in svg
+        assert "#ff0000" in svg
 
     def test_text_with_font_family(self):
         """Test text with custom font family"""
         svg = create_text_svg("Test", font_family="Arial")
 
-        assert 'Arial' in svg
+        assert "Arial" in svg
 
     def test_text_escaping(self):
         """Test text with special characters"""
@@ -155,6 +152,7 @@ class TestCreateTextSvg:
 
 # ===== Ellipse SVG Tests =====
 
+
 class TestCreateEllipseSvg:
     """Tests for create_ellipse_svg()"""
 
@@ -164,7 +162,7 @@ class TestCreateEllipseSvg:
 
         assert 'rx="50"' in svg
         assert 'ry="30"' in svg
-        assert '<ellipse' in svg
+        assert "<ellipse" in svg
 
     def test_circle(self):
         """Test creating circle (equal radii)"""
@@ -177,8 +175,8 @@ class TestCreateEllipseSvg:
         """Test ellipse with custom colors"""
         svg = create_ellipse_svg(50, 30, fill="#00ff00", border="#ff00ff")
 
-        assert '#00ff00' in svg
-        assert '#ff00ff' in svg
+        assert "#00ff00" in svg
+        assert "#ff00ff" in svg
 
     def test_ellipse_center(self):
         """Test ellipse is centered in viewBox"""
@@ -191,6 +189,7 @@ class TestCreateEllipseSvg:
 
 # ===== Line SVG Tests =====
 
+
 class TestCreateLineSvg:
     """Tests for create_line_svg()"""
 
@@ -198,24 +197,24 @@ class TestCreateLineSvg:
         """Test creating basic line"""
         svg = create_line_svg(100, 50)
 
-        assert '<line' in svg
+        assert "<line" in svg
         # Line has padding of 1 added
-        assert 'x2=' in svg
-        assert 'y2=' in svg
+        assert "x2=" in svg
+        assert "y2=" in svg
 
     def test_line_has_padding(self):
         """Test line includes padding for stroke"""
         svg = create_line_svg(100, 50)
 
         # Should have padding (coordinates adjusted)
-        assert 'x1=' in svg
-        assert 'y1=' in svg
+        assert "x1=" in svg
+        assert "y1=" in svg
 
     def test_line_with_color(self):
         """Test line with custom color"""
         svg = create_line_svg(100, 50, stroke="#0000ff")
 
-        assert '#0000ff' in svg
+        assert "#0000ff" in svg
 
     def test_line_with_stroke_width(self):
         """Test line with custom stroke width"""
@@ -235,6 +234,7 @@ class TestCreateLineSvg:
 
 # ===== Integration Tests =====
 
+
 class TestSVGGeneration:
     """Integration tests for SVG generation"""
 
@@ -247,7 +247,7 @@ class TestSVGGeneration:
             create_rectangle_svg(100, 50),
             create_text_svg("Test"),
             create_ellipse_svg(50, 30),
-            create_line_svg(100, 50)
+            create_line_svg(100, 50),
         ]
 
         for svg in svgs:
