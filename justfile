@@ -66,12 +66,12 @@ clean:
 
 # Build desktop extension (.mcpb)
 build: install-lib
-    cd mcp-server && npx @anthropic-ai/mcpb pack
+    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb pack"
     @echo "Built: mcp-server/mcp-server.mcpb"
 
 # Validate manifest.json
 validate-manifest:
-    cd mcp-server && npx @anthropic-ai/mcpb validate manifest.json
+    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb validate manifest.json"
 
 # Check version consistency across files
 version-check:
