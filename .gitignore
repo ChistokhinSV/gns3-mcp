@@ -47,6 +47,10 @@ env/
 Thumbs.db
 
 # MCP specific
+# Bundled dependencies (built by Just)
+mcp-server/lib/
+# Copied source code (built by Just)
+mcp-server/gns3_mcp/
 # Note: mcp-server/mcp-server.mcpb is committed (built by pre-commit hook)
 # But ignore any other .mcpb files
 !mcp-server/mcp-server.mcpb

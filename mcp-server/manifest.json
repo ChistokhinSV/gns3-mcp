@@ -2,27 +2,27 @@
   "manifest_version": "0.3",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.43.0",
+  "version": "0.43.1",
   "description": "GNS3 lab automation with AI agent",
-  "long_description": "GNS3 v3 lab automation MCP server. Create/modify nodes, configure via console/SSH, topology management. v0.43.0: Just-based local CI/CD with unified commands (just check, just build, just release), 10x faster commits (3-5s vs 30-60s).",
+  "long_description": "GNS3 v3 lab automation MCP server. Create/modify nodes, configure via console/SSH, topology management. v0.43.1: Just-based local CI/CD with unified commands (just check, just build, just release), 10x faster commits (3-5s vs 30-60s).",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
   },
   "server": {
     "type": "python",
-    "entry_point": "../gns3_mcp/server/main.py",
+    "entry_point": "gns3_mcp/server/main.py",
     "mcp_config": {
       "command": "python",
       "args": [
-        "${__dirname}/../gns3_mcp/server/main.py",
+        "${__dirname}/gns3_mcp/server/main.py",
         "--host=${user_config.gns3_host}",
         "--port=${user_config.gns3_port}",
         "--username=${user_config.username}",
         "--password=${user_config.password}"
       ],
       "env": {
-        "PYTHONPATH": "${__dirname}/lib;${__dirname}/../gns3_mcp/server"
+        "PYTHONPATH": "${__dirname}/lib;${__dirname}/gns3_mcp"
       }
     }
   },
@@ -202,7 +202,11 @@
     }
   ],
   "compatibility": {
-    "platforms": ["darwin", "win32", "linux"],
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
     "runtimes": {
       "python": ">=3.10"
     }

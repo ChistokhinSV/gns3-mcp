@@ -77,11 +77,14 @@ def update_pyproject_toml(new_version: str) -> None:
     pyproject_file = Path("pyproject.toml")
     content = pyproject_file.read_text(encoding="utf-8")
 
-    # Replace version line (should be in [project] section)
+    # Replace version line in [project] section only (not target-version or python_version)
+    # Match: version = "X.Y.Z" (with optional whitespace)
+    # Don't match: target-version, python_version, etc.
     new_content = re.sub(
-        r'(version\s*=\s*["\'])([^"\']+)(["\'])',
+        r'(^version\s*=\s*["\'])([^"\']+)(["\'])',
         rf'\g<1>{new_version}\g<3>',
-        content
+        content,
+        flags=re.MULTILINE
     )
 
     pyproject_file.write_text(new_content, encoding="utf-8")

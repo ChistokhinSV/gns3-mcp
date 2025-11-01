@@ -60,12 +60,17 @@ type-check:
 # Clean build artifacts and caches
 clean:
     powershell -Command "if (Test-Path mcp-server/lib) { Remove-Item -Path mcp-server/lib -Recurse -Force }"
+    powershell -Command "if (Test-Path mcp-server/gns3_mcp) { Remove-Item -Path mcp-server/gns3_mcp -Recurse -Force }"
     powershell -Command "if (Test-Path mcp-server/mcp-server.mcpb) { Remove-Item -Path mcp-server/mcp-server.mcpb -Force }"
     powershell -Command "if (Test-Path dist) { Remove-Item -Path dist -Recurse -Force }"
     powershell -Command "Get-ChildItem -Path . -Include __pycache__,*.pyc,*.egg-info,.pytest_cache,.ruff_cache,.mypy_cache -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
 
 # Build desktop extension (.mcpb)
 build: install-lib
+    @echo "Copying source code to mcp-server for packaging..."
+    powershell -Command "if (Test-Path mcp-server/gns3_mcp) { Remove-Item -Path mcp-server/gns3_mcp -Recurse -Force }"
+    powershell -Command "Copy-Item -Path gns3_mcp -Destination mcp-server/gns3_mcp -Recurse -Force"
+    @echo "Building .mcpb package..."
     powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb pack"
     @echo "Built: mcp-server/mcp-server.mcpb"
 

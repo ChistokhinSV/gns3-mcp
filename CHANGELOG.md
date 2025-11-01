@@ -5,6 +5,38 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.1] - 2025-11-01 - Critical Desktop Extension Fix
+
+### Fixed
+- **Desktop Extension Packaging** - CRITICAL bugfix for v0.42.0-v0.43.0:
+  - Extension was missing source code (`gns3_mcp/` directory) due to PyPI restructuring
+  - Users saw "an update to Claude Desktop" warning even with latest version
+  - `just build` now copies `gns3_mcp/` into `mcp-server/` before packaging
+  - Updated `manifest.json` entry_point from `../gns3_mcp/` to `gns3_mcp/` (local path)
+  - .mcpb size increased from 46 MB → 47 MB (source code now included)
+- **PowerShell Syntax** in justfile:
+  - Changed `cd mcp-server && npx` → `powershell -Command "cd mcp-server; npx"`
+  - PowerShell doesn't support `&&` operator (requires `;` separator)
+- **Setuptools Deprecation Warning**:
+  - Changed `license = {text = "MIT"}` → `license = "MIT"` in pyproject.toml
+  - Complies with setuptools>=77.0.0 requirement (2026 deadline)
+- **Version Bump Script**:
+  - Fixed regex to only match `^version =` (not `target-version` or `python_version`)
+  - Prevents accidentally changing Ruff/Mypy config values during version bumps
+
+### Changed
+- **.gitignore**: Added `mcp-server/lib/` and `mcp-server/gns3_mcp/` (build artifacts)
+- **GitHub Actions Cache**: Optimized to only rebuild on dependency changes
+  - Changed key from `hashFiles('requirements.txt', 'pyproject.toml')` → `hashFiles('requirements.txt')`
+  - Metadata/config changes (license, mypy, linting) no longer invalidate cache
+  - Expected speedup: 1-2 minutes per build
+
+### Migration Notes
+**CRITICAL**: All v0.42.0-v0.43.0 users must upgrade to v0.43.1!
+- Previous versions had broken desktop extension (missing source code)
+- Rebuild and reinstall: `just clean && just build && just install-desktop`
+- Or download fresh .mcpb from GitHub release: https://github.com/ChistokhinSV/gns3-mcp/releases/tag/v0.43.1
+
 ## [0.43.0] - 2025-11-01 - Just-Based Local CI/CD Complete
 
 ### Added
