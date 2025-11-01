@@ -29,10 +29,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install system dependencies for cairosvg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libpango1.0-dev
+      - name: Cache system dependencies for cairosvg
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libcairo2-dev libpango1.0-dev
+          version: 1.0
 
       - name: Cache pip dependencies
         uses: actions/cache@v4
