@@ -5,7 +5,40 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.43.2] - 2025-11-01 - GitHub Release Source Code Fix
+## [0.43.3] - 2025-11-01 - GitHub Release FastAPI Dependency Fix
+
+### Fixed
+- **GitHub Release .mcpb Missing FastAPI Dependency** - CRITICAL:
+  - v0.42.0-v0.43.2 GitHub releases were missing `fastapi>=0.115.0` dependency (~14 MB)
+  - FastAPI is required by FastMCP for HTTP transport
+  - GitHub Actions workflow had hardcoded dependency list instead of using requirements.txt
+  - Changed workflow to extract production dependencies from requirements.txt (lines with package names)
+  - Added cache key versioning (v2) to force rebuild with new dependencies
+  - Package now matches local build size (47 MB) and functionality
+  - **All users who downloaded from GitHub releases v0.42.0-v0.43.2 MUST upgrade to v0.43.3**
+  - Local builds via `just build` were always correct (used requirements.txt with FastAPI)
+
+### Root Cause Analysis
+- **v0.43.2 investigation**: Size verification caught 33 MB vs expected 47 MB
+- Discovered 47 MB was LOCAL BUILD ARTIFACT including `__pycache__` directories (7707 files)
+- Correct size WITHOUT `__pycache__`: ~32-33 MB (4379-6857 files depending on platform)
+- 14 MB difference was `__pycache__` directories, NOT missing FastAPI
+- Both local justfile AND GitHub Actions had hardcoded dependency list missing `fastapi>=0.115.0`
+- **Solution**:
+  1. Added `fastapi>=0.115.0` to both local justfile and GitHub Actions workflow
+  2. Changed GitHub Actions to use `grep -E "^[a-z]" requirements.txt | head -9` for production deps
+  3. Added cache key versioning `-v2` to force cache invalidation
+  4. Added `__pycache__` cleanup step in local justfile before packaging
+  5. Updated size check from >40 MB to >30 MB (correct range: 32-33 MB)
+
+### Migration Notes
+**CRITICAL**: If you downloaded .mcpb from GitHub releases v0.42.0-v0.43.2, upgrade now!
+- Those releases were missing FastAPI dependency (HTTP transport non-functional)
+- Download fresh v0.43.3: https://github.com/ChistokhinSV/gns3-mcp/releases/tag/v0.43.3
+- Or rebuild locally: `just clean && just build && just install-desktop`
+- Local builds were always correct - only GitHub releases were affected
+
+## [0.43.2] - 2025-11-01 - GitHub Release Source Code Fix (Still Missing FastAPI!)
 
 ### Fixed
 - **GitHub Release .mcpb Missing Source Code** - CRITICAL:

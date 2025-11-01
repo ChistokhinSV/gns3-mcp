@@ -18,7 +18,7 @@ install:
 install-lib:
     powershell -Command "if (Test-Path mcp-server/lib) { Remove-Item -Path mcp-server/lib -Recurse -Force }"
     powershell -Command "New-Item -Path mcp-server/lib -ItemType Directory -Force | Out-Null"
-    pip install --target=mcp-server/lib fastmcp>=2.13.0.2 httpx>=0.28.1 telnetlib3>=2.0.8 pydantic>=2.12.3 python-dotenv>=1.2.1 cairosvg>=2.8.2 docker>=7.1.0 tabulate>=0.9.0 --no-warn-script-location --quiet
+    pip install --target=mcp-server/lib fastmcp>=2.13.0.2 fastapi>=0.115.0 httpx>=0.28.1 telnetlib3>=2.0.8 pydantic>=2.12.3 python-dotenv>=1.2.1 cairosvg>=2.8.2 docker>=7.1.0 tabulate>=0.9.0 --no-warn-script-location --quiet
 
 # Run unit tests
 test *ARGS='':
@@ -70,6 +70,8 @@ build: install-lib
     @echo "Copying source code to mcp-server for packaging..."
     powershell -Command "if (Test-Path mcp-server/gns3_mcp) { Remove-Item -Path mcp-server/gns3_mcp -Recurse -Force }"
     powershell -Command "Copy-Item -Path gns3_mcp -Destination mcp-server/gns3_mcp -Recurse -Force"
+    @echo "Cleaning __pycache__ directories before packaging..."
+    powershell -Command "Get-ChildItem -Path mcp-server -Include __pycache__ -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
     @echo "Building .mcpb package..."
     powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb pack"
     @echo "Built: mcp-server/mcp-server.mcpb"

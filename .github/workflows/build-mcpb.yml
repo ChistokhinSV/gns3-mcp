@@ -48,9 +48,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: mcp-server/lib
-          key: ${{ runner.os }}-py3.10-lib-${{ hashFiles('requirements.txt') }}
+          # Cache key includes version to allow manual invalidation when build process changes
+          key: ${{ runner.os }}-py3.10-lib-v2-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-py3.10-lib-
+            ${{ runner.os }}-py3.10-lib-v2-
             ${{ runner.os }}-lib-
 
       - name: Create lib directory
@@ -62,16 +63,9 @@ jobs:
         if: steps.cache-lib.outputs.cache-hit != 'true'
         run: |
           python -m pip install --upgrade pip
-          pip install --target=mcp-server/lib \
-            fastmcp>=2.13.0.2 \
-            httpx>=0.28.1 \
-            telnetlib3>=2.0.8 \
-            pydantic>=2.12.3 \
-            python-dotenv>=1.2.1 \
-            cairosvg>=2.8.2 \
-            docker>=7.1.0 \
-            tabulate>=0.9.0 \
-            --no-warn-script-location
+          # Extract only production dependencies from requirements.txt (skip dev dependencies)
+          grep -E "^[a-z]" requirements.txt | head -9 > /tmp/prod-requirements.txt
+          pip install --target=mcp-server/lib -r /tmp/prod-requirements.txt --no-warn-script-location
 
       - name: Install build tools for PyPI
         run: |
@@ -104,15 +98,15 @@ jobs:
           echo "Build successful:"
           ls -lh mcp-server/mcp-server.mcpb
 
-          # Verify source code is included (size should be ~47 MB, not ~32 MB)
+          # Verify dependencies are included (size should be ~32-33 MB with all production deps)
           SIZE_MB=$(du -m mcp-server/mcp-server.mcpb | cut -f1)
-          if [ "$SIZE_MB" -lt 40 ]; then
-            echo "ERROR: .mcpb size is ${SIZE_MB}M - source code likely missing!"
-            echo "Expected size: ~47 MB (with source code)"
+          if [ "$SIZE_MB" -lt 30 ]; then
+            echo "ERROR: .mcpb size is ${SIZE_MB}M - dependencies likely missing!"
+            echo "Expected size: ~32-33 MB (with FastAPI + all dependencies)"
             echo "Actual size: ${SIZE_MB} MB"
             exit 1
           fi
-          echo "Size check passed: ${SIZE_MB} MB (source code included)"
+          echo "Size check passed: ${SIZE_MB} MB (all dependencies included)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
