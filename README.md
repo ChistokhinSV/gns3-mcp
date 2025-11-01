@@ -16,7 +16,58 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
 
 ## Installation
 
-### Claude Code (Recommended - STDIO Mode)
+### Quick Start with pip (Recommended)
+
+**Prerequisites:**
+- Python 3.10+
+- GNS3 server running and accessible
+
+**Steps:**
+
+1. Install package:
+   ```bash
+   pip install gns3-mcp
+   ```
+
+2. Create `.env` file in your working directory:
+   ```bash
+   GNS3_HOST=192.168.1.20
+   GNS3_PORT=80
+   GNS3_USER=admin
+   GNS3_PASSWORD=your-password
+   ```
+
+3. Add to Claude Code (STDIO mode):
+   ```bash
+   claude mcp add --transport stdio gns3-lab -- gns3-mcp
+   ```
+
+4. Verify installation:
+   ```bash
+   claude mcp get gns3-lab
+   # Should show: Status: ✓ Connected
+   ```
+
+**HTTP Mode (Advanced):**
+
+For network access or always-running service:
+
+```bash
+# Add to .env
+MCP_API_KEY=your-random-token-here
+
+# Configure Claude Code
+claude mcp add --transport http gns3-lab \
+  http://127.0.0.1:8100/mcp/ \
+  --header "MCP_API_KEY: your-token"
+
+# Start server (in separate terminal)
+gns3-mcp --transport http --http-port 8100
+```
+
+---
+
+### Claude Code (Manual Installation - STDIO Mode)
 
 **STDIO mode is more secure** - no HTTP service, no authentication needed, runs only when Claude Code is active.
 

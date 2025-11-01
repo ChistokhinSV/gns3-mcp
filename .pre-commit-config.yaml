@@ -57,4 +57,4 @@ repos:
         entry: bash -c 'cd mcp-server && npx @anthropic-ai/mcpb pack'
         language: system
         pass_filenames: false
-        files: '^mcp-server/(server/.*\.py|manifest\.json|requirements\.txt)$|^requirements\.txt$'
+        files: '^gns3_mcp/server/.*\.py$|^mcp-server/manifest\.json$|^requirements\.txt$'

@@ -298,19 +298,43 @@ if %errorlevel% neq 0 (
 )
 echo   [OK] Dependencies installed
 
-REM 5. Rebuild lib folder
+REM 5. Rebuild lib folder for desktop extension
 echo [5/5] Rebuilding lib folder for desktop extension...
 set "LIB_DIR=%SCRIPT_DIR%\mcp-server\lib"
+
+REM Clean old lib folder
 if exist "%LIB_DIR%" (
+    echo   Removing old lib folder...
     rmdir /s /q "%LIB_DIR%" 2>nul
 )
+
+REM Create fresh lib folder
 mkdir "%LIB_DIR%" 2>nul
-"%VENV_PIP%" install --target="%LIB_DIR%" --upgrade fastmcp fastapi httpx telnetlib3 pydantic python-dotenv cairosvg docker tabulate --quiet
+if not exist "%LIB_DIR%" (
+    echo   [ERROR] Failed to create lib folder
+    exit /b 1
+)
+
+REM Install dependencies from requirements.txt (exclude dev dependencies)
+echo   Installing production dependencies to lib folder...
+"%VENV_PIP%" install --target="%LIB_DIR%" --upgrade ^
+    fastmcp>=2.13.0.2 ^
+    fastapi>=0.115.0 ^
+    httpx>=0.28.1 ^
+    telnetlib3>=2.0.8 ^
+    pydantic>=2.12.3 ^
+    python-dotenv>=1.2.1 ^
+    cairosvg>=2.8.2 ^
+    docker>=7.1.0 ^
+    tabulate>=0.9.0 ^
+    --no-warn-script-location ^
+    --quiet
+
 if %errorlevel% neq 0 (
     echo   [ERROR] Failed to rebuild lib folder
     exit /b 1
 )
-echo   [OK] Lib folder rebuilt
+echo   [OK] Lib folder rebuilt (%LIB_DIR%)
 
 echo.
 echo === Rebuild Complete ===

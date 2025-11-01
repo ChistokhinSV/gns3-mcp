@@ -17,7 +17,7 @@ if env_file.exists():
 
 # Add lib and server to Python path
 lib_path = str(project_root / 'mcp-server' / 'lib')
-server_path = str(project_root / 'mcp-server' / 'server')
+server_path = str(project_root / 'gns3_mcp' / 'server')
 sys.path.insert(0, lib_path)
 sys.path.insert(0, server_path)
 

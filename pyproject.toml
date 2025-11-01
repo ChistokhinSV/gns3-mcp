@@ -1,3 +1,74 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gns3-mcp"
+version = "0.41.0"
+description = "GNS3 lab automation MCP server with AI agent integration"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Sergei Chistokhin", email = "Sergei@Chistokhin.com"}
+]
+keywords = ["gns3", "mcp", "network", "automation", "ai", "claude", "fastmcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Networking",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "fastmcp>=2.13.0.2",
+    "fastapi>=0.115.0",
+    "httpx>=0.28.1",
+    "telnetlib3>=2.0.8",
+    "pydantic>=2.12.3",
+    "python-dotenv>=1.2.1",
+    "cairosvg>=2.8.2",
+    "docker>=7.1.0",
+    "tabulate>=0.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-mock>=3.15.1",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.2",
+    "mypy>=1.18.2",
+    "black>=25.9.0",
+    "pre-commit>=4.3.0",
+]
+http = [
+    "uvicorn>=0.30.0",
+]
+
+[project.scripts]
+gns3-mcp = "gns3_mcp.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ChistokhinSV/gns3-mcp"
+Documentation = "https://github.com/ChistokhinSV/gns3-mcp#readme"
+Repository = "https://github.com/ChistokhinSV/gns3-mcp"
+Issues = "https://github.com/ChistokhinSV/gns3-mcp/issues"
+Changelog = "https://github.com/ChistokhinSV/gns3-mcp/blob/master/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gns3_mcp*"]
+exclude = ["tests*", "mcp-server*", "skill*", "ssh-proxy*", "docs*", "data*", ".github*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py39"

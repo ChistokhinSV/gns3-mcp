@@ -11,18 +11,18 @@
   },
   "server": {
     "type": "python",
-    "entry_point": "server/main.py",
+    "entry_point": "../gns3_mcp/server/main.py",
     "mcp_config": {
       "command": "python",
       "args": [
-        "${__dirname}/server/main.py",
+        "${__dirname}/../gns3_mcp/server/main.py",
         "--host=${user_config.gns3_host}",
         "--port=${user_config.gns3_port}",
         "--username=${user_config.username}",
         "--password=${user_config.password}"
       ],
       "env": {
-        "PYTHONPATH": "${__dirname}/lib;${__dirname}/server"
+        "PYTHONPATH": "${__dirname}/lib;${__dirname}/../gns3_mcp/server"
       }
     }
   },

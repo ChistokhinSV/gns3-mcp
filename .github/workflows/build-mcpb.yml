@@ -1,4 +1,4 @@
-name: Build MCP Server Binary
+name: Build and Publish MCP Server
 
 on:
   workflow_dispatch:  # Manual trigger
@@ -6,9 +6,13 @@ on:
     branches:
       - main
       - master
+    tags:
+      - 'v*'  # Trigger on version tags (v0.41.0, v1.0.0, etc.)
     paths:
-      - 'mcp-server/**'
+      - 'gns3_mcp/**'
+      - 'mcp-server/manifest.json'
       - 'requirements.txt'
+      - 'pyproject.toml'
       - '.github/workflows/build-mcpb.yml'
 
 permissions:
@@ -57,6 +61,9 @@ jobs:
             tabulate>=0.9.0 \
             --no-warn-script-location
 
+          # Install build tools for PyPI
+          pip install build twine
+
       - name: Verify dependencies installed
         run: |
           ls -la mcp-server/lib
@@ -99,19 +106,43 @@ jobs:
             echo "This commit is not tagged"
           fi
 
+      - name: Build PyPI distributions
+        if: steps.version.outputs.is_tagged == 'true'
+        run: |
+          python -m build
+          ls -lh dist/
+
+      - name: Publish to PyPI
+        if: steps.version.outputs.is_tagged == 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          python -m twine upload dist/*
+
       - name: Create Release
         if: steps.version.outputs.is_tagged == 'true'
         uses: softprops/action-gh-release@v1
         with:
-          files: mcp-server/mcp-server.mcpb
+          files: |
+            mcp-server/mcp-server.mcpb
+            dist/*.whl
+            dist/*.tar.gz
           tag_name: v${{ steps.version.outputs.version }}
           name: Release ${{ steps.version.outputs.version }}
           body: |
             ## GNS3 MCP Server v${{ steps.version.outputs.version }}
-            
+
             ### Installation
+
+            **Via pip (Recommended):**
+            ```bash
+            pip install gns3-mcp
+            ```
+
+            **Via Claude Desktop:**
             Download `mcp-server.mcpb` and install via Claude Desktop settings.
-            
+
             ### Changes
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details.
           draft: false
