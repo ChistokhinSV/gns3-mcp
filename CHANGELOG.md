@@ -5,12 +5,27 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.43.7] - 2025-11-01 - PyPI Version Bump
+## [0.43.8] - 2025-11-01 - Windows-Only Release (Clean Build)
+
+### Fixed
+- **Workflow Race Condition**:
+  - v0.43.7 triggered both Linux AND Windows workflows
+  - First to upload to PyPI wins (likely Linux with incompatible binaries)
+  - Deleted Linux workflow completely (no Claude Desktop for Linux)
+  - v0.43.8 triggers Windows workflow only
 
 ### Technical Details
-- PyPI rejected v0.43.6 upload: "File already exists ('gns3_mcp-0.43.6-py3-none-any.whl')"
-- v0.43.7 is functionally identical to v0.43.6
-- Windows runner workflow + platform compatibility fixes
+- Linux workflow deleted from repository
+- Windows-only builds going forward
+- Clean Windows-compatible .mcpb package
+
+## [0.43.7] - 2025-11-01 - PyPI Version Bump (SKIP - Race Condition)
+
+### Technical Details
+- PyPI rejected v0.43.6 upload: "File already exists"
+- **WARNING**: v0.43.7 ran BOTH workflows (Linux + Windows)
+- Skip this version - use v0.43.8 instead
+- v0.43.8 has clean Windows-only build
 
 ## [0.43.6] - 2025-11-01 - Windows Runner for Platform Compatibility
 
