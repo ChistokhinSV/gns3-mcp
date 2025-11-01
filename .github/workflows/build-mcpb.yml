@@ -3,17 +3,8 @@ name: Build and Publish MCP Server
 on:
   workflow_dispatch:  # Manual trigger
   push:
-    branches:
-      - main
-      - master
     tags:
-      - 'v*'  # Trigger on version tags (v0.41.0, v1.0.0, etc.)
-    paths:
-      - 'gns3_mcp/**'
-      - 'mcp-server/manifest.json'
-      - 'requirements.txt'
-      - 'pyproject.toml'
-      - '.github/workflows/build-mcpb.yml'
+      - 'v*'  # Trigger ONLY on version tags (v0.42.0, v1.0.0, etc.)
 
 permissions:
   contents: write  # Required for creating releases
@@ -37,8 +28,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'mcp-server/package-lock.json'
 
       - name: Install system dependencies for cairosvg
         run: |
