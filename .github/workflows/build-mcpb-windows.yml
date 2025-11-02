@@ -145,7 +145,7 @@ jobs:
 
             Omit default parameters and it would be:
             ```powershell
-            claude mcp add --transport stdio gns3-mcp --env GNS3_HOST=192.168.1.20 --env GNS3_PASSWORD=your-password uvx gns3-mcp@latest
+            claude mcp add --transport stdio gns3-mcp --env GNS3_HOST=192.168.1.20 --env GNS3_PASSWORD=your-password -- uvx gns3-mcp@latest
             ```
 
             **Option 2: Using pip (Traditional)**
