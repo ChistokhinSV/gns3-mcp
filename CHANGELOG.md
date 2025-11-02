@@ -5,6 +5,24 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.46.3] - 2025-11-02 - Bug Fix: Circular Import Resolution
+
+### Fixed
+- **Circular Import Error**: Resolved "attempted relative import beyond top-level package" error in uvx/pip installations
+  - Changed `resource_tools.py` to avoid package-level imports that trigger `__init__.py`
+  - Uses sys.path manipulation for error_utils and models imports
+  - AppContext type hints use forward references with TYPE_CHECKING guard
+  - Clean environment installations now work correctly (uvx, pip, direct import)
+
+### Technical Details
+- **Root Cause**: Relative imports in resource_tools.py conflicted with sys.path manipulation in main.py
+- **Solution**: Use non-package imports (`from error_utils import`) instead of package imports (`from gns3_mcp.server.error_utils import`)
+- **Impact**: Fixes GM-23 regression introduced in v0.46.0
+- **Testing**: All 202 unit tests pass, direct import works, CLI works, uvx works
+
+### Related
+- Created GM-24: Long-term refactoring task to extract AppContext to separate module
+
 ## [0.46.2] - 2025-11-02 - Simplified Installation (--env Flags)
 
 ### Changed

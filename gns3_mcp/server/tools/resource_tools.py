@@ -8,17 +8,28 @@ These tools are thin wrappers that delegate to resource implementations.
 """
 
 import logging
-from typing import Literal
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal
 
-from ..app_context import AppContext
-from ..error_utils import create_error_response
-from ..models import ErrorCode
+# Add server directory to path to avoid package-level circular imports
+# This allows importing error_utils and models without triggering __init__.py
+server_dir = Path(__file__).parent.parent.resolve()
+if str(server_dir) not in sys.path:
+    sys.path.insert(0, str(server_dir))
+
+from error_utils import create_error_response  # noqa: E402
+from models import ErrorCode  # noqa: E402
+
+# AppContext imported only for type checking to avoid circular imports at runtime
+if TYPE_CHECKING:
+    from gns3_mcp.server.main import AppContext
 
 logger = logging.getLogger(__name__)
 
 
 async def query_resource(
-    app: AppContext,
+    app: "AppContext",
     uri: str,
     format: Literal["table", "json"] = "table",
 ) -> str:
@@ -119,7 +130,7 @@ async def query_resource(
 
 
 async def list_projects(
-    app: AppContext,
+    app: "AppContext",
     format: Literal["table", "json"] = "table",
 ) -> str:
     """List all GNS3 projects (convenience wrapper).
@@ -155,7 +166,7 @@ async def list_projects(
 
 
 async def list_nodes(
-    app: AppContext,
+    app: "AppContext",
     project_id: str,
     format: Literal["table", "json"] = "table",
 ) -> str:
@@ -194,7 +205,7 @@ async def list_nodes(
 
 
 async def get_topology(
-    app: AppContext,
+    app: "AppContext",
     project_id: str,
     format: Literal["table", "json"] = "table",
 ) -> str:
