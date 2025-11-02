@@ -10,12 +10,19 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.40.0
+## Current Version: v0.46.0
 
-**Latest Release:** v0.40.0 - Competitive Features: Bulk Operations & Topology Report
+**Latest Release:** v0.46.0 - Resource Query Tools (Claude Desktop Compatibility)
 
-### Recent Changes (v0.26.0 - v0.40.0)
+### Recent Changes (v0.26.0 - v0.46.0)
 
+**v0.46.0** - Resource query tools for Claude Desktop compatibility
+- **4 New Tools**: `query_resource()`, `list_projects()`, `list_nodes()`, `get_topology()`
+- **Claude Desktop Support**: All 25+ resources now accessible via tools
+- **Convenience Shortcuts**: 3 high-use operations (projects, nodes, topology)
+- **Universal Query**: Single tool provides access to all resource URIs
+- **GM-4 Aligned**: Minimal tool count (4 vs 25), will optimize later
+- **Resource Preservation**: All resources remain for Claude Code compatibility
 **v0.40.0** - Wildcard bulk operations, topology report resource, structured exceptions
 - **Bulk Node Operations**: Wildcard patterns (`"*"`, `"Router*"`), JSON arrays, parallel execution
 - **Topology Report**: Single-resource overview of nodes/links/statistics (replaces 3+ tool calls)
@@ -35,8 +42,8 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 **v0.26.0** - Multi-proxy support for isolated network access
 
 ### Current State
-- **27 Tools**: Complete GNS3 lab automation toolkit with wildcard bulk operations (v0.40.0)
-- **22 Resources**: Text table output, topology_report (v0.40.0), URIs, complete metadata
+- **32 Tools**: Complete GNS3 lab automation + resource query tools (v0.46.0)
+- **25 Resources**: Text table output, topology_report (v0.40.0), URIs, complete metadata
 - **5 Prompts**: Guided workflows for SSH setup, topology discovery, troubleshooting, lab setup, node setup
 - **Code Quality**: Ruff, Mypy, Black linting with pre-commit hooks
 - **Project Memory**: Per-project README for IP schemes, credentials, architecture notes

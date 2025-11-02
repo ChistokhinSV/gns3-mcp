@@ -5,6 +5,60 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.46.1] - 2025-11-02 - Documentation Update
+
+### Changed
+- **README Installation Instructions**: Complete rewrite following modern best practices
+  - Windows-specific commands (PowerShell syntax throughout)
+  - uvx installation option (recommended, 10-100× faster than pip)
+  - Traditional pip installation option (alternative)
+  - Collapsible editor-specific sections (Claude Code, Claude Desktop, Cursor, Windsurf)
+  - Troubleshooting section with common issues
+  - Advanced Setup section (HTTP mode, Windows service, development)
+  - 3-command Quick Start for fastest installation
+- **GitHub Release Template**: Updated with short installation examples
+  - Both uvx and pip options for Claude Code
+  - Claude Desktop and Cursor/Windsurf references
+  - Links to full README for detailed instructions
+
+### Why This Change?
+- **Modern Standards**: Aligned with ecosystem best practices (Context7 pattern)
+- **Better UX**: 3-command installation (vs previous 4+ steps)
+- **Multi-Editor Support**: Clear instructions for Claude Code, Desktop, Cursor, Windsurf
+- **Windows-Specific**: All commands optimized for Windows platform
+
+## [0.46.0] - 2025-11-02 - Resource Query Tools (Claude Desktop Compatibility)
+
+### Added
+- **Resource Query Tools** (GM-23): Added 4 new tools to make all 25+ MCP resources accessible to Claude Desktop
+  - `query_resource(uri, format)`: Universal tool supporting all resource URI patterns
+  - `list_projects(format)`: Convenience wrapper for `projects://` resource
+  - `list_nodes(project_id, format)`: Convenience wrapper for `nodes://{project_id}/` resource
+  - `get_topology(project_id, format)`: Convenience wrapper for `projects://{project_id}/topology_report` resource
+  - All tools support both "table" (default) and "json" output formats
+  - Comprehensive URI pattern documentation in tool docstrings
+
+### Changed
+- **Tool Count**: 28 → 32 tools (+4 resource query tools)
+- **Updated Tool Descriptions**: Added resource URI references to related tools:
+  - SSH tools now reference `sessions://ssh/` URIs
+  - Project tools reference `list_projects()` and `query_resource("projects://")`
+  - Node tools reference `list_nodes()`, `get_topology()`, and node resource URIs
+  - Console tools reference console session resource URIs
+
+### Technical Details
+- **File Added**: `gns3_mcp/server/tools/resource_tools.py` - Resource query tool implementations
+- **File Modified**: `gns3_mcp/server/main.py` - Imported and registered 4 new tools
+- **Architecture**: Tools are thin wrappers delegating to existing `ResourceManager.get_resource()`
+- **Zero Duplication**: All resource logic reused, tools add ~200 lines of wrapper code
+- **GM-4 Alignment**: Minimized tool count (4 vs 25 separate tools), optimization deferred
+
+### Why This Change?
+- **Claude Desktop Limitation**: Cannot automatically access MCP resources (only Claude Code can)
+- **Backward Compatibility**: All resources preserved for Claude Code users
+- **User Choice**: Claude Desktop users can now access resources via tools
+- **Future Optimization**: GM-4 will consolidate/optimize all tools later
+
 ## [0.45.0] - 2025-11-01 - UV Package Manager Integration
 
 ### Added

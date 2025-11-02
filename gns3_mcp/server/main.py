@@ -76,6 +76,18 @@ from tools.project_tools import (
     create_project_impl,
     open_project_impl,
 )
+from tools.resource_tools import (
+    get_topology as get_topology_impl,
+)
+from tools.resource_tools import (
+    list_nodes as list_nodes_impl,
+)
+from tools.resource_tools import (
+    list_projects as list_projects_impl,
+)
+from tools.resource_tools import (
+    query_resource as query_resource_impl,
+)
 
 # Read version from package __init__.py (single source of truth for PyPI package)
 try:
@@ -1018,6 +1030,10 @@ async def open_project(
     """Open a GNS3 project by name
 
     Returns: JSON with ProjectInfo for opened project
+
+    To list available projects:
+        list_projects()                          # Convenience tool
+        query_resource("projects://")            # Universal resource query
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await open_project_impl(app, project_name)
@@ -1127,6 +1143,11 @@ async def set_node(
 
         # Position all switches
         set_node_properties("Switch*", x=100, y=200)
+
+    To query node information:
+        list_nodes(project_id)                       # Convenience tool
+        query_resource(f"nodes://{project_id}/")     # Universal query
+        get_topology(project_id)                     # Full topology with links
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await set_node_impl(
@@ -1190,6 +1211,10 @@ async def console_send(
         console_send("R1", "\n")
         await 1 second
         console_read("R1", mode="diff")  # See what prompt appeared
+
+    To query console session status:
+        query_resource("sessions://console/")        # All console sessions
+        query_resource("sessions://console/R1")      # Specific session details
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await send_console_impl(app, node_name, data, raw)
@@ -2107,6 +2132,11 @@ async def ssh_configure(
 
         # Force recreation (rarely needed)
         ssh_configure("R1", device_dict, force=True)
+
+    To query existing SSH sessions without modifying:
+        query_resource("sessions://ssh/")              # All SSH sessions
+        query_resource("sessions://ssh/Router1")       # Specific session details
+        query_resource("sessions://ssh/Router1/history") # Command history
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await configure_ssh_impl(
@@ -2264,6 +2294,80 @@ async def ssh_batch(
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await ssh_batch_impl(app, operations)
+
+
+# ============================================================================
+# MCP Tools - Resource Query (v0.46.0 - Claude Desktop Compatibility)
+# ============================================================================
+
+
+@mcp.tool(
+    name="query_resource",
+    tags={"resource", "query", "read-only", "claude-desktop"},
+)
+async def query_resource(
+    ctx: Context,
+    uri: Annotated[str, "Resource URI to query (see tool description for supported patterns)"],
+    format: Annotated[
+        str, "Output format: 'table' (default, human-readable) or 'json' (structured)"
+    ] = "table",
+) -> str:
+    """Universal resource query tool - access any GNS3 MCP resource.
+
+    See tool implementation docstring for comprehensive URI pattern documentation.
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await query_resource_impl(app, uri, format)
+
+
+@mcp.tool(
+    name="list_projects",
+    tags={"resource", "project", "read-only", "claude-desktop"},
+)
+async def list_projects(
+    ctx: Context,
+    format: Annotated[str, "Output format: 'table' (default) or 'json'"] = "table",
+) -> str:
+    """List all GNS3 projects (convenience wrapper).
+
+    See tool implementation docstring for details.
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await list_projects_impl(app, format)
+
+
+@mcp.tool(
+    name="list_nodes",
+    tags={"resource", "node", "read-only", "claude-desktop"},
+)
+async def list_nodes(
+    ctx: Context,
+    project_id: Annotated[str, "GNS3 project ID (UUID format)"],
+    format: Annotated[str, "Output format: 'table' (default) or 'json'"] = "table",
+) -> str:
+    """List nodes in a GNS3 project (convenience wrapper).
+
+    See tool implementation docstring for details.
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await list_nodes_impl(app, project_id, format)
+
+
+@mcp.tool(
+    name="get_topology",
+    tags={"resource", "topology", "read-only", "claude-desktop"},
+)
+async def get_topology(
+    ctx: Context,
+    project_id: Annotated[str, "GNS3 project ID (UUID format)"],
+    format: Annotated[str, "Output format: 'table' (default) or 'json'"] = "table",
+) -> str:
+    """Get unified topology report for a project (convenience wrapper).
+
+    See tool implementation docstring for details.
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    return await get_topology_impl(app, project_id, format)
 
 
 # ============================================================================

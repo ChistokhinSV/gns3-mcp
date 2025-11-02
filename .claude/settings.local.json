@@ -31,7 +31,12 @@
       "Bash(nssm status:*)",
       "Bash(cmd /c \"timeout /t 3 /nobreak >nul & run-gns3-mcp.bat\")",
       "Bash(timeout:*)",
-      "Bash(powershell -ExecutionPolicy Bypass -File \"install-service-batch-wrapper.ps1\")"
+      "Bash(powershell -ExecutionPolicy Bypass -File \"install-service-batch-wrapper.ps1\")",
+      "Bash(NUL)",
+      "Bash(find:*)",
+      "Bash(just bump:*)",
+      "Bash(just check:*)",
+      "Bash(just build:*)"
     ],
     "deny": [],
     "ask": []

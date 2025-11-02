@@ -130,28 +130,41 @@ jobs:
           body: |
             ## GNS3 MCP Server v${{ steps.version.outputs.version }} (Windows Build)
 
-            ### 🚀 Performance Improvements (v0.45.0)
-            - **UV Package Manager Integration**: 10-100× faster dependency installation
-            - **Bootstrap time**: 70s → 6-10s (7× faster)
-            - **MCP timeout compliance**: ✅ Fits within 60-second initialization timeout
-            - **Runtime dependencies**: Installed on-demand from bundled UV binary (58 MB)
+            ### 🚀 Quick Installation (Claude Code)
 
-            ### Installation
+            **Option 1: Using uvx (Recommended - Faster)**
+            ```powershell
+            # Install uv if not already installed
+            pip install uv
 
-            **Via pip (Recommended):**
-            ```bash
-            pip install gns3-mcp
+            # Add to Claude Code (auto-installs package)
+            claude mcp add --transport stdio gns3-lab -- uvx gns3-mcp@latest
             ```
 
-            **Via Claude Desktop:**
-            Download `mcp-server.mcpb` and install via Claude Desktop settings.
+            **Option 2: Using pip (Traditional)**
+            ```powershell
+            # Install package
+            pip install gns3-mcp
+
+            # Add to Claude Code
+            claude mcp add --transport stdio gns3-lab -- gns3-mcp
+            ```
+
+            **Claude Desktop:**
+            Download `mcp-server.mcpb` → double-click to install → configure credentials in settings.
+
+            **Cursor/Windsurf:**
+            See [full installation guide](https://github.com/${{ github.repository }}/blob/master/README.md#installation) for JSON configuration examples.
+
+            > **Note:** Configure GNS3 credentials in `.env` file. See [README](https://github.com/${{ github.repository }}/blob/master/README.md#installation) for complete setup instructions.
 
             ### Changes
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details.
 
             ### Platform
-            - Windows-compatible binaries (Python 3.10-3.13)
+            - **Supported:** Windows only
+            - **Python:** 3.10-3.13
+            - **Package size:** ~21 MB (includes UV binary)
             - Built on: windows-latest runner
-            - Package size: ~22 MB (compressed)
           draft: false
           prerelease: false
