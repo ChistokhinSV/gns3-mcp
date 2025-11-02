@@ -1,9 +1,9 @@
 {
   "mcpServers": {
-    "gns3-lab": {
+    "gns3-mcp": {
       "url": "http://127.0.0.1:8100/mcp/"
     },
-    "gns3-lab-with-auth": {
+    "gns3-mcp-with-auth": {
       "_comment": "Example HTTP mode with API key authentication (v0.41.0+)",
       "_comment2": "Requires MCP_API_KEY in .env, uncomment and set your key",
       "url": "http://127.0.0.1:8100/mcp/",

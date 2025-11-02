@@ -320,7 +320,7 @@ The wrapper script automatically:
 
 **Verify installation:**
 ```bash
-claude mcp get gns3-lab
+claude mcp get gns3-mcp
 # Should show: Status: ✓ Connected
 ```
 
@@ -328,7 +328,7 @@ claude mcp get gns3-lab
 
 **Global installation (optional):**
 ```powershell
-claude mcp add --transport stdio gns3-lab --scope user -- `
+claude mcp add --transport stdio gns3-mcp --scope user -- `
   python "C:\HOME\1. Scripts\008. GNS3 MCP\mcp-server\start_mcp.py"
 ```
 

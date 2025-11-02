@@ -32,19 +32,16 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
 **Option 1: Using uvx (Recommended - Faster)**
 
 ```powershell
-# Step 1: Configure GNS3 credentials
-@"
-GNS3_HOST=192.168.1.20
-GNS3_PORT=80
-GNS3_USER=admin
-GNS3_PASSWORD=your-password
-"@ | Out-File -FilePath .env -Encoding ASCII
+# Single command - no .env file needed!
+claude mcp add --transport stdio gns3-mcp `
+  --env GNS3_HOST=192.168.1.20 `
+  --env GNS3_PORT=80 `
+  --env GNS3_USER=admin `
+  --env GNS3_PASSWORD=your-password `
+  -- uvx gns3-mcp@latest
 
-# Step 2: Install and add to Claude Code (uvx auto-installs package)
-claude mcp add --transport stdio gns3-lab -- uvx gns3-mcp@latest
-
-# Step 3: Verify installation
-claude mcp get gns3-lab
+# Verify installation
+claude mcp get gns3-mcp
 # Should show: Status: ✓ Connected
 ```
 
@@ -54,19 +51,16 @@ claude mcp get gns3-lab
 # Step 1: Install package
 pip install gns3-mcp
 
-# Step 2: Configure GNS3 credentials
-@"
-GNS3_HOST=192.168.1.20
-GNS3_PORT=80
-GNS3_USER=admin
-GNS3_PASSWORD=your-password
-"@ | Out-File -FilePath .env -Encoding ASCII
+# Step 2: Add to Claude Code with credentials
+claude mcp add --transport stdio gns3-mcp `
+  --env GNS3_HOST=192.168.1.20 `
+  --env GNS3_PORT=80 `
+  --env GNS3_USER=admin `
+  --env GNS3_PASSWORD=your-password `
+  -- gns3-mcp
 
-# Step 3: Add to Claude Code
-claude mcp add --transport stdio gns3-lab -- gns3-mcp
-
-# Step 4: Verify installation
-claude mcp get gns3-lab
+# Step 3: Verify installation
+claude mcp get gns3-mcp
 # Should show: Status: ✓ Connected
 ```
 
@@ -100,10 +94,10 @@ GNS3_PASSWORD=your-password
 "@ | Out-File -FilePath .env -Encoding ASCII
 
 # 3. Add to Claude Code
-claude mcp add --transport stdio gns3-lab -- uvx gns3-mcp@latest
+claude mcp add --transport stdio gns3-mcp -- uvx gns3-mcp@latest
 
 # 4. Verify
-claude mcp get gns3-lab
+claude mcp get gns3-mcp
 ```
 
 **Using pip:**
@@ -121,10 +115,10 @@ GNS3_PASSWORD=your-password
 "@ | Out-File -FilePath .env -Encoding ASCII
 
 # 3. Add to Claude Code
-claude mcp add --transport stdio gns3-lab -- gns3-mcp
+claude mcp add --transport stdio gns3-mcp -- gns3-mcp
 
 # 4. Verify
-claude mcp get gns3-lab
+claude mcp get gns3-mcp
 # Should show: Status: ✓ Connected
 ```
 
@@ -193,7 +187,7 @@ claude mcp get gns3-lab
 ```json
 {
   "mcpServers": {
-    "gns3-lab": {
+    "gns3-mcp": {
       "command": "uvx",
       "args": ["gns3-mcp@latest"],
       "env": {
@@ -216,7 +210,7 @@ claude mcp get gns3-lab
 ```json
 {
   "mcpServers": {
-    "gns3-lab": {
+    "gns3-mcp": {
       "command": "gns3-mcp",
       "args": [],
       "env": {
@@ -247,7 +241,7 @@ claude mcp get gns3-lab
 ```json
 {
   "mcpServers": {
-    "gns3-lab": {
+    "gns3-mcp": {
       "command": "uvx",
       "args": ["gns3-mcp@latest"],
       "env": {
@@ -270,7 +264,7 @@ claude mcp get gns3-lab
 ```json
 {
   "mcpServers": {
-    "gns3-lab": {
+    "gns3-mcp": {
       "command": "gns3-mcp",
       "args": [],
       "env": {
@@ -300,7 +294,7 @@ claude mcp get gns3-lab
 curl http://192.168.1.20:80/v3/projects
 
 # Check Claude Code MCP status
-claude mcp get gns3-lab
+claude mcp get gns3-mcp
 
 # View detailed logs (Claude Code)
 # Check console output when running commands
@@ -343,7 +337,7 @@ C:\Users\<username>\AppData\Roaming\Claude\logs\mcp-server-GNS3 Lab Controller.l
 
 2. Configure Claude Code:
    ```powershell
-   claude mcp add --transport http gns3-lab `
+   claude mcp add --transport http gns3-mcp `
      http://127.0.0.1:8100/mcp/ `
      --header "MCP_API_KEY: your-random-token-here"
    ```
@@ -428,7 +422,7 @@ GNS3_PASSWORD=your-password
 python gns3_mcp\cli.py --host 192.168.1.20 --port 80 --username admin --password your-password
 
 # Or add to Claude Code (project-scoped)
-claude mcp add --transport stdio gns3-lab --scope project -- python "C:\full\path\to\gns3_mcp\cli.py"
+claude mcp add --transport stdio gns3-mcp --scope project -- python "C:\full\path\to\gns3_mcp\cli.py"
 ```
 
 **Build .mcpb package:**

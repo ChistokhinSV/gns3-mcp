@@ -5,6 +5,28 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.46.2] - 2025-11-02 - Simplified Installation (--env Flags)
+
+### Changed
+- **Quick Start Installation**: Simplified to use `--env` flags, eliminating .env file requirement
+  - **uvx option**: Now a single command (was 4 steps)
+  - **pip option**: Now 2 commands (was 4 steps)
+  - Credentials passed directly via `claude mcp add --env KEY=VALUE` flags
+  - Quick Start section shows both uvx (recommended) and pip approaches
+- **GitHub Workflow**: Updated release template with --env flag examples
+  - Shows simplified installation commands for both uvx and pip
+  - Removed outdated .env file references
+
+### Why This Change?
+- **Simpler UX**: 1-2 commands instead of 3-4 steps (create .env → add server → verify)
+- **Claude Code Best Practice**: `--env` flag stores credentials in MCP config automatically
+- **Less Confusion**: No need to explain .env file creation for quick installation
+- **Faster Onboarding**: Users can copy-paste one command with their credentials
+
+### Note
+- Detailed Setup section still shows .env approach for users who prefer it
+- Advanced Setup (HTTP mode, Windows service) still uses .env files as required
+
 ## [0.46.1] - 2025-11-02 - Documentation Update
 
 ### Changed
