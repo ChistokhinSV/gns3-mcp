@@ -5,6 +5,69 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.46.4] - 2025-11-03 - Portable Service Setup (uvx-Based)
+
+### Added
+- **run-uvx.cmd Wrapper**: Script to locate uvx.exe in Windows service context
+  - Searches common Python installation locations (user/system/ProgramFiles)
+  - Supports Python 3.10-3.13 versions
+  - Handles PATH inheritance issues in Windows services
+  - Detailed error messages if uvx not found
+- **set-env-vars.ps1**: PowerShell script to configure Windows environment variables
+  - Reads credentials from .env file
+  - Sets system-wide or user-level environment variables
+  - Supports both Machine and User target levels
+  - Masks passwords in output for security
+  - Handles backward compatibility with old variable names
+- **PORTABLE_SETUP.md**: Comprehensive documentation for portable service setup
+  - Step-by-step setup instructions
+  - Migration guide from v0.46.x
+  - Troubleshooting section
+  - Environment variables reference
+
+### Changed
+- **Windows Service Configuration**: Made fully portable (no hardcoded paths)
+  - GNS3-MCP-HTTP.xml uses `%BASE%` variable instead of absolute paths
+  - Executable changed to `%BASE%\run-uvx.cmd` (wrapper script)
+  - All paths relative to service directory
+  - Environment variables loaded from Windows environment (not .env)
+  - Works from any folder location
+- **server.cmd**: Migrated from venv to uvx-based execution
+  - Removed venv-related code and `venv-recreate` command
+  - Uses `run-uvx.cmd` wrapper for both service and direct modes
+  - Loads .env file in development mode only (`server.cmd run`)
+  - Added uvx availability check before service install
+  - Simplified installation process
+- **README.md**: Updated Windows Service section
+  - Added reference to PORTABLE_SETUP.md
+  - Simplified setup steps (3 commands)
+  - Removed venv-recreate references
+  - Added key features list (portable, no venv, secure, simple)
+
+### Fixed
+- **server.cmd Flow Control**: Fixed missing exit statement in `:check_admin` section
+  - Prevented fall-through into `:run_direct` label
+  - Resolves "batch label not found" error
+- **Service PATH Issues**: Windows services can now find uvx.exe
+  - Services don't inherit user PATH environment
+  - Wrapper script provides explicit path resolution
+  - Supports all common Python installation layouts
+
+### Migration Notes
+- **Breaking for Service Users**: Requires environment variables instead of .env
+  - Run `.\set-env-vars.ps1` to migrate from .env to Windows environment
+  - Or manually set GNS3_USER, GNS3_PASSWORD, GNS3_HOST, GNS3_PORT
+  - Existing services must be uninstalled and reinstalled
+- **No Breaking Changes for STDIO Mode**: Claude Code/Desktop unaffected
+  - STDIO mode still uses .env file
+  - Only Windows service deployment affected
+
+### Benefits
+- ✅ **Portable**: Works from any folder location (no hardcoded paths)
+- ✅ **No venv**: Uses uvx for automatic isolation (cleaner project structure)
+- ✅ **Secure**: Credentials in Windows environment (encrypted by OS)
+- ✅ **Simple**: Automated setup with PowerShell script
+
 ## [0.46.3] - 2025-11-02 - Bug Fix: Circular Import Resolution
 
 ### Fixed

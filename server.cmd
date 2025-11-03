@@ -1,7 +1,7 @@
 @echo off
 REM GNS3 MCP HTTP Server Management Script
-REM Uses WinSW (Windows Service Wrapper) to run as Windows service
-REM Usage: server.cmd [run|start|stop|restart|install|uninstall|reinstall|status|venv-recreate|create-user]
+REM Uses WinSW (Windows Service Wrapper) to run as Windows service with uvx
+REM Usage: server.cmd [run|start|stop|restart|install|uninstall|reinstall|status|create-user]
 REM   (no params)      - Run server directly (development mode)
 REM   run             - Run server directly (development mode)
 REM   start           - Start Windows service
@@ -11,7 +11,6 @@ REM   install         - Install Windows service
 REM   uninstall       - Remove Windows service
 REM   reinstall       - Reinstall Windows service
 REM   status          - Show service status
-REM   venv-recreate   - Recreate Python virtual environment (clean install)
 REM   create-user     - Create service user account (requires admin)
 
 setlocal enabledelayedexpansion
@@ -21,14 +20,9 @@ set "WINSW_DOWNLOAD_URL=https://github.com/winsw/winsw/releases/download/latest/
 REM Alternative for 32-bit systems:
 REM set "WINSW_DOWNLOAD_URL=https://github.com/winsw/winsw/releases/download/latest/WinSW-x86.exe"
 
-REM Get script directory
+REM Get script directory (will work from any location)
 set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
-set "VENV_DIR=%SCRIPT_DIR%\venv"
-set "VENV_PYTHON=%VENV_DIR%\Scripts\python.exe"
-set "VENV_PIP=%VENV_DIR%\Scripts\pip.exe"
-set "SERVER_DIR=%SCRIPT_DIR%\mcp-server"
-set "REQUIREMENTS=%SCRIPT_DIR%\requirements.txt"
 set "SERVICE_NAME=GNS3-MCP-HTTP"
 set "WINSW_EXE=%SCRIPT_DIR%\%SERVICE_NAME%.exe"
 
@@ -64,10 +58,9 @@ if /i "%COMMAND%"=="restart" goto :check_admin
 if /i "%COMMAND%"=="create-user" goto :check_admin
 if /i "%COMMAND%"=="status" goto :status
 if /i "%COMMAND%"=="run" goto :run_direct
-if /i "%COMMAND%"=="venv-recreate" goto :venv_recreate
 
 echo Unknown command: %COMMAND%
-echo Usage: server.cmd [run^|start^|stop^|restart^|install^|uninstall^|reinstall^|status^|venv-recreate^|create-user]
+echo Usage: server.cmd [run^|start^|stop^|restart^|install^|uninstall^|reinstall^|status^|create-user]
 echo   run            - Run server directly (no service)
 echo   start          - Start Windows service
 echo   stop           - Stop Windows service
@@ -76,7 +69,6 @@ echo   install        - Install Windows service
 echo   uninstall      - Remove Windows service
 echo   reinstall      - Reinstall Windows service
 echo   status         - Show service status
-echo   venv-recreate  - Recreate Python virtual environment
 echo   create-user    - Create service user account (admin required)
 exit /b 1
 
@@ -99,16 +91,33 @@ if /i "%COMMAND%"=="start" goto :service_start
 if /i "%COMMAND%"=="stop" goto :service_stop
 if /i "%COMMAND%"=="restart" goto :service_restart
 if /i "%COMMAND%"=="create-user" goto :create_user
+echo ERROR: Unknown admin command
+exit /b 1
 
 :run_direct
 echo === GNS3 MCP HTTP Server (Direct Mode) ===
 echo.
-call :check_venv
-if %errorlevel% neq 0 exit /b 1
-
-echo Starting server directly (not as service)...
+echo Starting server with uvx (not as service)...
+echo Directory: %SCRIPT_DIR%
+echo.
 cd /d "%SCRIPT_DIR%"
-"%SCRIPT_DIR%\venv\Scripts\gns3-mcp.exe" --transport http --http-port 8100
+
+REM Load environment variables from .env if exists (development mode)
+if exist "%SCRIPT_DIR%\.env" (
+    echo Loading environment variables from .env...
+    for /f "usebackq tokens=1,2 delims==" %%a in ("%SCRIPT_DIR%\.env") do (
+        REM Skip comments and empty lines
+        echo %%a | findstr /r "^#" >nul || (
+            if not "%%a"=="" if not "%%b"=="" set "%%a=%%b"
+        )
+    )
+    echo.
+)
+
+REM Run with uvx via wrapper (handles PATH issues)
+echo Running: run-uvx.cmd --from . gns3-mcp --transport http --http-port 8100
+echo.
+"%SCRIPT_DIR%\run-uvx.cmd" --from . gns3-mcp --transport http --http-port 8100
 exit /b %errorlevel%
 
 :service_start
@@ -136,13 +145,19 @@ exit /b %errorlevel%
 :install
 echo === Installing GNS3 MCP HTTP Service ===
 echo.
-call :check_venv
-if %errorlevel% neq 0 exit /b 1
 
 REM Check if already installed
 "%WINSW_EXE%" status >nul 2>&1
 if %errorlevel% equ 0 (
     echo Service already installed. Use 'reinstall' to update.
+    exit /b 1
+)
+
+REM Check if uvx is available
+where uvx >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ERROR: uvx not found in PATH
+    echo Please install uv: pip install uv
     exit /b 1
 )
 
@@ -204,170 +219,6 @@ exit /b %errorlevel%
 :status
 "%WINSW_EXE%" status
 exit /b %errorlevel%
-
-:check_venv
-REM Check if venv exists
-if not exist "%VENV_DIR%" (
-    echo Venv not found. Creating...
-    python -m venv "%VENV_DIR%"
-    if %errorlevel% neq 0 (
-        echo ERROR: Failed to create venv
-        exit /b 1
-    )
-    echo Venv created successfully
-    set "NEED_INSTALL=1"
-) else (
-    echo Venv found: %VENV_DIR%
-    set "NEED_INSTALL=0"
-)
-
-REM Check if dependencies are installed (check if lib folder in venv has mcp package)
-if not exist "%VENV_DIR%\Lib\site-packages\mcp" set "NEED_INSTALL=1"
-
-REM Install dependencies if needed
-if "%NEED_INSTALL%"=="1" (
-    echo Installing dependencies...
-    "%VENV_PIP%" install -r "%REQUIREMENTS%"
-    if %errorlevel% neq 0 (
-        echo ERROR: Failed to install dependencies
-        exit /b 1
-    )
-    echo Dependencies installed successfully
-
-    REM Install package in editable mode for Windows service
-    echo Installing gns3-mcp package...
-    "%VENV_PIP%" install -e "%SCRIPT_DIR%"
-    if %errorlevel% neq 0 (
-        echo ERROR: Failed to install gns3-mcp package
-        exit /b 1
-    )
-    echo Package installed successfully
-) else (
-    echo Dependencies already installed
-)
-
-REM Show Python version
-echo.
-echo Python: %VENV_PYTHON%
-"%VENV_PYTHON%" --version
-echo.
-
-exit /b 0
-
-:venv_recreate
-echo === Recreating Python Virtual Environment ===
-echo.
-
-REM 1. Remove old venv
-if exist "%VENV_DIR%" (
-    echo [1/5] Removing old venv...
-    rmdir /s /q "%VENV_DIR%" 2>nul
-    if exist "%VENV_DIR%" (
-        echo   Warning: Could not remove some files, retrying...
-        timeout /t 2 /nobreak >nul
-        rmdir /s /q "%VENV_DIR%" 2>nul
-    )
-    if not exist "%VENV_DIR%" (
-        echo   [OK] Old venv removed
-    ) else (
-        echo   [ERROR] Failed to remove venv
-        echo   Try manually: rmdir /s /q "%VENV_DIR%"
-        echo   Or close all programs using Python and retry
-        exit /b 1
-    )
-) else (
-    echo [1/5] No existing venv found
-)
-
-REM 2. Create new venv
-echo [2/5] Creating fresh venv...
-python -m venv "%VENV_DIR%"
-if %errorlevel% neq 0 (
-    echo   [ERROR] Failed to create venv
-    echo   Ensure Python 3.10+ is installed and in PATH
-    exit /b 1
-)
-echo   [OK] Venv created
-
-REM 3. Upgrade pip
-echo [3/5] Upgrading pip...
-"%VENV_PIP%" install --upgrade pip --quiet
-if %errorlevel% equ 0 (
-    echo   [OK] Pip upgraded
-) else (
-    echo   [WARNING] Failed to upgrade pip
-)
-
-REM 4. Install dependencies
-echo [4/5] Installing dependencies from requirements.txt...
-"%VENV_PIP%" install -r "%REQUIREMENTS%"
-if %errorlevel% neq 0 (
-    echo   [ERROR] Failed to install dependencies
-    exit /b 1
-)
-echo   [OK] Dependencies installed
-
-REM 5. Rebuild lib folder for desktop extension
-echo [5/5] Rebuilding lib folder for desktop extension...
-set "LIB_DIR=%SCRIPT_DIR%\mcp-server\lib"
-
-REM Clean old lib folder
-if exist "%LIB_DIR%" (
-    echo   Removing old lib folder...
-    rmdir /s /q "%LIB_DIR%" 2>nul
-)
-
-REM Create fresh lib folder
-mkdir "%LIB_DIR%" 2>nul
-if not exist "%LIB_DIR%" (
-    echo   [ERROR] Failed to create lib folder
-    exit /b 1
-)
-
-REM Install dependencies from requirements.txt (exclude dev dependencies)
-echo   Installing production dependencies to lib folder...
-"%VENV_PIP%" install --target="%LIB_DIR%" --upgrade ^
-    fastmcp>=2.13.0.2 ^
-    fastapi>=0.115.0 ^
-    httpx>=0.28.1 ^
-    telnetlib3>=2.0.8 ^
-    pydantic>=2.12.3 ^
-    python-dotenv>=1.2.1 ^
-    cairosvg>=2.8.2 ^
-    docker>=7.1.0 ^
-    tabulate>=0.9.0 ^
-    --no-warn-script-location ^
-    --quiet
-
-if %errorlevel% neq 0 (
-    echo   [ERROR] Failed to rebuild lib folder
-    exit /b 1
-)
-echo   [OK] Lib folder rebuilt (%LIB_DIR%)
-
-REM 6. Install package in editable mode
-echo [6/6] Installing gns3-mcp package in editable mode...
-"%VENV_PIP%" install -e "%SCRIPT_DIR%" --quiet
-if %errorlevel% neq 0 (
-    echo   [ERROR] Failed to install package
-    exit /b 1
-)
-echo   [OK] Package installed
-
-echo.
-echo === Rebuild Complete ===
-echo.
-echo Venv: %VENV_DIR%
-echo Lib: %LIB_DIR%
-echo Package: gns3-mcp (editable mode)
-echo.
-echo Next steps:
-echo   1. Test CLI: gns3-mcp --version
-echo   2. Test server: .\server.cmd run
-echo   3. Rebuild desktop extension: cd mcp-server ^&^& npx @anthropic-ai/mcpb pack
-echo   4. Reinstall service (if installed): .\server.cmd reinstall
-echo.
-exit /b 0
 
 :create_user
 echo === Creating Service User Account ===

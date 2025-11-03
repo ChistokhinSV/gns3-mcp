@@ -356,17 +356,19 @@ C:\Users\<username>\AppData\Roaming\Claude\logs\mcp-server-GNS3 Lab Controller.l
 
 ### Windows Service Deployment
 
-Run MCP server as a Windows service with WinSW (for HTTP mode):
+Run MCP server as a Windows service with WinSW and uvx (for HTTP mode).
 
-**Setup (one-time):**
+**📖 See [PORTABLE_SETUP.md](PORTABLE_SETUP.md) for detailed instructions.**
+
+**Quick Setup:**
 ```batch
-# 1. Recreate venv with all dependencies (including FastAPI)
-.\server.cmd venv-recreate
+# 1. Install uv (if not already installed)
+pip install uv
 
-# 2. Create service user account (requires Administrator)
-.\server.cmd create-user
+# 2. Set environment variables from .env (requires Administrator)
+.\set-env-vars.ps1
 
-# 3. Install and start service
+# 3. Install and start service (requires Administrator)
 .\server.cmd install
 ```
 
@@ -381,18 +383,23 @@ Run MCP server as a Windows service with WinSW (for HTTP mode):
 .\server.cmd restart
 
 # After code updates
-.\server.cmd venv-recreate    # Rebuild dependencies
 .\server.cmd reinstall        # Reinstall service
 
 # Remove service
 .\server.cmd uninstall
+
+# Development mode (direct run, no service)
+.\server.cmd run
 ```
 
-**Service Details:**
-- **User**: GNS3MCPService (low privilege, not LocalSystem)
+**Key Features:**
+- ✅ **Portable**: Works from any folder location (no hardcoded paths)
+- ✅ **No venv**: Uses uvx for automatic isolation
+- ✅ **Secure**: Credentials in Windows environment variables
+- ✅ **Simple**: Automated setup with PowerShell script
+- **User**: GNS3MCPService (low privilege, optional)
 - **Startup**: Automatic
 - **Logs**: `mcp-http-server.log` and `GNS3-MCP-HTTP.wrapper.log`
-- **Commands**: All integrated into server.cmd
 
 </details>
 
