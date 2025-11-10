@@ -135,17 +135,12 @@ jobs:
             **Option 1: Using uvx (Recommended - Faster)**
             ```powershell
             # Single command - no .env file needed!
-            claude mcp add --transport stdio gns3-mcp `
-              --env GNS3_HOST=localhost `
-              --env GNS3_PORT=80 `
-              --env GNS3_USER=admin `
-              --env GNS3_PASSWORD=your-password `
-              -- uvx gns3-mcp@latest
+            claude mcp add --scope user --transport stdio gns3-mcp --env GNS3_HOST=localhost --env GNS3_PORT=80 --env GNS3_USER=admin --env GNS3_PASSWORD=your-password -- uvx gns3-mcp@latest
             ```
 
             Omit default parameters and it would be:
             ```powershell
-            claude mcp add --transport stdio gns3-mcp --env GNS3_HOST=192.168.1.20 --env GNS3_PASSWORD=your-password -- uvx gns3-mcp@latest
+            claude mcp add --scope user --transport stdio gns3-mcp --env GNS3_HOST=192.168.1.20 --env GNS3_PASSWORD=your-password -- uvx gns3-mcp@latest
             ```
 
             **Option 2: Using pip (Traditional)**
@@ -154,7 +149,8 @@ jobs:
             pip install gns3-mcp
 
             # Step 2: Add to Claude Code with credentials
-            claude mcp add --transport stdio gns3-mcp `
+            claude mcp add --scope user `
+              --transport stdio gns3-mcp `
               --env GNS3_HOST=localhost `
               --env GNS3_PORT=80 `
               --env GNS3_USER=admin `
