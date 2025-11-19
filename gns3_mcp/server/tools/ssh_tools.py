@@ -981,7 +981,8 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
     start_time = time.time()
 
     # Validation: Check all operations first
-    VALID_TYPES = {"send_command", "send_config_set", "read_buffer"}
+    # v0.47.4: Updated to match documented API (configure/command/read/disconnect)
+    VALID_TYPES = {"configure", "command", "read", "disconnect"}
 
     for idx, op in enumerate(operations):
         # Check required fields
@@ -1014,33 +1015,27 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
         op_type = op["type"]
         node_name = op["node_name"]
 
-        if op_type == "send_command":
+        if op_type == "configure":
+            if "device_dict" not in op:
+                return create_error_response(
+                    error=f"Operation {idx} (type='configure') missing required parameter 'device_dict'",
+                    error_code=ErrorCode.INVALID_PARAMETER.value,
+                    details="configure operations require 'device_dict' parameter (Netmiko device config)",
+                    suggested_action="Add 'device_dict' field with device_type, host, username, password",
+                    context={"operation_index": idx, "node_name": node_name},
+                )
+
+        elif op_type == "command":
             if "command" not in op:
                 return create_error_response(
-                    error=f"Operation {idx} (type='send_command') missing required parameter 'command'",
+                    error=f"Operation {idx} (type='command') missing required parameter 'command'",
                     error_code=ErrorCode.INVALID_PARAMETER.value,
-                    details="send_command operations require 'command' parameter",
+                    details="command operations require 'command' parameter (string or list)",
                     suggested_action="Add 'command' field to operation",
                     context={"operation_index": idx, "node_name": node_name},
                 )
 
-        elif op_type == "send_config_set":
-            if "config_commands" not in op:
-                return create_error_response(
-                    error=f"Operation {idx} (type='send_config_set') missing required parameter 'config_commands'",
-                    error_code=ErrorCode.INVALID_PARAMETER.value,
-                    details="send_config_set operations require 'config_commands' parameter (list of strings)",
-                    suggested_action="Add 'config_commands' field to operation",
-                    context={"operation_index": idx, "node_name": node_name},
-                )
-            if not isinstance(op["config_commands"], list):
-                return create_error_response(
-                    error=f"Operation {idx} (type='send_config_set') 'config_commands' must be a list",
-                    error_code=ErrorCode.INVALID_PARAMETER.value,
-                    details=f"Expected list, got {type(op['config_commands']).__name__}",
-                    suggested_action="Provide config_commands as a list of strings",
-                    context={"operation_index": idx, "node_name": node_name},
-                )
+        # disconnect and read have no required parameters beyond node_name
 
     # Validation passed - execute all operations sequentially
     results = []
@@ -1053,30 +1048,48 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
 
         try:
             # Execute operation based on type
-            if op_type == "send_command":
-                result = await ssh_send_command_impl(
+            if op_type == "configure":
+                result = await configure_ssh_impl(
                     app,
                     node_name,
-                    op["command"],
-                    op.get("expect_string"),
-                    op.get("read_timeout", 30.0),
-                    op.get("wait_timeout", 30),
-                    op.get("strip_prompt", True),
-                    op.get("strip_command", True),
+                    op["device_dict"],
+                    op.get("persist", True),
+                    op.get("force", False),
                     op.get("proxy", "host"),
+                    op.get("session_timeout", 1800),
                 )
 
-            elif op_type == "send_config_set":
-                result = await ssh_send_config_set_impl(
-                    app,
-                    node_name,
-                    op["config_commands"],
-                    op.get("wait_timeout", 30),
-                    op.get("exit_config_mode", True),
-                    op.get("proxy", "host"),
-                )
+            elif op_type == "command":
+                # Auto-detect: list = config commands, string = show command
+                command = op["command"]
+                if isinstance(command, list):
+                    # Config commands - use send_config_set
+                    result = await ssh_send_config_set_impl(
+                        app,
+                        node_name,
+                        command,
+                        op.get("wait_timeout", 30),
+                        op.get("exit_config_mode", True),
+                        op.get("proxy", "host"),
+                    )
+                else:
+                    # Show command - use send_command
+                    result = await ssh_send_command_impl(
+                        app,
+                        node_name,
+                        command,
+                        op.get("expect_string"),
+                        op.get("read_timeout", 30.0),
+                        op.get("wait_timeout", 30),
+                        op.get("strip_prompt", True),
+                        op.get("strip_command", True),
+                        op.get("proxy", "host"),
+                    )
 
-            elif op_type == "read_buffer":
+            elif op_type == "disconnect":
+                result = await ssh_disconnect_impl(app, node_name)
+
+            elif op_type == "read":
                 result = await ssh_read_buffer_impl(
                     app,
                     node_name,
