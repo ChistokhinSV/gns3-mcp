@@ -294,11 +294,11 @@ Once you've discovered the topology:
 - `projects://{id}/drawings/` - Visual annotations
 
 **Tools (actions):**
-- `open_project(name)` - Open a project
-- `set_node(...)` - Modify node properties or control state
-- `set_connection(...)` - Manage links between nodes
-- `console_send(node, data)` - Access device console
-- `ssh_configure(node, device_dict)` - Establish SSH session
+- `project(action="open", name=...)` - Open a project
+- `node(action="set", node_name=..., ...)` - Modify node properties or control state
+- `link(connections=[...])` - Manage links between nodes (batch)
+- `console(operations=[{"type": "send", ...}])` - Access device console (batch)
+- `ssh(operations=[{"type": "configure", ...}])` - Establish SSH session (batch)
 - `export_topology_diagram(...)` - Create visual diagram
 
 **Typical Workflow After Discovery:**

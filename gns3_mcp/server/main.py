@@ -27,7 +27,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any, Dict, List, Literal
 
 from console_manager import ConsoleManager
 from export_tools import (
@@ -50,11 +50,6 @@ from prompts import (
 from resources import ResourceManager
 from tools.console_tools import (
     console_batch_impl,
-    disconnect_console_impl,
-    read_console_impl,
-    send_and_wait_console_impl,
-    send_console_impl,
-    send_keystroke_impl,
 )
 from tools.drawing_tools import (
     create_drawing_impl,
@@ -915,102 +910,90 @@ async def node_setup(
 
 
 @mcp.tool(
-    name="check_gns3_connection",
-    tags={"connection", "diagnostics", "readonly"},
+    name="gns3_connection",
+    tags={"connection", "management", "diagnostics"},
 )
-async def check_gns3_connection(ctx: Context) -> str:
-    """Check GNS3 server connection status
+async def gns3_connection(
+    ctx: Context,
+    action: Annotated[
+        Literal["check", "retry"], "Action: 'check' (check status) or 'retry' (force reconnect)"
+    ],
+) -> str:
+    """Manage GNS3 server connection
 
-    Returns connection state, error details if disconnected, and last authentication attempt time.
-    Use this before running operations that require GNS3 connectivity.
+    CRUD-style connection management tool.
+
+    Actions:
+        - check: Check connection status (connection state, error details, last attempt time)
+        - retry: Force immediate reconnection (bypasses exponential backoff)
+
+    Args:
+        action: Connection action to perform
 
     Returns:
-        JSON with connection status:
-        {
-            "connected": bool,
-            "server": str (GNS3 server URL),
-            "error": str | null (error details if disconnected),
-            "last_attempt": str | null (timestamp of last auth attempt)
-        }
+        JSON with connection status or reconnection result
 
-    Example:
-        >>> check_gns3_connection()
+    Examples:
+        # Check connection status
+        >>> gns3_connection(action="check")
         {"connected": false, "server": "http://192.168.1.20:80",
          "error": "Connection timeout", "last_attempt": "08:15:42 30.10.2025"}
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    gns3 = app.gns3
 
-    status = {
-        "connected": gns3.is_connected,
-        "server": gns3.base_url,
-        "error": gns3.connection_error,
-        "last_attempt": (
-            gns3.last_auth_attempt.strftime("%H:%M:%S %d.%m.%Y") if gns3.last_auth_attempt else None
-        ),
-    }
-
-    return json.dumps(status, indent=2)
-
-
-@mcp.tool(
-    name="retry_gns3_connection",
-    tags={"connection", "management"},
-)
-async def retry_gns3_connection(ctx: Context) -> str:
-    """Force immediate GNS3 reconnection attempt
-
-    Bypasses exponential backoff timer and attempts to reconnect immediately.
-    Use this after fixing GNS3 server issues or network connectivity.
-
-    Returns:
-        JSON with reconnection result:
-        {
-            "success": bool,
-            "message": str (result details),
-            "server": str (GNS3 server URL),
-            "error": str | null (error details if failed)
-        }
-
-    Example:
-        >>> retry_gns3_connection()
+        # Force reconnection
+        >>> gns3_connection(action="retry")
         {"success": true, "message": "Successfully reconnected to GNS3 server",
          "server": "http://192.168.1.20:80", "error": null}
     """
     app: AppContext = ctx.request_context.lifespan_context
     gns3 = app.gns3
 
-    logger.info("Manual reconnection attempt triggered")
-
-    # Attempt authentication with 5-second timeout
-    success = await gns3.authenticate(retry=False, retry_interval=5, max_retries=1)
-
-    if success:
-        # Try to detect opened project
-        try:
-            projects = await gns3.get_projects()
-            opened = [p for p in projects if p.get("status") == "opened"]
-            if opened:
-                app.current_project_id = opened[0]["project_id"]
-                logger.info(f"Auto-detected opened project: {opened[0]['name']}")
-        except Exception as e:
-            logger.warning(f"Failed to detect opened project: {e}")
-
-        result = {
-            "success": True,
-            "message": "Successfully reconnected to GNS3 server",
-            "server": gns3.base_url,
-            "error": None,
-        }
-    else:
-        result = {
-            "success": False,
-            "message": "Failed to reconnect to GNS3 server",
+    if action == "check":
+        # Check connection status
+        status = {
+            "connected": gns3.is_connected,
             "server": gns3.base_url,
             "error": gns3.connection_error,
+            "last_attempt": (
+                gns3.last_auth_attempt.strftime("%H:%M:%S %d.%m.%Y")
+                if gns3.last_auth_attempt
+                else None
+            ),
         }
+        return json.dumps(status, indent=2)
 
-    return json.dumps(result, indent=2)
+    elif action == "retry":
+        # Force immediate reconnection
+        logger.info("Manual reconnection attempt triggered")
+
+        # Attempt authentication with 5-second timeout
+        success = await gns3.authenticate(retry=False, retry_interval=5, max_retries=1)
+
+        if success:
+            # Try to detect opened project
+            try:
+                projects = await gns3.get_projects()
+                opened = [p for p in projects if p.get("status") == "opened"]
+                if opened:
+                    app.current_project_id = opened[0]["project_id"]
+                    logger.info(f"Auto-detected opened project: {opened[0]['name']}")
+            except Exception as e:
+                logger.warning(f"Failed to detect opened project: {e}")
+
+            result = {
+                "success": True,
+                "message": "Successfully reconnected to GNS3 server",
+                "server": gns3.base_url,
+                "error": None,
+            }
+        else:
+            result = {
+                "success": False,
+                "message": "Failed to reconnect to GNS3 server",
+                "server": gns3.base_url,
+                "error": gns3.connection_error,
+            }
+
+        return json.dumps(result, indent=2)
 
 
 # ============================================================================
@@ -1019,79 +1002,85 @@ async def retry_gns3_connection(ctx: Context) -> str:
 
 
 @mcp.tool(
-    name="open_project",
+    name="project",
     tags={"project", "management", "idempotent"},
     annotations={"idempotent": True},
 )
-async def open_project(
+async def project(
     ctx: Context,
-    project_name: Annotated[str, "Name of the project to open"],
+    action: Annotated[Literal["open", "create", "close"], "Action: 'open', 'create', or 'close'"],
+    name: Annotated[str | None, "Project name (required for 'open' and 'create')"] = None,
+    path: Annotated[str | None, "Optional project directory path (for 'create')"] = None,
 ) -> str:
-    """Open a GNS3 project by name
+    """Manage GNS3 projects
 
-    Returns: JSON with ProjectInfo for opened project
+    CRUD-style project management tool.
+
+    Actions:
+        - open: Open a project by name
+        - create: Create a new project and auto-open it
+        - close: Close the currently opened project
+
+    Args:
+        action: Project action to perform
+        name: Project name (required for open/create)
+        path: Optional project directory path (create only)
+
+    Returns:
+        JSON with ProjectInfo for created project
+
+    Examples:
+        # Open existing project
+        >>> project(action="open", name="My Lab")
+
+        # Create new project
+        >>> project(action="create", name="Production Lab")
+        >>> project(action="create", name="Test Lab", path="/opt/gns3/projects")
+
+        # Close current project
+        >>> project(action="close")
 
     To list available projects:
         list_projects()                          # Convenience tool
         query_resource("projects://")            # Universal resource query
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await open_project_impl(app, project_name)
+
+    if action == "open":
+        if not name:
+            raise ValueError("name parameter is required for 'open' action")
+        return await open_project_impl(app, name)
+
+    elif action == "create":
+        if not name:
+            raise ValueError("name parameter is required for 'create' action")
+        return await create_project_impl(app, name, path)
+
+    elif action == "close":
+        return await close_project_impl(app)
 
 
 @mcp.tool(
-    name="create_project",
-    tags={"project", "management", "creates-resource", "idempotent"},
-    annotations={"idempotent": True, "creates_resource": True},
-)
-async def create_project(
-    ctx: Context,
-    name: Annotated[str, "Project name"],
-    path: Annotated[str | None, "Optional project directory path"] = None,
-) -> str:
-    """Create a new GNS3 project and auto-open it
-
-    Returns: JSON with ProjectInfo for created project
-
-    Example:
-        >>> create_project("My Lab")
-        >>> create_project("Production Lab", "/opt/gns3/projects")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await create_project_impl(app, name, path)
-
-
-@mcp.tool(
-    name="close_project",
-    tags={"project", "management", "idempotent"},
-    annotations={"idempotent": True},
-)
-async def close_project(ctx: Context) -> str:
-    """Close the currently opened project
-
-    Returns: JSON with success message
-
-    Example:
-        >>> close_project()
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await close_project_impl(app)
-
-
-@mcp.tool(
-    name="set_node_properties",
+    name="node",
     tags={"node", "topology", "modifies-state", "bulk", "idempotent"},
     annotations={"idempotent": True},
 )
-async def set_node(
+async def node(
     ctx: Context,
-    node_name: Annotated[
-        str,
-        "Node name, wildcard pattern ('*', 'Router*', 'R[123]'), or JSON array ('[\"R1\",\"R2\"]')",
-    ],
     action: Annotated[
+        Literal["create", "delete", "set"],
+        "Action: 'create' (new node), 'delete' (remove node), or 'set' (configure/control node)",
+    ],
+    node_name: Annotated[
         str | None,
-        "Node action: 'start' (boot node), 'stop' (shutdown), 'suspend' (pause), 'reload' (reboot), 'restart' (stop then start)",
+        "Node name, wildcard pattern ('*', 'Router*', 'R[123]'), or JSON array ('[\"R1\",\"R2\"]'). Required for 'delete' and 'set'",
+    ] = None,
+    template_name: Annotated[
+        str | None, "Template name (required for 'create', e.g., 'Alpine Linux', 'Cisco IOSv')"
+    ] = None,
+    state_action: Annotated[
+        str | None,
+        "State control action for 'set': 'start' (boot), 'stop' (shutdown), 'suspend' (pause), 'reload' (reboot), 'restart' (stop then start)",
     ] = None,
     x: Annotated[int | None, "X coordinate (top-left corner of node icon)"] = None,
     y: Annotated[int | None, "Y coordinate (top-left corner of node icon)"] = None,
@@ -1104,45 +1093,58 @@ async def set_node(
     hdd_disk_image: Annotated[str | None, "HDD disk image path (QEMU nodes only)"] = None,
     adapters: Annotated[int | None, "Network adapters count (QEMU nodes only)"] = None,
     console_type: Annotated[str | None, "Console type: telnet/vnc/spice"] = None,
+    compute_id: Annotated[str, "Compute server ID (for 'create')"] = "local",
+    properties: Annotated[
+        Dict[str, Any] | None, "Override template properties for 'create' (e.g., {'ram': 512})"
+    ] = None,
     parallel: Annotated[
         bool, "Execute operations concurrently (default: True for start/stop/suspend)"
     ] = True,
 ) -> str:
-    """Configure node properties and/or control node state
+    """Manage GNS3 nodes (CRUD operations)
 
+    v0.47.0: CRUD-style consolidation of create_node, delete_node, and set_node.
     v0.40.0: Enhanced with wildcard and bulk operation support.
 
-    Wildcard Patterns:
-    - Single node: "Router1"
-    - All nodes: "*"
-    - Prefix match: "Router*" (matches Router1, Router2, RouterCore)
-    - Suffix match: "*-Core" (matches Router-Core, Switch-Core)
-    - Character class: "R[123]" (matches R1, R2, R3)
-    - JSON array: '["Router1", "Router2", "Switch1"]'
+    Actions:
+        - create: Create new node from template at specified coordinates
+        - delete: Delete node from project (WARNING: destructive, cannot be undone)
+        - set: Configure node properties and/or control state (supports wildcards/bulk)
+
+    Wildcard Patterns (for 'set' and 'delete'):
+        - Single node: "Router1"
+        - All nodes: "*"
+        - Prefix match: "Router*" (matches Router1, Router2, RouterCore)
+        - Suffix match: "*-Core" (matches Router-Core, Switch-Core)
+        - Character class: "R[123]" (matches R1, R2, R3)
+        - JSON array: '["Router1", "Router2", "Switch1"]'
 
     Validation Rules:
-    - name parameter requires node to be stopped
-    - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU nodes only
-    - ports parameter applies to ethernet_switch nodes only
-    - action values: start, stop, suspend, reload, restart
-    - restart action: stops node (with retry logic), waits for confirmed stop, then starts
+        - name parameter requires node to be stopped
+        - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU nodes only
+        - ports parameter applies to ethernet_switch nodes only
+        - state_action values: start, stop, suspend, reload, restart
 
     Returns:
-        Single node: Status message (backward compatible)
+        Single node: Status message
         Multiple nodes: BatchOperationResult JSON with per-node success/failure
 
     Examples:
+        # Create new node
+        >>> node(action="create", template_name="Alpine Linux", x=100, y=200)
+        >>> node(action="create", template_name="Cisco IOSv", x=300, y=400, node_name="R1", properties={"ram": 1024})
+
+        # Delete node
+        >>> node(action="delete", node_name="Router1")
+
         # Start all nodes
-        set_node_properties("*", action="start")
+        >>> node(action="set", node_name="*", state_action="start")
 
         # Stop all routers
-        set_node_properties("Router*", action="stop")
+        >>> node(action="set", node_name="Router*", state_action="stop")
 
-        # Start specific nodes
-        set_node_properties('["R1", "R2", "R3"]', action="start")
-
-        # Position all switches
-        set_node_properties("Switch*", x=100, y=200)
+        # Configure node properties
+        >>> node(action="set", node_name="R1", x=100, y=200, ram=2048)
 
     To query node information:
         list_nodes(project_id)                       # Convenience tool
@@ -1150,248 +1152,66 @@ async def set_node(
         get_topology(project_id)                     # Full topology with links
     """
     app: AppContext = ctx.request_context.lifespan_context
-    return await set_node_impl(
-        app,
-        node_name,
-        action,
-        x,
-        y,
-        z,
-        locked,
-        ports,
-        name,
-        ram,
-        cpus,
-        hdd_disk_image,
-        adapters,
-        console_type,
-        ctx=ctx,  # v0.39.0: Pass Context for progress notifications
-        parallel=parallel,  # v0.40.0: Parallel execution support
-    )
 
+    if action == "create":
+        # Create new node from template
+        if not template_name:
+            raise ValueError("template_name is required for 'create' action")
+        if x is None or y is None:
+            raise ValueError("x and y coordinates are required for 'create' action")
 
-@mcp.tool(name="send_console_data", tags={"console", "device-access", "modifies-state"})
-async def console_send(
-    ctx: Context,
-    node_name: Annotated[str, "Name of the node (e.g., 'Router1')"],
-    data: Annotated[str, "Data to send - include newline for commands (e.g., 'enable\\n')"],
-    raw: Annotated[bool, "Send data without escape sequence processing"] = False,
-) -> str:
-    """Send data to console (auto-connects if needed)
+        error = await validate_current_project(app)
+        if error:
+            return error
 
-    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
-    - Initial device configuration (enabling SSH, creating users)
-    - Troubleshooting when SSH is unavailable
-    - Devices without SSH support (VPCS, simple switches)
+        return await create_node_impl(app, template_name, x, y, node_name, compute_id, properties)
 
-    For automation workflows, use ssh_command() which provides better
-    reliability, error handling, and automatic prompt detection.
+    elif action == "delete":
+        # Delete node
+        if not node_name:
+            raise ValueError("node_name is required for 'delete' action")
 
-    Sends data immediately to console without waiting for response.
-    For interactive workflows, use console_read() after sending to verify output.
+        error = await validate_current_project(app)
+        if error:
+            return error
 
-    Timing Considerations:
-    - Console output appears in background buffer (read via console_read)
-    - Allow 0.5-2 seconds after send before reading for command processing
-    - Interactive prompts (login, password) may need 1-3 seconds to appear
-    - Boot/initialization sequences may take 30-60 seconds
+        return await delete_node_impl(app, node_name)
 
-    Auto-connect Behavior:
-    - First send/read automatically connects to console (no manual connect needed)
-    - Connection persists until console_disconnect() or 30-minute timeout
-    - Check connection state with resource gns3://sessions/console/{node}
+    elif action == "set":
+        # Configure node properties and/or control state
+        if not node_name:
+            raise ValueError("node_name is required for 'set' action")
 
-    Escape Sequence Processing:
-    - By default, processes common escape sequences (\n, \r, \t, \x1b)
-    - Use raw=True to send data without processing (for binary data)
-
-    Returns: "Sent successfully" or error message
-
-    Example - Wake console and check state:
-        console_send("R1", "\n")
-        await 1 second
-        console_read("R1", mode="diff")  # See what prompt appeared
-
-    To query console session status:
-        query_resource("sessions://console/")        # All console sessions
-        query_resource("sessions://console/R1")      # Specific session details
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await send_console_impl(app, node_name, data, raw)
-
-
-@mcp.tool(
-    name="read_console_output",
-    tags={"console", "device-access", "read-only"},
-    annotations={"read_only": True},
-)
-async def console_read(
-    ctx: Context,
-    node_name: Annotated[str, "Name of the node"],
-    mode: Annotated[
-        str,
-        "Read mode: 'diff' (only new output since last read), 'last_page' (current screen/prompt), 'num_pages' (paginated view), 'all' (entire buffer)",
-    ] = "diff",
-    pages: Annotated[int, "Number of pages (only with mode='num_pages')"] = 1,
-    pattern: Annotated[str | None, "Regex pattern to filter output"] = None,
-    case_insensitive: Annotated[bool, "Case-insensitive matching (grep -i)"] = False,
-    invert: Annotated[bool, "Invert match (grep -v)"] = False,
-    before: Annotated[int, "Context lines before match (grep -B)"] = 0,
-    after: Annotated[int, "Context lines after match (grep -A)"] = 0,
-    context: Annotated[int, "Context lines around match (grep -C)"] = 0,
-) -> str:
-    """Read console output with optional grep filtering (auto-connects if needed)
-
-    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
-    - Initial device configuration (enabling SSH, creating users)
-    - Troubleshooting when SSH is unavailable
-    - Devices without SSH support
-
-    For automation workflows, use ssh_command() which provides better
-    reliability and structured output.
-
-    Reads accumulated output from background console buffer. Output accumulates
-    while device runs - this function retrieves it without blocking.
-
-    Buffer Behavior:
-    - Background task continuously reads console into 10MB buffer
-    - Diff mode (DEFAULT): Returns only NEW output since last read
-    - Last page mode: Returns last ~25 lines of buffer
-    - Num pages mode: Returns last N pages (~25 lines per page)
-    - All mode: Returns ALL console output since connection (WARNING: May produce >25000 tokens!)
-    - Read position advances with each diff mode read
-
-    Grep Parameters (optional):
-    - pattern: Regex pattern to filter output (returns matching lines with line numbers)
-    - case_insensitive: Ignore case when matching (grep -i)
-    - invert: Return non-matching lines (grep -v)
-    - before/after/context: Context lines around matches (grep -B/-A/-C)
-
-    Returns: Console output (filtered if pattern provided)
-
-    Example - Grep for errors:
-        console_read("R1", mode="all", pattern="error", case_insensitive=True)
-
-    Example - Find interface with context:
-        console_read("R1", mode="diff", pattern="GigabitEthernet", context=2)
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await read_console_impl(
-        app, node_name, mode, pages, pattern, case_insensitive, invert, before, after, context
-    )
-
-
-@mcp.tool(
-    name="disconnect_console",
-    tags={"console", "device-access", "idempotent"},
-    annotations={"idempotent": True},
-)
-async def console_disconnect(ctx: Context, node_name: Annotated[str, "Name of the node"]) -> str:
-    """Disconnect console session
-
-    Returns: JSON with status
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await disconnect_console_impl(app, node_name)
-
-
-@mcp.tool(name="send_console_keystroke", tags={"console", "device-access", "modifies-state"})
-async def console_keystroke(
-    ctx: Context,
-    node_name: Annotated[str, "Name of the node"],
-    key: Annotated[str, "Special key to send (e.g., 'up', 'enter', 'ctrl_c')"],
-) -> str:
-    """Send special keystroke to console (auto-connects if needed)
-
-    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
-    - Initial device configuration (enabling SSH, creating users)
-    - Troubleshooting when SSH is unavailable
-    - Devices without SSH support (VPCS, simple switches)
-
-    Sends special keys like arrows, function keys, control sequences for
-    navigating menus, editing in vim, or TUI applications.
-
-    Supported Keys:
-    - Navigation: "up", "down", "left", "right", "home", "end", "pageup", "pagedown"
-    - Editing: "enter", "backspace", "delete", "tab", "esc"
-    - Control: "ctrl_c", "ctrl_d", "ctrl_z", "ctrl_a", "ctrl_e"
-    - Function: "f1" through "f12"
-
-    Returns: "Sent successfully" or error message
-
-    Example - Navigate menu:
-        send_keystroke("R1", "down")
-        send_keystroke("R1", "down")
-        send_keystroke("R1", "enter")
-
-    Example - Exit vim:
-        send_keystroke("R1", "esc")
-        send_console("R1", ":wq\n")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await send_keystroke_impl(app, node_name, key)
-
-
-@mcp.tool(name="send_console_command_and_wait", tags={"console", "device-access", "automation"})
-async def console_send_and_wait(
-    ctx: Context,
-    node_name: Annotated[str, "Name of the node"],
-    command: Annotated[str, "Command to send (include \\n for newline)"],
-    wait_pattern: Annotated[str | None, "Regex pattern to wait for (e.g., 'Router#')"] = None,
-    timeout: Annotated[int, "Maximum seconds to wait for pattern"] = 30,
-    raw: Annotated[bool, "Send command without escape sequence processing"] = False,
-) -> str:
-    """Send command and wait for prompt pattern with timeout
-
-    IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
-    - Initial device configuration (enabling SSH, creating users)
-    - Troubleshooting when SSH is unavailable
-    - Devices without SSH support (VPCS, simple switches)
-
-    Combines send + wait + read into single operation. Useful for interactive
-    workflows where you need to verify prompt before proceeding.
-
-    BEST PRACTICE: Check the prompt first!
-    1. Send "\\n" with console_send() to wake the console
-    2. Use console_read() to see the current prompt (e.g., "Router#", "[admin@MikroTik] >")
-    3. Use that exact prompt pattern in wait_pattern parameter
-    4. This ensures you wait for the right prompt and don't miss command output
-
-    Returns:
-        JSON with output, pattern_found, timeout_occurred, wait_time
-
-    Examples:
-        # Step 1: Check the prompt first
-        console_send("R1", "\\n")
-        output = console_read("R1")  # Shows "Router#"
-
-        # Step 2: Use that prompt pattern
-        result = console_send_and_wait(
-            "R1",
-            "show ip interface brief\\n",
-            wait_pattern="Router#",  # Wait for exact prompt
-            timeout=10
+        return await set_node_impl(
+            app,
+            node_name,
+            state_action,  # Renamed from 'action' to 'state_action'
+            x,
+            y,
+            z,
+            locked,
+            ports,
+            name,
+            ram,
+            cpus,
+            hdd_disk_image,
+            adapters,
+            console_type,
+            ctx=ctx,
+            parallel=parallel,
         )
-        # Returns when "Router#" appears - command is complete
-
-        # Wait for login prompt:
-        console_send_and_wait("R1", "\\n", wait_pattern="Login:", timeout=10)
-
-        # No pattern (just wait 2s):
-        console_send_and_wait("R1", "enable\\n")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await send_and_wait_console_impl(app, node_name, command, wait_pattern, timeout, raw)
 
 
-@mcp.tool(name="console_batch_operations", tags={"console", "device-access", "bulk", "automation"})
-async def console_batch(
+@mcp.tool(name="console", tags={"console", "device-access", "bulk", "automation"})
+async def console(
     ctx: Context,
     operations: Annotated[
         List[Dict[str, Any]], "List of console operations (send/send_and_wait/read/keystroke)"
     ],
 ) -> str:
-    """Execute multiple console operations in batch with validation
+    """Execute console operations (BATCH-ONLY)
+
+    v0.47.0: Batch-only console tool. Individual console tools removed (aggressive consolidation).
 
     IMPORTANT: Prefer SSH tools when available! Console tools are primarily for:
     - Initial device configuration (enabling SSH, creating users)
@@ -1467,37 +1287,37 @@ async def console_batch(
 
     Examples:
         # Multiple commands on one node:
-        console_batch([
-            {"type": "send_and_wait", "node_name": "R1", "command": "show version\\n", "wait_pattern": "Router#"},
-            {"type": "send_and_wait", "node_name": "R1", "command": "show ip route\\n", "wait_pattern": "Router#"},
-            {"type": "read", "node_name": "R1", "mode": "diff"}
-        ])
+        >>> console(operations=[
+        ...     {"type": "send_and_wait", "node_name": "R1", "command": "show version\\n", "wait_pattern": "Router#"},
+        ...     {"type": "send_and_wait", "node_name": "R1", "command": "show ip route\\n", "wait_pattern": "Router#"},
+        ...     {"type": "read", "node_name": "R1", "mode": "diff"}
+        ... ])
 
         # Same command on multiple nodes:
-        console_batch([
-            {"type": "send_and_wait", "node_name": "R1", "command": "show ip int brief\\n", "wait_pattern": "#"},
-            {"type": "send_and_wait", "node_name": "R2", "command": "show ip int brief\\n", "wait_pattern": "#"},
-            {"type": "send_and_wait", "node_name": "R3", "command": "show ip int brief\\n", "wait_pattern": "#"}
-        ])
+        >>> console(operations=[
+        ...     {"type": "send_and_wait", "node_name": "R1", "command": "show ip int brief\\n", "wait_pattern": "#"},
+        ...     {"type": "send_and_wait", "node_name": "R2", "command": "show ip int brief\\n", "wait_pattern": "#"},
+        ...     {"type": "send_and_wait", "node_name": "R3", "command": "show ip int brief\\n", "wait_pattern": "#"}
+        ... ])
 
         # Mixed operations:
-        console_batch([
-            {"type": "send", "node_name": "R1", "data": "\\n"},  // Wake console
-            {"type": "read", "node_name": "R1", "mode": "last_page"},  // Check prompt
-            {"type": "send_and_wait", "node_name": "R1", "command": "show version\\n", "wait_pattern": "#"},
-            {"type": "keystroke", "node_name": "R1", "key": "ctrl_c"}  // Cancel if needed
-        ])
+        >>> console(operations=[
+        ...     {"type": "send", "node_name": "R1", "data": "\\n"},  # Wake console
+        ...     {"type": "read", "node_name": "R1", "mode": "last_page"},  # Check prompt
+        ...     {"type": "send_and_wait", "node_name": "R1", "command": "show version\\n", "wait_pattern": "#"},
+        ...     {"type": "keystroke", "node_name": "R1", "key": "ctrl_c"}  # Cancel if needed
+        ... ])
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await console_batch_impl(app, operations)
 
 
 @mcp.tool(
-    name="set_network_connections",
+    name="link",
     tags={"network", "topology", "bulk", "modifies-state"},
     annotations={"modifies_topology": True},
 )
-async def set_connection(
+async def link(
     ctx: Context,
     connections: Annotated[
         List[Dict[str, Any]], "List of connection operations (connect/disconnect)"
@@ -1505,18 +1325,35 @@ async def set_connection(
 ) -> str:
     """Manage network connections (links) in batch with two-phase validation
 
+    v0.47.0: Renamed from set_network_connections to link (CRUD consolidation).
+
     Two-phase execution prevents partial topology changes:
     1. VALIDATE ALL operations (check nodes exist, ports free, adapters valid)
     2. EXECUTE ALL operations (only if all valid - atomic)
 
     Workflow:
-        1. Call get_links() to see current topology
+        1. Use query_resource("links://{project_id}/") to see current topology
         2. Identify link IDs to disconnect (if needed)
-        3. Call set_connection() with disconnect + connect operations
+        3. Call link() with disconnect + connect operations
 
     Connection Operations:
         Connect: {action: "connect", node_a, node_b, port_a, port_b, adapter_a, adapter_b}
         Disconnect: {action: "disconnect", link_id}
+
+    Examples:
+        # Connect two nodes
+        >>> link(connections=[{
+        ...     "action": "connect",
+        ...     "node_a": "Router1",
+        ...     "node_b": "Router2",
+        ...     "port_a": 0,
+        ...     "port_b": 0,
+        ...     "adapter_a": 0,
+        ...     "adapter_b": 0
+        ... }])
+
+        # Disconnect link
+        >>> link(connections=[{"action": "disconnect", "link_id": "abc123"}])
 
     Returns: JSON with OperationResult (completed and failed operations)
     """
@@ -1530,251 +1367,124 @@ async def set_connection(
 
 
 @mcp.tool(
-    name="create_node",
-    tags={"node", "topology", "creates-resource"},
-    annotations={"creates_resource": True, "modifies_topology": True},
+    name="node_file",
+    tags={"node", "docker", "modifies-state"},
 )
-async def create_node(
+async def node_file(
     ctx: Context,
-    template_name: Annotated[str, "Template name (e.g., 'Alpine Linux', 'Cisco IOSv')"],
-    x: Annotated[int, "X coordinate (horizontal position, left edge of icon)"],
-    y: Annotated[int, "Y coordinate (vertical position, top edge of icon)"],
-    node_name: Annotated[
-        str | None, "Custom name (defaults to template name with auto-number)"
+    action: Annotated[
+        Literal["read", "write", "configure_network"],
+        "Action: 'read' (get file), 'write' (update file), or 'configure_network' (network config workflow)",
+    ],
+    node_name: Annotated[str, "Name of the Docker node"],
+    file_path: Annotated[
+        str | None, "Path relative to container root (required for 'read' and 'write')"
     ] = None,
-    compute_id: Annotated[str, "Compute server ID"] = "local",
-    properties: Annotated[
-        Dict[str, Any] | None, "Override template properties (e.g., {'ram': 512})"
+    content: Annotated[str | None, "File contents (required for 'write')"] = None,
+    interfaces: Annotated[
+        list | None, "List of interface configs (required for 'configure_network')"
     ] = None,
 ) -> str:
-    """Create a new node from template at specified coordinates
+    """Manage Docker node files (CRUD operations)
 
-    Creates a node from a GNS3 template and places it at the given x/y position.
-    Optional properties can override template defaults.
+    v0.47.0: CRUD-style consolidation of get_node_file, write_node_file, and configure_node_network.
 
-    Returns: JSON with created NodeInfo
+    Actions:
+        - read: Read file from Docker node filesystem
+        - write: Write file to Docker node filesystem (WARNING: does NOT restart node)
+        - configure_network: Configure network interfaces (full workflow: write + restart)
 
-    Example:
-        >>> create_node("Alpine Linux", 100, 200)
-        >>> create_node("Cisco IOSv", 300, 400, node_name="R1", properties={"ram": 1024})
-        >>> create_node("Ethernet switch", 500, 600, node_name="SW1")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await create_node_impl(app, template_name, x, y, node_name, compute_id, properties)
-
-
-@mcp.tool(
-    name="delete_node",
-    tags={"node", "topology", "destructive", "idempotent"},
-    annotations={"destructive": True, "idempotent": True, "modifies_topology": True},
-)
-async def delete_node(ctx: Context, node_name: Annotated[str, "Name of the node to delete"]) -> str:
-    """Delete a node from the current project
-
-    WARNING: This operation is destructive and cannot be undone.
-
-    Returns: JSON confirmation message
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await delete_node_impl(app, node_name)
-
-
-@mcp.tool(name="get_node_file", tags={"node", "read-only"})
-async def get_node_file(
-    ctx: Context,
-    node_name: Annotated[str, "Name of the Docker node"],
-    file_path: Annotated[str, "Path relative to container root (e.g., 'etc/network/interfaces')"],
-) -> str:
-    """Read file from Docker node filesystem
-
-    Allows reading files from Docker node containers. Useful for inspecting
-    configuration files, logs, or other data inside containers.
-
-    Returns: JSON with file contents
-
-    Example:
-        get_node_file("A-PROXY", "etc/network/interfaces")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await get_node_file_impl(app, node_name, file_path)
-
-
-@mcp.tool(name="write_node_file", tags={"node", "modifies-state"})
-async def write_node_file(
-    ctx: Context,
-    node_name: Annotated[str, "Name of the Docker node"],
-    file_path: Annotated[str, "Path relative to container root (e.g., 'etc/network/interfaces')"],
-    content: Annotated[str, "File contents to write"],
-) -> str:
-    """Write file to Docker node filesystem
-
-    Allows writing configuration files or other data to Docker node containers.
-
-    IMPORTANT: File changes do NOT automatically restart the node or apply configuration.
-    For network configuration, use configure_node_network() which handles the full workflow.
-
-    Returns: JSON confirmation message
-
-    Example:
-        write_node_file("A-PROXY", "etc/network/interfaces", "auto eth0\\niface eth0 inet dhcp")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await write_node_file_impl(app, node_name, file_path, content)
-
-
-@mcp.tool(
-    name="configure_node_network",
-    tags={"network", "node", "modifies-state"},
-    annotations={"modifies_topology": True},
-)
-async def configure_node_network(
-    ctx: Context,
-    node_name: Annotated[str, "Name of the Docker node"],
-    interfaces: Annotated[list, "List of interface configs (static/DHCP)"],
-) -> str:
-    """Configure network interfaces on Docker node
-
-    Generates /etc/network/interfaces file and restarts the node to apply configuration.
-    Supports both static IP and DHCP configuration for multiple interfaces (eth0, eth1, etc.).
-
-    This is the recommended way to configure network settings on Docker nodes, as it handles
-    the complete workflow: write config file → restart node → apply configuration.
-
-    Interface Configuration:
-        Static mode: {name, mode: "static", address, netmask, gateway?, dns?}
-        DHCP mode: {name, mode: "dhcp", dns?}
-
-    Returns: JSON confirmation with configured interfaces
-
-    Examples:
-        # Static IP configuration
-        configure_node_network("A-PROXY", [{
-            "name": "eth0",
-            "mode": "static",
-            "address": "10.199.0.254",
-            "netmask": "255.255.255.0",
-            "gateway": "10.199.0.1"
-        }])
-
-        # DHCP configuration
-        configure_node_network("A-PROXY", [{
-            "name": "eth0",
-            "mode": "dhcp"
-        }])
-
-        # Multiple interfaces
-        configure_node_network("A-PROXY", [
-            {
-                "name": "eth0",
-                "mode": "static",
-                "address": "10.199.0.254",
-                "netmask": "255.255.255.0",
-                "gateway": "10.199.0.1"
-            },
-            {
-                "name": "eth1",
-                "mode": "dhcp"
-            }
-        ])
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await configure_node_network_impl(app, node_name, interfaces)
-
-
-@mcp.tool(name="get_project_readme", tags={"documentation", "project", "read-only"})
-async def get_project_readme(
-    ctx: Context,
-    project_id: Annotated[str | None, "Project ID (uses current project if not specified)"] = None,
-) -> str:
-    """Get project README/notes
-
-    Returns project documentation in markdown format including:
-    - IP addressing schemes and VLANs
-    - Node credentials and details
-    - Architecture notes and diagrams
-    - Configuration snippets
-    - Troubleshooting notes
-
-    Returns: JSON with project_id and markdown content
-
-    Example:
-        >>> get_project_readme()
-        >>> get_project_readme("a920c77d-6e9b-41b8-9311-b4b866a2fbb0")
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    if not project_id:
-        error = await validate_current_project(app)
-        if error:
-            return error
-        project_id = app.current_project_id
-
-    try:
-        content = await app.gns3.get_project_readme(project_id)
-        return json.dumps(
-            {
-                "project_id": project_id,
-                "content": content if content else "# Project Notes\n\n(No notes yet)",
-                "format": "markdown",
-            },
-            indent=2,
-        )
-    except Exception as e:
-        return json.dumps(
-            {"error": "Failed to get project README", "project_id": project_id, "details": str(e)},
-            indent=2,
-        )
-
-
-@mcp.tool(name="update_project_readme", tags={"documentation", "project", "modifies-state"})
-async def update_project_readme(
-    ctx: Context,
-    content: Annotated[str, "Markdown content to save"],
-    project_id: Annotated[str | None, "Project ID (uses current project if not specified)"] = None,
-) -> str:
-    """Update project README/notes
-
-    Saves project documentation in markdown format. Agent can store:
-    - IP addressing schemes and VLANs
-    - Node credentials (usernames, password vault keys)
-    - Architecture diagrams (text-based)
-    - Configuration templates and snippets
-    - Troubleshooting notes and runbooks
-
-    Args:
-        content: Markdown content to save
-        project_id: Project ID (uses current project if not specified)
+    IMPORTANT: Use 'configure_network' for network configuration as it handles the complete
+    workflow (write config → restart node → apply changes).
 
     Returns:
-        JSON with success confirmation
+        JSON with file contents, confirmation message, or configured interfaces
 
-    Example:
-        >>> update_project_readme(\"\"\"
+    Examples:
+        # Read file
+        >>> node_file(action="read", node_name="A-PROXY", file_path="etc/network/interfaces")
+
+        # Write file
+        >>> node_file(action="write", node_name="A-PROXY",
+        ...           file_path="etc/network/interfaces",
+        ...           content="auto eth0\\niface eth0 inet dhcp")
+
+        # Configure network (recommended)
+        >>> node_file(action="configure_network", node_name="A-PROXY", interfaces=[{
+        ...     "name": "eth0",
+        ...     "mode": "static",
+        ...     "address": "10.199.0.254",
+        ...     "netmask": "255.255.255.0",
+        ...     "gateway": "10.199.0.1"
+        ... }])
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    error = await validate_current_project(app)
+    if error:
+        return error
+
+    if action == "read":
+        # Read file from Docker node
+        if not file_path:
+            raise ValueError("file_path is required for 'read' action")
+
+        return await get_node_file_impl(app, node_name, file_path)
+
+    elif action == "write":
+        # Write file to Docker node
+        if not file_path:
+            raise ValueError("file_path is required for 'write' action")
+        if not content:
+            raise ValueError("content is required for 'write' action")
+
+        return await write_node_file_impl(app, node_name, file_path, content)
+
+    elif action == "configure_network":
+        # Configure network interfaces (full workflow)
+        if not interfaces:
+            raise ValueError("interfaces list is required for 'configure_network' action")
+
+        return await configure_node_network_impl(app, node_name, interfaces)
+
+
+@mcp.tool(
+    name="project_docs",
+    tags={"documentation", "project", "modifies-state"},
+)
+async def project_docs(
+    ctx: Context,
+    action: Annotated[
+        Literal["get", "update"], "Action: 'get' (read README) or 'update' (write README)"
+    ],
+    content: Annotated[str | None, "Markdown content (required for 'update')"] = None,
+    project_id: Annotated[str | None, "Project ID (uses current project if not specified)"] = None,
+) -> str:
+    """Manage project documentation (CRUD operations)
+
+    v0.47.0: CRUD-style consolidation of get_project_readme and update_project_readme.
+
+    Actions:
+        - get: Read project README/notes (markdown format)
+        - update: Write project README/notes
+
+    Project documentation typically includes:
+        - IP addressing schemes and VLANs
+        - Node credentials (usernames, password vault keys)
+        - Architecture diagrams (text-based)
+        - Configuration templates and snippets
+        - Troubleshooting notes and runbooks
+
+    Returns:
+        JSON with project_id and markdown content or success confirmation
+
+    Examples:
+        # Get README
+        >>> project_docs(action="get")
+        >>> project_docs(action="get", project_id="a920c77d-6e9b-41b8-9311-b4b866a2fbb0")
+
+        # Update README
+        >>> project_docs(action="update", content=\"\"\"
         ... # HA PowerDNS
         ... ## IPs
         ... - B-Rec1: 10.2.0.1/24
@@ -1789,27 +1499,56 @@ async def update_project_readme(
             return error
         project_id = app.current_project_id
 
-    try:
-        success = await app.gns3.update_project_readme(project_id, content)
-        if success:
+    if action == "get":
+        # Get project README
+        try:
+            readme_content = await app.gns3.get_project_readme(project_id)
             return json.dumps(
                 {
-                    "success": True,
                     "project_id": project_id,
-                    "message": "README updated successfully",
-                    "content_length": len(content),
+                    "content": (
+                        readme_content if readme_content else "# Project Notes\n\n(No notes yet)"
+                    ),
+                    "format": "markdown",
                 },
                 indent=2,
             )
-        else:
+        except Exception as e:
             return json.dumps(
-                {"error": "Failed to update README", "project_id": project_id}, indent=2
+                {
+                    "error": "Failed to get project README",
+                    "project_id": project_id,
+                    "details": str(e),
+                },
+                indent=2,
             )
-    except Exception as e:
-        return json.dumps(
-            {"error": "Failed to update README", "project_id": project_id, "details": str(e)},
-            indent=2,
-        )
+
+    elif action == "update":
+        # Update project README
+        if not content:
+            raise ValueError("content is required for 'update' action")
+
+        try:
+            success = await app.gns3.update_project_readme(project_id, content)
+            if success:
+                return json.dumps(
+                    {
+                        "success": True,
+                        "project_id": project_id,
+                        "message": "README updated successfully",
+                        "content_length": len(content),
+                    },
+                    indent=2,
+                )
+            else:
+                return json.dumps(
+                    {"error": "Failed to update README", "project_id": project_id}, indent=2
+                )
+        except Exception as e:
+            return json.dumps(
+                {"error": "Failed to update README", "project_id": project_id, "details": str(e)},
+                indent=2,
+            )
 
 
 # export_topology_diagram tool now registered from export_tools module
@@ -1828,19 +1567,24 @@ mcp.tool(
 
 
 @mcp.tool(
-    name="create_drawing",
-    tags={"drawing", "topology", "visualization", "creates-resource"},
+    name="drawing",
+    tags={"drawing", "topology", "visualization", "bulk"},
     annotations={"creates_resource": True},
 )
-async def create_drawing(
+async def drawing(
     ctx: Context,
-    drawing_type: Annotated[
-        str,
-        "Shape type: 'rectangle' (box), 'ellipse' (circle/oval), 'line' (connector), 'text' (label)",
+    action: Annotated[
+        Literal["create", "update", "delete", "batch"],
+        "Action: 'create' (new drawing), 'update' (modify), 'delete' (remove), or 'batch' (create multiple)",
     ],
-    x: Annotated[int, "X coordinate (start point for line, top-left for others)"],
-    y: Annotated[int, "Y coordinate (start point for line, top-left for others)"],
-    z: Annotated[int, "Z-order/layer (default: 0 for shapes, 1 for text)"] = 0,
+    drawing_id: Annotated[str | None, "Drawing ID (required for 'update' and 'delete')"] = None,
+    drawing_type: Annotated[
+        str | None,
+        "Shape type for 'create': 'rectangle' (box), 'ellipse' (circle/oval), 'line' (connector), 'text' (label)",
+    ] = None,
+    x: Annotated[int | None, "X coordinate (start point for line, top-left for others)"] = None,
+    y: Annotated[int | None, "Y coordinate (start point for line, top-left for others)"] = None,
+    z: Annotated[int | None, "Z-order/layer (default: 0 for shapes, 1 for text)"] = None,
     width: Annotated[int | None, "Width in pixels (rectangle/ellipse only)"] = None,
     height: Annotated[int | None, "Height in pixels (rectangle/ellipse only)"] = None,
     rx: Annotated[int | None, "Horizontal corner radius (rectangle only)"] = None,
@@ -1855,167 +1599,44 @@ async def create_drawing(
     font_weight: Annotated[str, "Font weight: 'normal' or 'bold' (text only)"] = "normal",
     font_family: Annotated[str, "Font family name (text only)"] = "TypeWriter",
     color: Annotated[str, "Text color hex code (text only)"] = "#000000",
+    rotation: Annotated[int | None, "Rotation angle in degrees (for 'update')"] = None,
+    svg: Annotated[str | None, "SVG content (for 'update')"] = None,
+    locked: Annotated[bool | None, "Lock/unlock drawing (for 'update')"] = None,
+    drawings: Annotated[
+        list[dict] | None, "List of drawing definitions (required for 'batch')"
+    ] = None,
 ) -> str:
-    """Create a drawing object (rectangle, ellipse, line, or text)
+    """Manage drawings (CRUD operations)
 
-    Args:
-        drawing_type: Type of drawing - "rectangle", "ellipse", "line", or "text"
-        x: X coordinate (start point for line, top-left for others)
-        y: Y coordinate (start point for line, top-left for others)
-        z: Z-order/layer (default: 0 for shapes, 1 for text)
+    v0.47.0: CRUD-style consolidation of create_drawing, update_drawing, delete_drawing, and create_drawings_batch.
 
-        Rectangle parameters (drawing_type="rectangle"):
-            width: Rectangle width (required)
-            height: Rectangle height (required)
-            fill_color: Fill color (hex or name, default: white)
-            border_color: Border color (default: black)
-            border_width: Border width in pixels (default: 2)
-
-        Ellipse parameters (drawing_type="ellipse"):
-            rx: Horizontal radius (required)
-            ry: Vertical radius (required, use same as rx for circle)
-            fill_color: Fill color (hex or name, default: white)
-            border_color: Border color (default: black)
-            border_width: Border width in pixels (default: 2)
-
-        Line parameters (drawing_type="line"):
-            x2: X offset from start point (required, can be negative)
-            y2: Y offset from start point (required, can be negative)
-            color: Line color (hex or name, default: black)
-            border_width: Line width in pixels (default: 2)
-
-        Text parameters (drawing_type="text"):
-            text: Text content (required)
-            font_size: Font size in points (default: 10)
-            font_weight: Font weight - "normal" or "bold" (default: normal)
-            font_family: Font family (default: "TypeWriter")
-            color: Text color (hex or name, default: black)
+    Actions:
+        - create: Create new drawing (rectangle, ellipse, line, text)
+        - update: Update existing drawing properties
+        - delete: Delete drawing (WARNING: destructive, cannot be undone)
+        - batch: Create multiple drawings with two-phase validation
 
     Returns:
-        JSON with created drawing info
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await create_drawing_impl(
-        app,
-        drawing_type,
-        x,
-        y,
-        z,
-        width,
-        height,
-        rx,
-        ry,
-        fill_color,
-        border_color,
-        border_width,
-        x2,
-        y2,
-        text,
-        font_size,
-        font_weight,
-        font_family,
-        color,
-    )
-
-
-@mcp.tool(
-    name="update_drawing",
-    tags={"drawing", "topology", "visualization", "modifies-state"},
-    annotations={"idempotent": True},
-)
-async def update_drawing(
-    ctx: Context,
-    drawing_id: Annotated[str, "ID of the drawing to update"],
-    x: Annotated[int | None, "New X coordinate"] = None,
-    y: Annotated[int | None, "New Y coordinate"] = None,
-    z: Annotated[int | None, "New Z-order/layer"] = None,
-    rotation: Annotated[int | None, "New rotation angle in degrees"] = None,
-    svg: Annotated[str | None, "New SVG content (for changing appearance)"] = None,
-    locked: Annotated[bool | None, "Lock/unlock drawing"] = None,
-) -> str:
-    """Update properties of an existing drawing object
-
-    Returns: JSON with updated drawing info
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await update_drawing_impl(app, drawing_id, x, y, z, rotation, svg, locked)
-
-
-@mcp.tool(
-    name="delete_drawing",
-    tags={"drawing", "topology", "visualization", "destructive", "idempotent"},
-    annotations={"destructive": True, "idempotent": True},
-)
-async def delete_drawing(
-    ctx: Context, drawing_id: Annotated[str, "ID of the drawing to delete"]
-) -> str:
-    """Delete a drawing object from the current project
-
-    WARNING: This operation is destructive and cannot be undone.
-
-    Returns: JSON confirmation message
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    error = await validate_current_project(app)
-    if error:
-        return error
-
-    return await delete_drawing_impl(app, drawing_id)
-
-
-@mcp.tool(
-    name="create_drawings_batch",
-    tags={"drawing", "topology", "visualization", "bulk", "creates-resource"},
-)
-async def create_drawings_batch(
-    ctx: Context, drawings: Annotated[list[dict], "List of drawing definitions to create"]
-) -> str:
-    """Create multiple drawing objects in batch with validation
-
-    Two-phase execution prevents partial failures:
-    1. VALIDATE ALL drawings (check required params, valid types)
-    2. CREATE ALL drawings (only if all valid, sequential execution)
-
-    Supported drawing types:
-    - "rectangle": Rectangle with width, height
-    - "ellipse": Ellipse/circle with rx, ry (radii)
-    - "line": Line with x2, y2 (offsets)
-    - "text": Text label with text content
-
-    Args:
-        drawings: List of drawing dicts, each with:
-            - drawing_type (str): Drawing type (required)
-            - x (int): X coordinate (required)
-            - y (int): Y coordinate (required)
-            - z (int): Z-order/layer (optional, default: 0)
-            - Additional params specific to drawing type
-
-    Returns:
-        JSON with execution results including completed/failed indices
+        JSON with drawing info or batch operation results
 
     Examples:
-        # Create multiple shapes:
-        create_drawings_batch([
-            {"drawing_type": "rectangle", "x": 100, "y": 100, "width": 200, "height": 100},
-            {"drawing_type": "ellipse", "x": 400, "y": 100, "rx": 50, "ry": 50}
-        ])
+        # Create rectangle
+        >>> drawing(action="create", drawing_type="rectangle", x=100, y=100, width=200, height=100)
 
-        # Create labeled diagram:
-        create_drawings_batch([
-            {"drawing_type": "rectangle", "x": 100, "y": 100, "width": 150, "height": 80, "z": 0},
-            {"drawing_type": "text", "x": 175, "y": 140, "text": "Router1", "z": 1}
-        ])
+        # Create text label
+        >>> drawing(action="create", drawing_type="text", x=175, y=140, text="Router1", z=1)
+
+        # Update drawing position
+        >>> drawing(action="update", drawing_id="abc123", x=200, y=200)
+
+        # Delete drawing
+        >>> drawing(action="delete", drawing_id="abc123")
+
+        # Create multiple drawings
+        >>> drawing(action="batch", drawings=[
+        ...     {"drawing_type": "rectangle", "x": 100, "y": 100, "width": 200, "height": 100},
+        ...     {"drawing_type": "text", "x": 175, "y": 140, "text": "Router1", "z": 1}
+        ... ])
     """
     app: AppContext = ctx.request_context.lifespan_context
 
@@ -2023,7 +1644,55 @@ async def create_drawings_batch(
     if error:
         return error
 
-    return await create_drawings_batch_impl(app, drawings)
+    if action == "create":
+        # Create single drawing
+        if not drawing_type:
+            raise ValueError("drawing_type is required for 'create' action")
+        if x is None or y is None:
+            raise ValueError("x and y coordinates are required for 'create' action")
+
+        return await create_drawing_impl(
+            app,
+            drawing_type,
+            x,
+            y,
+            z if z is not None else 0,
+            width,
+            height,
+            rx,
+            ry,
+            fill_color,
+            border_color,
+            border_width,
+            x2,
+            y2,
+            text,
+            font_size,
+            font_weight,
+            font_family,
+            color,
+        )
+
+    elif action == "update":
+        # Update existing drawing
+        if not drawing_id:
+            raise ValueError("drawing_id is required for 'update' action")
+
+        return await update_drawing_impl(app, drawing_id, x, y, z, rotation, svg, locked)
+
+    elif action == "delete":
+        # Delete drawing
+        if not drawing_id:
+            raise ValueError("drawing_id is required for 'delete' action")
+
+        return await delete_drawing_impl(app, drawing_id)
+
+    elif action == "batch":
+        # Create multiple drawings
+        if not drawings:
+            raise ValueError("drawings list is required for 'batch' action")
+
+        return await create_drawings_batch_impl(app, drawings)
 
 
 # ============================================================================
@@ -2031,213 +1700,20 @@ async def create_drawings_batch(
 # ============================================================================
 
 from tools.ssh_tools import (
-    configure_ssh_impl,
     ssh_batch_impl,
-    ssh_disconnect_impl,
-    ssh_send_command_impl,
-    ssh_send_config_set_impl,
 )
 
 
-@mcp.tool(
-    name="configure_ssh_session",
-    tags={"ssh", "device-access", "automation", "idempotent"},
-    annotations={"idempotent": True},
-)
-async def ssh_configure(
-    ctx: Context,
-    node_name: Annotated[str, "GNS3 node name (e.g., 'Router1') OR '@' for local execution"],
-    device_dict: Annotated[
-        dict,
-        "Netmiko config with device_type ('cisco_ios', 'cisco_nxos', 'arista_eos', 'juniper_junos', 'mikrotik_routeros', 'linux'), host, username, password",
-    ],
-    persist: Annotated[bool, "Store credentials for reconnection"] = True,
-    force: Annotated[bool, "Force recreation even if healthy session exists"] = False,
-    proxy: Annotated[str, "Proxy to route through: 'host' (default) or proxy_id"] = "host",
-    session_timeout: Annotated[int, "Session timeout in seconds (default: 4 hours)"] = 14400,
-) -> str:
-    """Configure SSH session to a network device in GNS3 lab
-
-    IMPORTANT: This configures SSH to the NETWORK DEVICE (router/switch/host),
-    NOT to the proxy. Enable SSH on the target device first using console tools.
-
-    PARAMETERS EXPLAINED:
-    - node_name: The GNS3 node name (e.g., "Router1", "Switch-Core")
-    - device_dict['host']: IP address of the NETWORK DEVICE you want to SSH to
-    - device_dict['username']: Login username for the NETWORK DEVICE
-    - device_dict['password']: Login password for the NETWORK DEVICE
-    - proxy parameter: Which proxy to route SSH through (NOT the target)
-
-    Special Node Names (v0.28.0):
-    - node_name="@": Local execution (no SSH session needed)
-      Execute commands directly on SSH proxy container with diagnostic tools
-      (ping, traceroute, dig, curl, ansible). Working dir: /opt/gns3-ssh-proxy
-
-    Multi-Proxy Support (v0.26.0):
-    - Use 'proxy' parameter to route through specific proxy
-    - proxy="host" (default): Use main proxy on GNS3 host
-    - proxy="<proxy_id>": Use discovered lab proxy for isolated networks
-    - Discovery: Check gns3://proxy/registry resource for available proxies
-
-    Session Management (v0.1.6) - AUTOMATIC RECOVERY:
-    - Reuses existing healthy sessions automatically
-    - Detects expired sessions (default 4hr TTL) and recreates automatically (v0.27.0)
-    - Detects stale/closed connections via health check and recreates automatically
-    - On "Socket is closed" errors: Just call ssh_configure() again (no force needed)
-
-    When ssh_command() fails with "Socket is closed":
-    1. Session is auto-removed from memory
-    2. Simply call ssh_configure() again with same parameters
-    3. Fresh session will be created automatically
-    4. Retry your ssh_command() - it will work
-
-    Args:
-        node_name: GNS3 node name of target device (e.g., "Router1") OR "@" for local execution
-        device_dict: Netmiko config for TARGET DEVICE (not proxy):
-                     - device_type: "cisco_ios", "linux", "mikrotik_routeros", etc.
-                     - host: IP address of the TARGET DEVICE (e.g., "10.1.0.1")
-                     - username: Login username for TARGET DEVICE
-                     - password: Login password for TARGET DEVICE
-                     - port: SSH port (optional, default 22)
-                     - secret: Enable password for Cisco (optional)
-        persist: Store credentials for reconnection (default: True)
-        force: Force recreation even if healthy session exists (default: False)
-               Only needed for: manual credential refresh, troubleshooting
-        proxy: Which proxy to route through - "host" (default) or proxy_id from registry
-        session_timeout: Session timeout in seconds (default: 4 hours = 14400s) (v0.27.0)
-
-    Returns:
-        JSON with session_id, connected, device_type, proxy_url, proxy
-
-    Examples:
-        # Connect to Router1 at 10.1.0.1 (use default proxy on GNS3 host)
-        ssh_configure("Router1", {"device_type": "cisco_ios", "host": "10.1.0.1",
-                                  "username": "admin", "password": "cisco123"})
-
-        # Isolated network - use lab proxy
-        # Step 1: Discover lab proxies
-        proxies = get_proxy_registry()  # gns3://proxy/registry
-
-        # Step 2: Configure SSH through lab proxy
-        ssh_configure("A-CLIENT", {
-            "device_type": "linux",
-            "host": "10.199.0.20",
-            "username": "alpine",
-            "password": "alpine"
-        }, proxy="3f3a56de-19d3-40c3-9806-76bee4fe96d4")  # A-PROXY proxy_id
-
-        # After "Socket is closed" error - just retry (auto-recovery)
-        # NO force parameter needed - stale session already cleaned up
-        ssh_configure("R1", device_dict)
-
-        # Force recreation (rarely needed)
-        ssh_configure("R1", device_dict, force=True)
-
-    To query existing SSH sessions without modifying:
-        query_resource("sessions://ssh/")              # All SSH sessions
-        query_resource("sessions://ssh/Router1")       # Specific session details
-        query_resource("sessions://ssh/Router1/history") # Command history
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await configure_ssh_impl(
-        app, node_name, device_dict, persist, force, proxy, session_timeout
-    )
-
-
-@mcp.tool(name="execute_ssh_command", tags={"ssh", "device-access", "automation"})
-async def ssh_command(
-    ctx: Context,
-    node_name: Annotated[str, "Node identifier (or '@' for local execution)"],
-    command: Annotated[str | list, "Command(s) - string for show, list for config/bash script"],
-    expect_string: Annotated[
-        str | None, "Regex pattern to wait for (overrides prompt detection)"
-    ] = None,
-    read_timeout: Annotated[float, "Max seconds to wait for output"] = 30.0,
-    wait_timeout: Annotated[int, "Max wait for long commands (0 for async job_id)"] = 30,
-) -> str:
-    """Execute command(s) via SSH with auto-detection (show vs config)
-
-    Local Execution (v0.28.0):
-    - Use node_name="@" to execute commands on SSH proxy container
-    - No ssh_configure() needed for local execution
-    - Access to: ping, traceroute, dig, curl, ansible, python3, bash
-    - Working directory: /opt/gns3-ssh-proxy (ansible playbooks mount)
-
-    Auto-detects command type:
-    - String: Single show command (uses ssh_send_command)
-    - List: Configuration commands or bash script (uses ssh_send_config_set)
-
-    Long commands: Set read_timeout high, wait_timeout=0 for job_id,
-    poll with resource gns3://sessions/ssh/{node}/jobs/{id}
-
-    Args:
-        node_name: Node identifier (or "@" for local execution)
-        command: Command(s) - string for show/single command, list for config/bash script
-        expect_string: Regex pattern to wait for (overrides prompt detection, optional)
-        read_timeout: Max seconds to wait for output (default: 30)
-        wait_timeout: Seconds to poll before returning job_id (default: 30)
-
-    Returns:
-        JSON with completed, job_id, output, execution_time (or success, output, exit_code for local)
-
-    Examples:
-        # Show command (string)
-        ssh_command("R1", "show ip interface brief")
-
-        # Config commands (list)
-        ssh_command("R1", [
-            "interface GigabitEthernet0/0",
-            "ip address 192.168.1.1 255.255.255.0",
-            "no shutdown"
-        ])
-
-        # Local execution - single command
-        ssh_command("@", "ping -c 3 10.10.10.1")
-
-        # Local execution - ansible playbook
-        ssh_command("@", "ansible-playbook /opt/gns3-ssh-proxy/backup.yml")
-
-        # Local execution - bash script (list)
-        ssh_command("@", [
-            "cd /opt/gns3-ssh-proxy",
-            "python3 backup_configs.py",
-            "ls -la backups/"
-        ])
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-
-    # Auto-detect command type
-    if isinstance(command, list):
-        # Config mode: list of commands (v0.39.0: pass Context for progress)
-        return await ssh_send_config_set_impl(app, node_name, command, wait_timeout, ctx=ctx)
-    else:
-        # Show mode: single command (v0.39.0: pass Context for progress)
-        return await ssh_send_command_impl(
-            app, node_name, command, expect_string, read_timeout, wait_timeout, ctx=ctx
-        )
-
-
-@mcp.tool(
-    name="disconnect_ssh_session",
-    tags={"ssh", "device-access", "idempotent"},
-    annotations={"idempotent": True},
-)
-async def ssh_disconnect(ctx: Context, node_name: Annotated[str, "Node identifier"]) -> str:
-    """Disconnect SSH session
-
-    Returns: JSON with status
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await ssh_disconnect_impl(app, node_name)
-
-
-@mcp.tool(name="ssh_batch_operations", tags={"ssh", "device-access", "bulk", "automation"})
-async def ssh_batch(
+@mcp.tool(name="ssh", tags={"ssh", "device-access", "bulk", "automation"})
+async def ssh(
     ctx: Context, operations: Annotated[list[dict], "List of SSH operations (command/disconnect)"]
 ) -> str:
-    """Execute multiple SSH operations in batch with validation
+    """Execute SSH operations (BATCH-ONLY)
 
-    Local Execution Support (v0.28.0):
+    v0.47.0: Batch-only SSH tool. Individual SSH tools removed (aggressive consolidation).
+    v0.28.0: Local execution support with node_name="@"
+
+    Local Execution Support:
     - Use node_name="@" in any operation for local execution on SSH proxy container
     - Mix local and remote operations in same batch
     - Useful for: connectivity tests before device access, ansible playbooks
@@ -2247,9 +1723,9 @@ async def ssh_batch(
     2. EXECUTE ALL operations (only if all valid, sequential execution)
 
     Supported operation types:
-    - "send_command": Execute show command (or local command with node_name="@")
-    - "send_config_set": Send configuration commands (or bash script with node_name="@")
-    - "read_buffer": Read SSH buffer with optional grep
+    - "configure": Configure SSH session (equivalent to old ssh_configure)
+    - "command": Execute command (equivalent to old ssh_command, supports local with "@")
+    - "disconnect": Disconnect SSH session
 
     Args:
         operations: List of operation dicts, each with:
@@ -2261,36 +1737,40 @@ async def ssh_batch(
         JSON with execution results including completed/failed indices
 
     Examples:
-        # Multiple commands on one node:
-        ssh_batch([
-            {"type": "send_command", "node_name": "R1", "command": "show version"},
-            {"type": "send_command", "node_name": "R1", "command": "show ip route"}
-        ])
+        # Configure session + run commands:
+        >>> ssh(operations=[
+        ...     {"type": "configure", "node_name": "R1", "device_dict": {
+        ...         "device_type": "cisco_ios", "host": "10.1.0.1",
+        ...         "username": "admin", "password": "cisco123"
+        ...     }},
+        ...     {"type": "command", "node_name": "R1", "command": "show version"},
+        ...     {"type": "command", "node_name": "R1", "command": "show ip route"}
+        ... ])
 
         # Same command on multiple nodes:
-        ssh_batch([
-            {"type": "send_command", "node_name": "R1", "command": "show ip int brief"},
-            {"type": "send_command", "node_name": "R2", "command": "show ip int brief"}
-        ])
+        >>> ssh(operations=[
+        ...     {"type": "command", "node_name": "R1", "command": "show ip int brief"},
+        ...     {"type": "command", "node_name": "R2", "command": "show ip int brief"}
+        ... ])
 
         # Configuration commands:
-        ssh_batch([{
-            "type": "send_config_set",
-            "node_name": "R1",
-            "config_commands": [
-                "interface GigabitEthernet0/0",
-                "ip address 10.1.1.1 255.255.255.0",
-                "no shutdown"
-            ]
-        }])
+        >>> ssh(operations=[{
+        ...     "type": "command",
+        ...     "node_name": "R1",
+        ...     "command": [
+        ...         "interface GigabitEthernet0/0",
+        ...         "ip address 10.1.1.1 255.255.255.0",
+        ...         "no shutdown"
+        ...     ]
+        ... }])
 
         # Local execution - test connectivity before device access:
-        ssh_batch([
-            {"type": "send_command", "node_name": "@", "command": "ping -c 2 10.1.1.1"},
-            {"type": "send_command", "node_name": "@", "command": "ping -c 2 10.1.1.2"},
-            {"type": "send_command", "node_name": "R1", "command": "show ip int brief"},
-            {"type": "send_command", "node_name": "R2", "command": "show ip int brief"}
-        ])
+        >>> ssh(operations=[
+        ...     {"type": "command", "node_name": "@", "command": "ping -c 2 10.1.1.1"},
+        ...     {"type": "command", "node_name": "@", "command": "ping -c 2 10.1.1.2"},
+        ...     {"type": "command", "node_name": "R1", "command": "show ip int brief"},
+        ...     {"type": "command", "node_name": "R2", "command": "show ip int brief"}
+        ... ])
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await ssh_batch_impl(app, operations)
@@ -2368,6 +1848,238 @@ async def get_topology(
     """
     app: AppContext = ctx.request_context.lifespan_context
     return await get_topology_impl(app, project_id, format)
+
+
+# ============================================================================
+# MCP Tools - Tool Discovery (v0.47.0 - Aggressive Consolidation)
+# ============================================================================
+
+
+# Tool metadata registry for search_tools
+TOOL_REGISTRY = {
+    "gns3_connection": {
+        "categories": ["connection", "management"],
+        "capabilities": ["CRUD"],
+        "resources": [],
+        "description": "Manage GNS3 server connection (check status, retry connection)",
+        "actions": ["check", "retry"],
+    },
+    "project": {
+        "categories": ["project", "management"],
+        "capabilities": ["CRUD", "idempotent"],
+        "resources": ["projects://"],
+        "description": "Manage GNS3 projects (open, create, close)",
+        "actions": ["open", "create", "close"],
+    },
+    "node": {
+        "categories": ["node", "topology"],
+        "capabilities": ["CRUD", "bulk", "wildcard", "parallel"],
+        "resources": ["nodes://{project_id}/"],
+        "description": "Manage GNS3 nodes (create, delete, configure/control)",
+        "actions": ["create", "delete", "set"],
+    },
+    "link": {
+        "categories": ["connection", "topology"],
+        "capabilities": ["CRUD", "batch", "parallel"],
+        "resources": ["links://{project_id}/"],
+        "description": "Manage network connections/links in batch",
+        "actions": ["connect", "disconnect"],
+    },
+    "drawing": {
+        "categories": ["drawing", "visualization"],
+        "capabilities": ["CRUD", "batch"],
+        "resources": ["drawings://{project_id}/"],
+        "description": "Manage topology drawings (create, update, delete, batch)",
+        "actions": ["create", "update", "delete", "batch"],
+    },
+    "node_file": {
+        "categories": ["docker", "node"],
+        "capabilities": ["CRUD"],
+        "resources": [],
+        "description": "Manage Docker node files (read, write, configure network)",
+        "actions": ["read", "write", "configure_network"],
+    },
+    "project_docs": {
+        "categories": ["docs", "project"],
+        "capabilities": ["CRUD"],
+        "resources": ["projects://{id}/readme"],
+        "description": "Manage project documentation/README (get, update)",
+        "actions": ["get", "update"],
+    },
+    "console": {
+        "categories": ["console", "device-access"],
+        "capabilities": ["batch"],
+        "resources": ["sessions://console/"],
+        "description": "Execute console operations in batch (send, read, keystroke, send_and_wait)",
+        "actions": ["batch"],
+    },
+    "ssh": {
+        "categories": ["ssh", "device-access"],
+        "capabilities": ["batch"],
+        "resources": ["sessions://ssh/"],
+        "description": "Execute SSH operations in batch (configure, command, disconnect)",
+        "actions": ["batch"],
+    },
+    "query_resource": {
+        "categories": ["resource", "query"],
+        "capabilities": [],
+        "resources": ["*"],
+        "description": "Universal resource query tool - access any GNS3 MCP resource by URI",
+        "actions": [],
+    },
+    "list_projects": {
+        "categories": ["resource", "project"],
+        "capabilities": [],
+        "resources": ["projects://"],
+        "description": "List all GNS3 projects (convenience wrapper)",
+        "actions": [],
+    },
+    "list_nodes": {
+        "categories": ["resource", "node"],
+        "capabilities": [],
+        "resources": ["nodes://{project_id}/"],
+        "description": "List nodes in a project (convenience wrapper)",
+        "actions": [],
+    },
+    "get_topology": {
+        "categories": ["resource", "topology"],
+        "capabilities": [],
+        "resources": ["topology://{project_id}"],
+        "description": "Get unified topology report (convenience wrapper)",
+        "actions": [],
+    },
+    "export_topology_diagram": {
+        "categories": ["topology", "visualization", "export"],
+        "capabilities": ["idempotent"],
+        "resources": ["diagrams://{project_id}/topology"],
+        "description": "Export topology diagram to SVG/PNG files on disk",
+        "actions": [],
+    },
+}
+
+
+@mcp.tool(
+    name="search_tools",
+    tags={"discovery", "search", "read-only"},
+)
+async def search_tools(
+    ctx: Context,
+    category: Annotated[
+        str | None,
+        "Filter by category: project, node, console, ssh, drawing, resource, docker, connection, docs, management, device-access, topology, visualization, discovery",
+    ] = None,
+    capability: Annotated[
+        str | None, "Filter by capability: CRUD, batch, wildcard, parallel, idempotent"
+    ] = None,
+    resource_uri: Annotated[
+        str | None,
+        "Find tools applicable to resource URI (e.g., 'projects://', 'nodes://{project_id}/')",
+    ] = None,
+) -> str:
+    """Discover GNS3 MCP tools (v0.47.0 - Tool Discovery)
+
+    Search and filter available tools by category, capability, or resource URI.
+    Returns tool metadata including description, actions, and applicable resources.
+
+    **Categories:**
+    - **project**: Project management (open, create, close)
+    - **node**: Node management (create, delete, configure)
+    - **connection**: Network connections and GNS3 server
+    - **console**: Console access to devices
+    - **ssh**: SSH access to devices
+    - **drawing**: Topology visualization
+    - **resource**: Resource query tools
+    - **docker**: Docker-specific operations
+    - **docs**: Documentation management
+    - **topology**: Topology operations
+    - **management**: Management operations
+    - **device-access**: Device access (console/SSH)
+    - **visualization**: Visual elements
+    - **discovery**: Tool discovery
+
+    **Capabilities:**
+    - **CRUD**: Supports create/read/update/delete operations via action parameter
+    - **batch**: Supports batch operations (multiple operations in one call)
+    - **wildcard**: Supports wildcard patterns (*, Router*, R[123])
+    - **parallel**: Supports parallel execution
+    - **idempotent**: Multiple executions produce same result
+
+    **Resource Mapping:**
+    - **projects://**: project, list_projects, query_resource
+    - **nodes://{project_id}/**: node, list_nodes, query_resource
+    - **links://{project_id}/**: link, query_resource
+    - **drawings://{project_id}/**: drawing, query_resource
+    - **sessions://console/**: console, query_resource
+    - **sessions://ssh/**: ssh, query_resource
+    - **topology://{project_id}**: get_topology, query_resource
+
+    Returns:
+        JSON with matching tools and their metadata
+
+    Examples:
+        # Find all CRUD tools
+        >>> search_tools(capability="CRUD")
+
+        # Find tools for working with nodes
+        >>> search_tools(category="node")
+
+        # Find tools that work with projects:// resources
+        >>> search_tools(resource_uri="projects://")
+
+        # Find batch operation tools
+        >>> search_tools(capability="batch")
+
+        # Find tools with wildcard support
+        >>> search_tools(capability="wildcard")
+    """
+    results = []
+
+    for tool_name, metadata in TOOL_REGISTRY.items():
+        # Filter by category
+        if category and category.lower() not in metadata["categories"]:
+            continue
+
+        # Filter by capability
+        if capability and capability.upper() not in metadata["capabilities"]:
+            continue
+
+        # Filter by resource URI
+        if resource_uri:
+            # Match resource URI patterns
+            if "*" not in metadata["resources"]:  # "*" means matches all resources
+                matched = False
+                for resource_pattern in metadata["resources"]:
+                    # Simple pattern matching (can be enhanced)
+                    if resource_uri.startswith(resource_pattern.split("{")[0]):
+                        matched = True
+                        break
+                if not matched:
+                    continue
+
+        # Add to results
+        results.append(
+            {
+                "tool": tool_name,
+                "description": metadata["description"],
+                "categories": metadata["categories"],
+                "capabilities": metadata["capabilities"],
+                "actions": metadata["actions"],
+                "resources": metadata["resources"],
+            }
+        )
+
+    return json.dumps(
+        {
+            "query": {
+                "category": category,
+                "capability": capability,
+                "resource_uri": resource_uri,
+            },
+            "total_results": len(results),
+            "tools": results,
+        },
+        indent=2,
+    )
 
 
 # ============================================================================

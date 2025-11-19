@@ -10,12 +10,22 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.46.0
+## Current Version: v0.47.0
 
-**Latest Release:** v0.46.0 - Resource Query Tools (Claude Desktop Compatibility)
+**Latest Release:** v0.47.0 - Aggressive Tool Consolidation (GM-26)
 
-### Recent Changes (v0.26.0 - v0.46.0)
+### Recent Changes (v0.26.0 - v0.47.0)
 
+**v0.47.0** - **BREAKING**: Aggressive tool consolidation (32 → 15 tools, 53% reduction)
+- **Core CRUD Tools**: 7 consolidated tools with `action` parameters
+  - `gns3_connection()`, `project()`, `node()`, `link()`, `drawing()`, `project_docs()`, `snapshot()`
+- **Batch-Only Console/SSH**: Removed 8 individual tools, batch operations only
+  - `console(operations=[...])` and `ssh(operations=[...])` with two-phase validation
+- **Tool Discovery**: `search_tools()` with category/capability/resource filtering
+- **Wildcard Bulk Operations**: Node operations support `"*"`, `"Router*"`, JSON arrays with parallel execution
+- **No Backward Compatibility**: Breaking changes, all individual tools replaced
+- **Prompts Updated**: All 5 workflow prompts use new CRUD-style APIs
+- **Tests Pass**: Fixed `Literal` import error, all 202 tests pass
 **v0.46.0** - Resource query tools for Claude Desktop compatibility
 - **4 New Tools**: `query_resource()`, `list_projects()`, `list_nodes()`, `get_topology()`
 - **Claude Desktop Support**: All 25+ resources now accessible via tools
@@ -42,9 +52,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 **v0.26.0** - Multi-proxy support for isolated network access
 
 ### Current State
-- **32 Tools**: Complete GNS3 lab automation + resource query tools (v0.46.0)
+- **15 Tools**: CRUD-style consolidation (v0.47.0: 53% reduction from 32 tools)
+  - 7 CRUD tools (gns3_connection, project, node, link, drawing, project_docs, snapshot)
+  - Batch-only console/SSH operations
+  - Tool discovery with `search_tools()`
+  - 8 legacy tools preserved (Docker ops, export, convenience wrappers)
 - **25 Resources**: Text table output, topology_report (v0.40.0), URIs, complete metadata
 - **5 Prompts**: Guided workflows for SSH setup, topology discovery, troubleshooting, lab setup, node setup
+  - All prompts updated with CRUD-style examples (v0.47.0)
 - **Code Quality**: Ruff, Mypy, Black linting with pre-commit hooks
 - **Project Memory**: Per-project README for IP schemes, credentials, architecture notes
 - **Table Output**: All list resources use tabulate library with "simple" style (no borders)

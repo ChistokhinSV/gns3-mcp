@@ -44,7 +44,17 @@
       "Bash(git log:*)",
       "Bash(pytest:*)",
       "Bash(uvx:*)",
-      "Bash(pip index:*)"
+      "Bash(pip index:*)",
+      "Bash(sed:*)",
+      "Bash(paste:*)",
+      "mcp__lab-youtrack__create_issue",
+      "mcp__lab-youtrack__update_issue",
+      "mcp__lab-youtrack__add_issue_comment",
+      "Bash(just install:*)",
+      "mcp__lab-youtrack__get_issue",
+      "mcp__lab-youtrack__search_issues",
+      "Bash(just test:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

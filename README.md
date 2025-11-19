@@ -2,18 +2,22 @@
 
 Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS3 projects, nodes, and device consoles through Claude Desktop or any MCP-compatible client.
 
-**Version**: 0.46.0
+**Version**: 0.47.0
 
 ## Features
 
-- **32 Tools**: Complete GNS3 lab automation + resource query tools for Claude Desktop
+- **15 Tools**: CRUD-style GNS3 automation (v0.47.0: 53% consolidation from 32 tools)
 - **25 Resources**: Read-only data access (projects, nodes, links, sessions, topology reports)
+- **CRUD Pattern**: Consolidated tools with `action` parameters (`project(action="open")`, `node(action="create")`, etc.)
+- **Batch Operations**: Console and SSH operations use batch-only APIs for atomic execution
+- **Wildcard Support**: Node operations support patterns (`*`, `Router*`, `R[123]`, JSON arrays)
 - **Project Management**: Create, open, close GNS3 projects
-- **Node Control**: Start/stop/restart nodes with wildcard patterns (`*`, `Router*`)
+- **Node Control**: Start/stop/restart nodes with wildcard patterns and parallel execution
 - **Console Access**: Telnet console automation with pattern matching and grep filtering
 - **SSH Automation**: Network device automation via Netmiko (200+ device types)
 - **Network Topology**: Batch connect/disconnect links, create drawings, export diagrams
 - **Docker Integration**: Configure container networks, read/write files
+- **Tool Discovery**: `search_tools()` with category/capability/resource filtering
 - **Claude Desktop Support**: All resources accessible via tools (`query_resource`, `list_projects`, `list_nodes`, `get_topology`)
 - **Security**: API key authentication (HTTP mode), service privilege isolation, HTTPS support
 
@@ -57,8 +61,8 @@ claude mcp add --transport stdio gns3-mcp `
   --env GNS3_HOST=192.168.1.20 `
   --env GNS3_PORT=80 `
   --env GNS3_USER=admin `
-  --scope user `
   --env GNS3_PASSWORD=your-password `
+  --scope user `
   -- gns3-mcp
 
 # Step 3: Verify installation

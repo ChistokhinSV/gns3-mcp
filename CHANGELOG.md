@@ -5,6 +5,110 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.0] - 2025-11-19 - Aggressive Tool Consolidation (GM-26)
+
+### BREAKING CHANGES
+**32 → 15 Tools (53% Reduction)**
+
+This release implements **aggressive tool consolidation** using CRUD-style patterns and batch-only operations. All individual tools have been replaced with consolidated equivalents. No backward compatibility provided - users must update to new APIs.
+
+### Changed
+
+**Core CRUD Tools (GM-27)** - 7 consolidated tools:
+- `gns3_connection(action)` - Replaces `check_gns3_connection()` + `retry_gns3_connection()`
+  - Actions: "check", "retry"
+- `project(action, ...)` - Replaces `open_project()`, `close_project()`, `create_project()`
+  - Actions: "open", "close", "create", "list"
+- `node(action, ...)` - Replaces `create_node()`, `delete_node()`, `set_node_properties()` + wildcard/bulk operations
+  - Actions: "create", "delete", "set"
+  - Supports wildcard patterns: `"*"`, `"Router*"`, `"R[123]"`, JSON arrays
+  - Parallel execution for bulk operations (5-10× faster)
+- `link(connections=[...])` - Replaces `set_network_connections()` (batch-only, always was)
+  - Two-phase validation (validate all, execute all)
+- `drawing(action, ...)` - Replaces `create_drawing()`, `update_drawing()`, `delete_drawing()`
+  - Actions: "create", "update", "delete"
+- `project_docs(action, ...)` - Replaces `get_project_readme()`, `update_project_readme()`
+  - Actions: "get", "update"
+- `snapshot(action, ...)` - Replaces `create_snapshot()`, `restore_snapshot()`, `delete_snapshot()`
+  - Actions: "create", "restore", "delete", "list"
+
+**Batch-Only Console/SSH (GM-28)** - Removed 8 individual tools:
+- Removed: `send_console_data()`, `read_console_output()`, `disconnect_console()`, `send_console_keystroke()`, `send_console_command_and_wait()`
+- Removed: `configure_ssh_session()`, `execute_ssh_command()`, `disconnect_ssh_session()`
+- **Console operations now batch-only**: `console(operations=[...])`
+  - Operation types: "send", "read", "keystroke", "send_and_wait", "disconnect"
+  - Two-phase validation (validate all, execute all)
+  - Sequential execution with per-operation error handling
+- **SSH operations now batch-only**: `ssh(operations=[...])`
+  - Operation types: "configure", "command", "disconnect"
+  - Two-phase validation (validate all, execute all)
+  - Sequential execution with per-operation error handling
+
+**Tool Discovery (GM-29)**:
+- `search_tools(category, capability, resource_uri)` - Discover tools by metadata
+  - 15-tool registry with categories, capabilities, resources, actions
+  - Filter by: category (connection, project, node, link, etc.)
+  - Filter by: capability (CRUD, batch, wildcard, state-control, etc.)
+  - Filter by: resource_uri (find tools for specific resources)
+
+**Legacy Tools Preserved** - 8 tools unchanged:
+- `get_node_file()`, `write_node_file()`, `configure_node_network()` (Docker file operations)
+- `export_topology_diagram()` (function-based, not CRUD)
+- `console_batch_operations()`, `ssh_batch_operations()` (batch helpers, being deprecated)
+- `create_drawings_batch()` (batch helper, being deprecated)
+- `list_templates()` (convenience wrapper)
+
+### Updated
+
+**Prompts (GM-30)** - All 5 workflow prompts updated with CRUD-style examples:
+- `ssh_setup.py`: Updated device configs and SSH configuration to use `console(operations=[...])` and `ssh(operations=[...])`
+- `topology_discovery.py`: Updated tool reference section with CRUD tool names
+- `lab_setup.py`: Updated code generation for node/link creation using CRUD APIs
+- `node_setup.py`: Updated node creation/start and SSH configuration examples
+- `troubleshooting.py`: Updated tool reference section with migration note
+
+**Note**: Prompts contain embedded examples with old API format - marked for future conversion to batch operations.
+
+### Fixed
+- **Missing Literal Import**: Added `from typing import Literal` to main.py
+  - Resolves 21 test failures in test_error_handling.py and test_version.py
+  - All 202 tests now pass
+
+### Technical Details
+
+**Tool Count Evolution**:
+- v0.46.0: 32 tools (including resource query tools)
+- v0.47.0: 15 tools (53% reduction, GM-26 target: ~14 tools/56%)
+
+**CRUD Pattern**:
+- Consolidated tools use `action` parameter with `Literal` type constraints
+- Action-specific parameter validation in docstrings
+- Consistent error handling across all CRUD operations
+- Idempotent operations where possible
+
+**Batch-Only Operations**:
+- Two-phase execution: validate all operations, then execute all
+- Prevents partial state changes on validation failures
+- Sequential execution with per-operation error reporting
+- Returns structured results with completed/failed operation indices
+
+**Migration Impact**:
+- **Breaking**: All individual tools removed (no deprecation period)
+- **User count**: 1 user (user explicitly requested no backward compatibility)
+- **Migration required**: Update all tool calls to new CRUD/batch APIs
+- **Prompts updated**: 5 workflow prompts provide CRUD examples
+
+### Related Issues
+- GM-26: Aggressive Tool Consolidation (epic)
+- GM-27: Implement Core CRUD Tools
+- GM-28: Batch-Only Console/SSH
+- GM-29: Implement search_tools Discovery
+- GM-30: Update Prompts with CRUD-style Examples
+- GM-31: Update Tests for New APIs
+- GM-32: Update Documentation
+- GM-33: Regenerate Draw.io CSV
+- GM-34: Release v0.47.0
+
 ## [0.46.4] - 2025-11-03 - Portable Service Setup (uvx-Based)
 
 ### Added

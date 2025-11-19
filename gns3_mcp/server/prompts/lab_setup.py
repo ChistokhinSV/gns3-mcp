@@ -514,13 +514,15 @@ def render_lab_setup_prompt(
     # Generate node creation commands
     node_commands = []
     for node_name, (x, y) in positions.items():
-        node_commands.append(f'create_node("{template_name}", {x}, {y}, node_name="{node_name}")')
+        node_commands.append(
+            f'node(action="create", template_name="{template_name}", x={x}, y={y}, node_name="{node_name}")'
+        )
 
     # Generate link creation commands
     link_commands = []
     for node_a, node_b in links:
         link_commands.append(
-            f"""set_connection([
+            f"""link(connections=[
     {{"action": "connect", "node_a": "{node_a}", "node_b": "{node_b}", "adapter_a": 0, "adapter_b": 0, "port_a": 0, "port_b": 0}}
 ])"""
         )
@@ -558,7 +560,7 @@ This workflow automates creation of a complete {topology_type} lab topology.
 Create a new project for this lab:
 
 ```
-create_project("{project_name}")
+project(action="create", name="{project_name}")
 ```
 
 This will create and auto-open the project.
@@ -596,7 +598,7 @@ Start all nodes in the project:
 
 ```python
 # Get all nodes and start them
-# (Use resource projects://{{id}}/nodes/ to list, then set_node() to start each)
+# (Use resource projects://{{id}}/nodes/ to list, then node(action="set", state_action="start") for each)
 ```
 
 ## Step 6: Verify Topology
@@ -749,8 +751,8 @@ Example:
 
 **Topology looks wrong:**
 - Export diagram to verify layout
-- Manually adjust node positions with `set_node()` if needed
-- Positions can be fine-tuned: `set_node("NodeName", x=100, y=200)`
+- Manually adjust node positions with `node(action="set")` if needed
+- Positions can be fine-tuned: `node(action="set", node_name="NodeName", x=100, y=200)`
 
 ## Cleanup
 

@@ -8,167 +8,103 @@ DEVICE_CONFIGS = {
     "cisco_ios": """
 **Cisco IOS/IOS-XE SSH Setup:**
 
-1. Enter configuration mode:
-   ```
-   console_send("{node_name}", "configure terminal\\n")
-   ```
-
-2. Create administrative user:
-   ```
-   console_send("{node_name}", "username {username} privilege 15 secret {password}\\n")
-   ```
-
-3. Generate RSA keys (required for SSH):
-   ```
-   console_send("{node_name}", "crypto key generate rsa modulus 2048\\n")
-   ```
-   Note: May prompt "Do you really want to replace them? [yes/no]:" - send "yes\\n" if needed
-
-4. Enable SSH version 2:
-   ```
-   console_send("{node_name}", "ip ssh version 2\\n")
-   ```
-
-5. Configure VTY lines for SSH access:
-   ```
-   console_send("{node_name}", "line vty 0 4\\n")
-   console_send("{node_name}", "login local\\n")
-   console_send("{node_name}", "transport input ssh\\n")
-   console_send("{node_name}", "end\\n")
-   ```
-
-6. Save configuration:
-   ```
-   console_send("{node_name}", "write memory\\n")
-   ```
+Use console batch operations to configure SSH:
+```
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "configure terminal\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "username {username} privilege 15 secret {password}\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "crypto key generate rsa modulus 2048\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "ip ssh version 2\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "line vty 0 4\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "login local\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "transport input ssh\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "end\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "write memory\\n"}}
+])
+```
+Note: If "crypto key generate rsa" prompts "Do you really want to replace them? [yes/no]:", send "yes\\n" in separate operation
 """,
     "cisco_nxos": """
 **Cisco NX-OS SSH Setup:**
 
-1. Enter configuration mode:
-   ```
-   console_send("{node_name}", "configure terminal\\n")
-   ```
-
-2. Enable SSH feature:
-   ```
-   console_send("{node_name}", "feature ssh\\n")
-   ```
-
-3. Create user:
-   ```
-   console_send("{node_name}", "username {username} password {password} role network-admin\\n")
-   ```
-
-4. Generate SSH keys:
-   ```
-   console_send("{node_name}", "ssh key rsa 2048\\n")
-   ```
-
-5. Exit and save:
-   ```
-   console_send("{node_name}", "end\\n")
-   console_send("{node_name}", "copy running-config startup-config\\n")
-   ```
+Use console batch operations:
+```
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "configure terminal\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "feature ssh\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "username {username} password {password} role network-admin\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "ssh key rsa 2048\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "end\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "copy running-config startup-config\\n"}}
+])
+```
 """,
     "mikrotik_routeros": """
 **MikroTik RouterOS SSH Setup:**
 
-1. Create administrative user:
-   ```
-   console_send("{node_name}", "/user add name={username} password={password} group=full\\n")
-   ```
-
-2. Ensure SSH service is enabled (usually enabled by default):
-   ```
-   console_send("{node_name}", "/ip service enable ssh\\n")
-   ```
-
-3. Optional: Configure SSH port (default is 22):
-   ```
-   console_send("{node_name}", "/ip service set ssh port=22\\n")
-   ```
+Use console batch operations:
+```
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "/user add name={username} password={password} group=full\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "/ip service enable ssh\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "/ip service set ssh port=22\\n"}}
+])
+```
 """,
     "juniper_junos": """
 **Juniper Junos SSH Setup:**
 
-1. Enter configuration mode:
-   ```
-   console_send("{node_name}", "configure\\n")
-   ```
-
-2. Create user with SSH access:
-   ```
-   console_send("{node_name}", "set system login user {username} class super-user authentication plain-text-password\\n")
-   ```
-   Note: Will prompt for password - send "{password}\\n" twice
-
-3. Enable SSH service:
-   ```
-   console_send("{node_name}", "set system services ssh\\n")
-   ```
-
-4. Commit and exit:
-   ```
-   console_send("{node_name}", "commit and-quit\\n")
-   ```
+Use console batch operations:
+```
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "configure\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "set system login user {username} class super-user authentication plain-text-password\\n"}},
+    # Wait for password prompt, then send password twice
+    {{"type": "send", "node_name": "{node_name}", "data": "{password}\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "{password}\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "set system services ssh\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "commit and-quit\\n"}}
+])
+```
 """,
     "arista_eos": """
 **Arista EOS SSH Setup:**
 
-1. Enter configuration mode:
-   ```
-   console_send("{node_name}", "configure\\n")
-   ```
-
-2. Create user:
-   ```
-   console_send("{node_name}", "username {username} privilege 15 secret {password}\\n")
-   ```
-
-3. Enable SSH (usually enabled by default):
-   ```
-   console_send("{node_name}", "management ssh\\n")
-   console_send("{node_name}", "idle-timeout 0\\n")
-   console_send("{node_name}", "exit\\n")
-   ```
-
-4. Save configuration:
-   ```
-   console_send("{node_name}", "end\\n")
-   console_send("{node_name}", "write memory\\n")
-   ```
+Use console batch operations:
+```
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "configure\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "username {username} privilege 15 secret {password}\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "management ssh\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "idle-timeout 0\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "exit\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "end\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "write memory\\n"}}
+])
+```
 """,
     "linux": """
 **Linux/Alpine SSH Setup:**
 
-1. Install OpenSSH server (if not installed):
-   ```
-   console_send("{node_name}", "apk add openssh\\n")  # Alpine
-   # OR
-   console_send("{node_name}", "apt-get install openssh-server\\n")  # Debian/Ubuntu
-   ```
+Use console batch operations:
+```
+# Alpine
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "apk add openssh\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "passwd\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "{password}\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "{password}\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "rc-service sshd start\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "rc-update add sshd\\n"}}
+])
 
-2. Set root password or create user:
-   ```
-   console_send("{node_name}", "passwd\\n")  # Then send password twice
-   # OR create user
-   console_send("{node_name}", "adduser {username}\\n")  # Follow prompts
-   ```
-
-3. Start SSH service:
-   ```
-   console_send("{node_name}", "rc-service sshd start\\n")  # Alpine
-   # OR
-   console_send("{node_name}", "systemctl start ssh\\n")  # SystemD
-   ```
-
-4. Enable SSH on boot:
-   ```
-   console_send("{node_name}", "rc-update add sshd\\n")  # Alpine
-   # OR
-   console_send("{node_name}", "systemctl enable ssh\\n")  # SystemD
-   ```
+# OR Debian/Ubuntu
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "apt-get install -y openssh-server\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "systemctl start ssh\\n"}},
+    {{"type": "send", "node_name": "{node_name}", "data": "systemctl enable ssh\\n"}}
+])
+```
 """,
 }
 
@@ -231,7 +167,9 @@ Use console tools to configure SSH access on the device:
 
 Read console output to verify commands executed successfully:
 ```
-console_read("{node_name}", mode="diff")
+console(operations=[
+    {{"type": "read", "node_name": "{node_name}", "mode": "diff"}}
+])
 ```
 
 Look for success messages and note any errors.
@@ -240,18 +178,29 @@ Look for success messages and note any errors.
 
 Get the device's management interface IP:
 ```
-console_send("{node_name}", "show ip interface brief\\n")  # Cisco
-# OR
-console_send("{node_name}", "/ip address print\\n")  # MikroTik
-# OR
-console_send("{node_name}", "show interfaces terse\\n")  # Juniper
-# OR
-console_send("{node_name}", "ip addr\\n")  # Linux
-```
+# Cisco
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "show ip interface brief\\n"}},
+    {{"type": "read", "node_name": "{node_name}", "mode": "last_page"}}
+])
 
-Then read the output:
-```
-console_read("{node_name}", mode="last_page")
+# OR MikroTik
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "/ip address print\\n"}},
+    {{"type": "read", "node_name": "{node_name}", "mode": "last_page"}}
+])
+
+# OR Juniper
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "show interfaces terse\\n"}},
+    {{"type": "read", "node_name": "{node_name}", "mode": "last_page"}}
+])
+
+# OR Linux
+console(operations=[
+    {{"type": "send", "node_name": "{node_name}", "data": "ip addr\\n"}},
+    {{"type": "read", "node_name": "{node_name}", "mode": "last_page"}}
+])
 ```
 
 Identify the management IP (e.g., 192.168.1.10).
@@ -275,7 +224,7 @@ The **usage** field may contain important information about:
 **IMPORTANT**: Document the management IP and credentials in the project README for future reference:
 
 ```
-update_project_readme(f\"\"\"
+project_docs(action="update", content=f\"\"\"
 [existing README content]
 
 ## {node_name} - SSH Access
@@ -307,13 +256,17 @@ Keeping credentials documented in the README ensures team members can access dev
 
 For devices reachable from GNS3 host, use default proxy:
 ```
-ssh_configure("{node_name}", {{
-    "device_type": "{device_type}",
-    "host": "192.168.1.10",  # Replace with actual IP
-    "username": "{username}",
-    "password": "{password}",
-    "port": 22
-}})
+ssh(operations=[{{
+    "type": "configure",
+    "node_name": "{node_name}",
+    "device_dict": {{
+        "device_type": "{device_type}",
+        "host": "192.168.1.10",  # Replace with actual IP
+        "username": "{username}",
+        "password": "{password}",
+        "port": 22
+    }}
+}}])
 ```
 
 ### Option B: Via Lab Proxy (Isolated Networks - v0.26.0)
@@ -327,13 +280,18 @@ ssh_configure("{node_name}", {{
 
 2. Configure SSH through lab proxy:
 ```
-ssh_configure("{node_name}", {{
-    "device_type": "{device_type}",
-    "host": "10.199.0.20",  # Device IP on isolated network
-    "username": "{username}",
-    "password": "{password}",
-    "port": 22
-}}, proxy="<proxy_id>")  # Use proxy_id from registry
+ssh(operations=[{{
+    "type": "configure",
+    "node_name": "{node_name}",
+    "device_dict": {{
+        "device_type": "{device_type}",
+        "host": "10.199.0.20",  # Device IP on isolated network
+        "username": "{username}",
+        "password": "{password}",
+        "port": 22
+    }},
+    "proxy": "<proxy_id>"  # Use proxy_id from registry
+}}])
 ```
 
 Example for isolated network 10.199.0.0/24:
@@ -342,24 +300,33 @@ Example for isolated network 10.199.0.0/24:
 # Returns: proxy_id="3f3a56de-19d3-40c3-9806-76bee4fe96d4"
 
 # 2. Configure SSH through A-PROXY
-ssh_configure("A-CLIENT", {{
-    "device_type": "linux",
-    "host": "10.199.0.20",
-    "username": "alpine",
-    "password": "alpine"
-}}, proxy="3f3a56de-19d3-40c3-9806-76bee4fe96d4")
+ssh(operations=[{{
+    "type": "configure",
+    "node_name": "A-CLIENT",
+    "device_dict": {{
+        "device_type": "linux",
+        "host": "10.199.0.20",
+        "username": "alpine",
+        "password": "alpine"
+    }},
+    "proxy": "3f3a56de-19d3-40c3-9806-76bee4fe96d4"
+}}])
 ```
 
 **How Multi-Proxy Routing Works:**
-- First call to ssh_configure() stores proxy mapping
-- All subsequent ssh_command() calls automatically route through same proxy
+- First configure operation stores proxy mapping
+- All subsequent ssh command operations automatically route through same proxy
 - No need to specify proxy again for each command
 
 ## Step 5: Test SSH Connection
 
 Verify SSH works by running a show command:
 ```
-ssh_command("{node_name}", "show version")  # Or appropriate command for device
+ssh(operations=[{{
+    "type": "command",
+    "node_name": "{node_name}",
+    "command": "show version"  # Or appropriate command for device
+}}])
 ```
 
 ## Step 6: Verify Session Status
@@ -393,9 +360,12 @@ Check SSH session is active:
 ## Next Steps
 
 Once SSH is working:
-1. Use `ssh_command()` for all automation tasks
+1. Use `ssh()` batch operations for all automation tasks
 2. Review command history with resource `sessions://ssh/{node_name}/history`
-3. Disconnect console session if no longer needed: `console_disconnect("{node_name}")`
+3. Disconnect console session if no longer needed:
+   ```
+   console(operations=[{{"type": "disconnect", "node_name": "{node_name}"}}])
+   ```
 
 SSH provides better reliability and automatic prompt detection compared to console.
 """

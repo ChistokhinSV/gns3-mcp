@@ -224,7 +224,8 @@ This workflow guides you through setting up **{node_name}** from scratch.
 Create the node from template and position it on canvas:
 
 ```python
-create_node(
+node(
+    action="create",
     template_name="{template_name}",
     node_name="{node_name}",
     x=100,  # Adjust position as needed
@@ -239,7 +240,7 @@ Note the returned node_id for reference.
 Start the node and wait for boot sequence:
 
 ```python
-set_node(node_name="{node_name}", action="start")
+node(action="set", node_name="{node_name}", state_action="start")
 ```
 
 **Wait time depends on device type:**
@@ -337,13 +338,17 @@ Configure SSH session for automated management:
 ### Standard Connection (Devices Reachable from GNS3 Host):
 
 ```python
-ssh_configure("{node_name}", {{
-    "device_type": "{device_type}",
-    "host": "{ip_address}",
-    "username": "{username}",
-    "password": "{password}",
-    "port": 22
-}})
+ssh(operations=[{{
+    "type": "configure",
+    "node_name": "{node_name}",
+    "device_dict": {{
+        "device_type": "{device_type}",
+        "host": "{ip_address}",
+        "username": "{username}",
+        "password": "{password}",
+        "port": 22
+    }}
+}}])
 ```
 
 ### Isolated Network Connection (v0.26.0 Multi-Proxy):
@@ -353,13 +358,18 @@ For devices on isolated networks, use lab proxy:
 ```python
 # 1. Discover lab proxies: check proxies://
 # 2. Configure SSH through lab proxy:
-ssh_configure("{node_name}", {{
-    "device_type": "{device_type}",
-    "host": "{ip_address}",
-    "username": "{username}",
-    "password": "{password}",
-    "port": 22
-}}, proxy="<proxy_id>")  # proxy_id from registry
+ssh(operations=[{{
+    "type": "configure",
+    "node_name": "{node_name}",
+    "device_dict": {{
+        "device_type": "{device_type}",
+        "host": "{ip_address}",
+        "username": "{username}",
+        "password": "{password}",
+        "port": 22
+    }},
+    "proxy": "<proxy_id>"  # proxy_id from registry
+}}])
 ```
 
 ## Step 6: Verify SSH Connection
@@ -368,13 +378,13 @@ Test SSH access with a simple command:
 
 ```python
 # Cisco
-ssh_command("{node_name}", "show version")
+ssh(operations=[{{"type": "command", "node_name": "{node_name}", "command": "show version"}}])
 
 # Linux
-ssh_command("{node_name}", "uname -a")
+ssh(operations=[{{"type": "command", "node_name": "{node_name}", "command": "uname -a"}}])
 
 # MikroTik
-ssh_command("{node_name}", "/system resource print")
+ssh(operations=[{{"type": "command", "node_name": "{node_name}", "command": "/system resource print"}}])
 ```
 
 Check SSH session status:

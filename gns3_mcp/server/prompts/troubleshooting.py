@@ -514,11 +514,13 @@ Issue Detected
 - `sessions://ssh/{node_name}` - SSH session state
 
 **Tools (actions):**
-- `set_node(...)` - Start/stop/reload nodes
-- `set_connection(...)` - Manage links
-- `console_send/read(...)` - Console interaction
-- `ssh_command(...)` - Execute commands via SSH
+- `node(action="set", state_action="start|stop|reload", ...)` - Start/stop/reload nodes
+- `link(connections=[...])` - Manage links (batch)
+- `console(operations=[{"type": "send|read|keystroke", ...}])` - Console interaction (batch)
+- `ssh(operations=[{"type": "command", ...}])` - Execute commands via SSH (batch)
 - `export_topology_diagram(...)` - Visualize topology
+
+**Note**: v0.47.0 uses CRUD-style APIs. Individual tool examples in this guide use old API format and should be converted to batch operations.
 
 ## Prevention and Best Practices
 
