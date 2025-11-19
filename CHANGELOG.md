@@ -5,6 +5,30 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.4] - 2025-11-19 - Fix: Remove Dangerous Auto-Wake
+
+### Removed
+- **Auto-Wake on Console Read**: Removed automatic newline + wait on first read (dangerous)
+  - Feature from v0.47.2 produced unwanted blank lines and could send unintended commands
+  - If buffer empty on read, now returns empty (no auto-send)
+  - **User feedback**: "It is dangerous and produce additional empty lines"
+  - **Impact**: Safer console operations, no unexpected sends
+  - **Mitigation**: Use `send_and_wait` if you need to explicitly wake console
+
+### Technical Details
+**What was removed**:
+- Auto-detection of empty buffer on first read
+- Automatic send of `\n` + 1.5s wait
+- Location: `gns3_mcp/server/tools/console_tools.py` (lines 244-252 removed)
+
+**Why removed**:
+- Could interfere with device state at wrong timing
+- Produced extra blank lines in console output
+- Safety feature (read-first batch policy) already prevents blind writes
+- Better to be explicit with `send_and_wait` when wake needed
+
+**Testing**: All 202 unit tests pass
+
 ## [0.47.3] - 2025-11-19 - Enhancement: Safety Policy Indicator
 
 ### Added
@@ -39,12 +63,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.47.2] - 2025-11-19 - Bug Fix + Safety: Console Operations (GM-34)
 
-### Fixed
-- **Smart Console Read**: console `read` operation now auto-wakes QEMU consoles (GM-34)
-  - Added automatic newline + 1.5s wait if buffer empty on first read
-  - Handles QEMU nodes where boot messages sent before console connection
-  - **Impact**: `read` now works immediately after connection without manual wake
-  - **Root Cause**: QEMU consoles don't output until prompted; boot messages already sent before telnet connection established
+### Fixed (⚠️ Smart Console Read removed in v0.47.4)
+- **~~Smart Console Read~~**: ~~console `read` operation now auto-wakes QEMU consoles (GM-34)~~
+  - ~~Added automatic newline + 1.5s wait if buffer empty on first read~~
+  - ~~Handles QEMU nodes where boot messages sent before console connection~~
+  - **REMOVED in v0.47.4**: Feature was dangerous, produced unwanted blank lines
+  - **Use instead**: `send_and_wait` for explicit console wake
 
 ### Added
 - **Batch Console Safety**: Read-first policy for unaccessed terminals (GM-34)
