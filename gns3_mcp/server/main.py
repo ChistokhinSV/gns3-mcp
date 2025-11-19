@@ -1242,7 +1242,7 @@ async def console(
             "raw": false  // optional
         }
 
-    - "read": Read console output
+    - "read": Read console output (NOTE: returns empty if nothing sent yet - this is normal)
         {
             "type": "read",
             "node_name": "R1",
@@ -1255,6 +1255,8 @@ async def console(
             "after": 0,  // optional context lines
             "context": 0  // optional context lines (overrides before/after)
         }
+        IMPORTANT: Console buffer may be empty on first read (QEMU nodes don't output until prompted).
+        Use 'send_and_wait' to explicitly send a command and read the response, or send commands first with 'send'.
 
     - "keystroke": Send special keystroke
         {
