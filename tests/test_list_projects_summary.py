@@ -7,8 +7,8 @@ Tests that the function returns ProjectSummary with uri field
 import sys
 from pathlib import Path
 
-# Add mcp-server/server to path
-server_path = Path(__file__).parent.parent / "mcp-server" / "server"
+# Add gns3_mcp/server to path
+server_path = Path(__file__).parent.parent / "gns3_mcp" / "server"
 sys.path.insert(0, str(server_path))
 
 import json
@@ -45,7 +45,7 @@ SAMPLE_PROJECTS_DATA = [
 
 @pytest.mark.asyncio
 async def test_list_projects_summary():
-    """Test that list_projects_impl returns ProjectSummary with uri field"""
+    """Test that list_projects_impl returns formatted table with uri field"""
     from resources.project_resources import list_projects_impl
 
     # Create mock context
@@ -54,28 +54,18 @@ async def test_list_projects_summary():
     # Call the function (default: detailed=False)
     result = await list_projects_impl(app, detailed=False)
 
-    # Parse JSON result
-    result_data = json.loads(result)
+    # Verify it's a string (table format)
+    assert isinstance(result, str), f"Expected string, got {type(result)}"
 
-    # Expected output (ProjectSummary format with uri)
-    expected_data = [
-        {
-            "status": "opened",
-            "name": "Test LAB",
-            "uri": "projects://79d09537-5b07-4af6-8308-bd1846f6d267",
-        },
-        {
-            "status": "closed",
-            "name": "Test DNS HA",
-            "uri": "projects://00700165-3140-4a1e-b3f0-0a11eb15ab47",
-        },
-    ]
+    # Verify table contains expected data
+    assert "opened" in result, "Expected 'opened' status in table"
+    assert "closed" in result, "Expected 'closed' status in table"
+    assert "Test LAB" in result, "Expected 'Test LAB' in table"
+    assert "Test DNS HA" in result, "Expected 'Test DNS HA' in table"
+    assert "projects://79d09537-5b07-4af6-8308-bd1846f6d267" in result, "Expected URI in table"
+    assert "projects://00700165-3140-4a1e-b3f0-0a11eb15ab47" in result, "Expected URI in table"
 
-    # Verify the result
-    assert (
-        result_data == expected_data
-    ), f"Expected:\n{json.dumps(expected_data, indent=2)}\n\nGot:\n{json.dumps(result_data, indent=2)}"
-    print("[PASS] Test passed: ProjectSummary format with uri is correct")
+    print("[PASS] Test passed: Table format with uri is correct")
 
 
 @pytest.mark.asyncio
@@ -107,17 +97,13 @@ async def test_list_projects_empty():
     # Create mock context with empty projects
     app = MockAppContext([])
 
-    # Call the function
-    result = await list_projects_impl(app)
+    # Call the function (default: detailed=False)
+    result = await list_projects_impl(app, detailed=False)
 
-    # Parse JSON result
-    result_data = json.loads(result)
+    # Verify it's a string (table format shows "No items found" for empty list)
+    assert isinstance(result, str), f"Expected string, got {type(result)}"
+    assert "No items found" in result, f"Expected 'No items found' message, got: {result}"
 
-    # Expected output for empty list
-    expected_data = []
-
-    # Verify the result
-    assert result_data == expected_data, f"Expected empty array, got: {result_data}"
     print("[PASS] Test passed: Empty list handled correctly")
 
 

@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 # Add server directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "mcp-server" / "server"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "gns3_mcp" / "server"))
 
 import logging
 
@@ -27,8 +27,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def test_console_manager(host: str, port: int, node_name: str):
-    """Test ConsoleManager functionality"""
+async def run_console_manager_test(host: str, port: int, node_name: str):
+    """Run ConsoleManager functionality test (manual test, not pytest)"""
 
     manager = ConsoleManager()
 
@@ -142,7 +142,7 @@ async def main():
 
     args = parser.parse_args()
 
-    success = await test_console_manager(args.host, args.port, args.node_name)
+    success = await run_console_manager_test(args.host, args.port, args.node_name)
     sys.exit(0 if success else 1)
 
 
