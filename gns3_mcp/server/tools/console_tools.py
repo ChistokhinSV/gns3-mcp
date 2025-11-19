@@ -986,14 +986,22 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
 
     execution_time = time.time() - start_time
 
-    return json.dumps(
-        {
-            "completed": completed_indices,
-            "failed": failed_indices,
-            "skipped": skipped_indices,
-            "results": results,
-            "total_operations": len(operations),
-            "execution_time": round(execution_time, 2),
-        },
-        indent=2,
-    )
+    # Build response with optional safety warnings
+    response = {
+        "completed": completed_indices,
+        "failed": failed_indices,
+        "skipped": skipped_indices,
+        "results": results,
+        "total_operations": len(operations),
+        "execution_time": round(execution_time, 2),
+    }
+
+    # Add safety policy note if any operations were skipped due to read-first policy
+    if read_only_nodes and skipped_indices:
+        response["safety_policy"] = {
+            "read_first_enforced": True,
+            "affected_nodes": sorted(list(read_only_nodes)),
+            "message": "Non-read operations skipped for terminals not accessed before. Read console first, then execute write operations in a separate batch.",
+        }
+
+    return json.dumps(response, indent=2)
