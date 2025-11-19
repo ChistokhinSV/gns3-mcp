@@ -5,6 +5,39 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.2] - 2025-11-19 - Bug Fix + Safety: Console Operations (GM-34)
+
+### Fixed
+- **Smart Console Read**: console `read` operation now auto-wakes QEMU consoles (GM-34)
+  - Added automatic newline + 1.5s wait if buffer empty on first read
+  - Handles QEMU nodes where boot messages sent before console connection
+  - **Impact**: `read` now works immediately after connection without manual wake
+  - **Root Cause**: QEMU consoles don't output until prompted; boot messages already sent before telnet connection established
+
+### Added
+- **Batch Console Safety**: Read-first policy for unaccessed terminals (GM-34)
+  - Batch operations skip non-read operations for nodes never accessed before
+  - Prevents accidental writes without seeing current console state
+  - Forces two-phase approach: read first batch, write second batch
+  - Skipped operations reported with reason in `results` array
+  - **Impact**: Safer batch operations, prevents blind console writes
+
+### Technical Details
+**Smart Read Implementation**:
+- Check if terminal accessed: `has_accessed_terminal_by_node()`
+- If buffer empty: send `\n` + wait 1.5s for console response
+- Location: `gns3_mcp/server/tools/console_tools.py` (lines 244-252)
+
+**Batch Safety Implementation**:
+- Check access status for all nodes in batch before execution
+- Skip non-read operations for unaccessed nodes
+- Return skipped operations with reason in results
+- Location: `gns3_mcp/server/tools/console_tools.py` (lines 859-895)
+
+**Testing**: All 202 unit tests pass
+
+**Workaround (no longer needed)**: Use `send_and_wait` instead of `read` for first console access
+
 ## [0.47.1] - 2025-11-19 - Bug Fix: SSH/Console Validation Error
 
 ### Fixed
