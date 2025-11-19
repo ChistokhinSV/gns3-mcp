@@ -5,6 +5,26 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.1] - 2025-11-19 - Bug Fix: SSH/Console Validation Error
+
+### Fixed
+- **validation_error() Parameter Bug**: Fixed incorrect function call in batch operation validation (GM-34)
+  - `validation_error()` signature: `(message, parameter, value, valid_values)`
+  - Was incorrectly called with non-existent `details=` parameter
+  - Fixed in both `ssh_tools.py` and `console_tools.py`
+  - Error: `validation_error() got an unexpected keyword argument 'details'`
+  - **Impact**: SSH and console batch operations now work correctly
+  - **Affected**: v0.47.0 only (introduced in CRUD consolidation)
+
+### Technical Details
+**Files Fixed**:
+- `gns3_mcp/server/tools/ssh_tools.py` (lines 989-1002)
+- `gns3_mcp/server/tools/console_tools.py` (lines 791-804)
+
+**Root Cause**: Copy-paste error during GM-28 batch-only consolidation - used `details=` parameter that doesn't exist in `validation_error()` helper function.
+
+**Testing**: All 202 unit tests pass
+
 ## [0.47.0] - 2025-11-19 - Aggressive Tool Consolidation (GM-26)
 
 ### BREAKING CHANGES
