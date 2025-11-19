@@ -856,14 +856,43 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                     context={"operation_index": idx, "node_name": node_name},
                 )
 
-    # Validation passed - execute all operations sequentially
+    # Validation passed - check for first-time access safety
+    # Safety: If terminal never accessed before, only allow read operations
     results = []
     completed_indices = []
     failed_indices = []
+    skipped_indices = []
+
+    # Collect unique node names and check access status
+    nodes_accessed_status = {}
+    for op in operations:
+        node_name = op["node_name"]
+        if node_name not in nodes_accessed_status:
+            nodes_accessed_status[node_name] = app.console.has_accessed_terminal_by_node(
+                node_name
+            )
+
+    # Determine if we need read-only mode for any nodes
+    read_only_nodes = {node for node, accessed in nodes_accessed_status.items() if not accessed}
 
     for idx, op in enumerate(operations):
         op_type = op["type"]
         node_name = op["node_name"]
+
+        # Safety check: Skip non-read operations for unaccessed terminals
+        if node_name in read_only_nodes and op_type != "read":
+            skipped_indices.append(idx)
+            results.append(
+                {
+                    "operation_index": idx,
+                    "success": False,
+                    "operation_type": op_type,
+                    "node_name": node_name,
+                    "skipped": True,
+                    "reason": f"Terminal '{node_name}' not accessed before - only read operations allowed in first batch",
+                }
+            )
+            continue
 
         try:
             # Execute operation based on type
@@ -961,6 +990,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
         {
             "completed": completed_indices,
             "failed": failed_indices,
+            "skipped": skipped_indices,
             "results": results,
             "total_operations": len(operations),
             "execution_time": round(execution_time, 2),
