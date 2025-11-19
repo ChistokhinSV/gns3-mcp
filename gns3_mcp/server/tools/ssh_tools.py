@@ -1069,8 +1069,6 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                         node_name,
                         command,
                         op.get("wait_timeout", 30),
-                        op.get("exit_config_mode", True),
-                        op.get("proxy", "host"),
                     )
                 else:
                     # Show command - use send_command
@@ -1081,9 +1079,6 @@ async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
                         op.get("expect_string"),
                         op.get("read_timeout", 30.0),
                         op.get("wait_timeout", 30),
-                        op.get("strip_prompt", True),
-                        op.get("strip_command", True),
-                        op.get("proxy", "host"),
                     )
 
             elif op_type == "disconnect":
