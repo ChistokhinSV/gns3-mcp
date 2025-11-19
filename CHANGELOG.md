@@ -5,6 +5,38 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.3] - 2025-11-19 - Enhancement: Safety Policy Indicator
+
+### Added
+- **Safety Policy Field**: Batch console response now includes top-level `safety_policy` field
+  - Appears when operations skipped due to read-first policy
+  - Contains: `read_first_enforced` flag, `affected_nodes` list, explanatory message
+  - Makes skip reason visible at summary level (not just in individual results)
+  - **Impact**: Clearer UX when safety policy prevents operations
+
+### Technical Details
+**Implementation**:
+- Check if any nodes had read-first policy enforced and operations skipped
+- Add `safety_policy` object to response with affected nodes and reason
+- Location: `gns3_mcp/server/tools/console_tools.py` (lines 999-1005)
+
+**Example Output**:
+```json
+{
+  "completed": [1],
+  "failed": [],
+  "skipped": [0],
+  "results": [...],
+  "safety_policy": {
+    "read_first_enforced": true,
+    "affected_nodes": ["AlpineLinuxVirt-2"],
+    "message": "Non-read operations skipped for terminals not accessed before. Read console first, then execute write operations in a separate batch."
+  }
+}
+```
+
+**Testing**: All 202 unit tests pass
+
 ## [0.47.2] - 2025-11-19 - Bug Fix + Safety: Console Operations (GM-34)
 
 ### Fixed

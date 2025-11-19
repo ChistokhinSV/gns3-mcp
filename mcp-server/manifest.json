@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.47.2",
+  "version": "0.47.3",
   "description": "GNS3 lab automation with AI agent",
-  "long_description": "GNS3 v3 lab automation MCP server. Create/modify nodes, configure via console/SSH, topology management. v0.47.2: UV package manager integration - 10-100× faster dependency installation (5-8s vs 70s), fits within 60s MCP timeout, works with Python 3.10-3.13.",
+  "long_description": "GNS3 v3 lab automation MCP server. Create/modify nodes, configure via console/SSH, topology management. v0.47.3: UV package manager integration - 10-100× faster dependency installation (5-8s vs 70s), fits within 60s MCP timeout, works with Python 3.10-3.13.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
