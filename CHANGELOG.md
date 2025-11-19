@@ -5,6 +5,30 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.6] - 2025-11-19 - Fix: SSH Command Operation Parameter Mismatch
+
+### Fixed
+- **SSH Command Operation**: Fixed function signature mismatch in batch operations (GM-35)
+  - `ssh_send_command_impl()` was called with 9 args but only accepts 7
+  - `ssh_send_config_set_impl()` was called with 6 args but only accepts 5
+  - Removed non-existent parameters: `strip_prompt`, `strip_command`, `proxy` from send_command
+  - Removed non-existent parameters: `exit_config_mode`, `proxy` from send_config_set
+  - **Impact**: SSH command operations now work correctly for both show and config commands
+  - **Testing**: All 206 tests pass
+
+### Technical Details
+**Root Cause**: v0.47.5 updated operation types but passed extra parameters that don't exist in underlying implementation functions.
+
+**Parameters Removed**:
+- From `ssh_send_command_impl()` call: `op.get("strip_prompt", True)`, `op.get("strip_command", True)`, `op.get("proxy", "host")`
+- From `ssh_send_config_set_impl()` call: `op.get("exit_config_mode", True)`, `op.get("proxy", "host")`
+
+**Correct Function Signatures**:
+```python
+ssh_send_command_impl(app, node_name, command, expect_string=None, read_timeout=30.0, wait_timeout=30, ctx=None)
+ssh_send_config_set_impl(app, node_name, config_commands, wait_timeout=30, ctx=None)
+```
+
 ## [0.47.5] - 2025-11-19 - Fix: Complete SSH API Fix + Test Fixes
 
 ### Fixed
