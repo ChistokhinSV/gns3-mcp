@@ -789,15 +789,17 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
         # Check required fields
         if "type" not in op:
             return validation_error(
+                message=f"Operation {idx} missing required field 'type'",
                 parameter="operations",
-                details=f"Operation {idx} missing required field 'type'",
+                value=op,
                 valid_values=list(VALID_TYPES),
             )
 
         if op["type"] not in VALID_TYPES:
             return validation_error(
+                message=f"Invalid operation type: {op['type']}",
                 parameter=f"operations[{idx}].type",
-                details=f"Invalid operation type: {op['type']}",
+                value=op["type"],
                 valid_values=list(VALID_TYPES),
             )
 

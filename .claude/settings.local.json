@@ -54,7 +54,10 @@
       "mcp__lab-youtrack__get_issue",
       "mcp__lab-youtrack__search_issues",
       "Bash(just test:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git tag:*)",
+      "Bash(git push)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
