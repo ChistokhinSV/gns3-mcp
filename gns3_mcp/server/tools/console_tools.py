@@ -241,6 +241,16 @@ async def read_console_impl(
     if error:
         return error
 
+    # Smart read: If buffer is empty and terminal not accessed yet, wake console
+    # This handles QEMU nodes where boot messages sent before console connection
+    if not app.console.has_accessed_terminal_by_node(node_name):
+        current_buffer = app.console.get_output_by_node(node_name) or ""
+        if not current_buffer.strip():  # Buffer empty - wake console
+            # Send newline to prompt console output
+            await app.console.send_by_node(node_name, "\n")
+            # Wait briefly for console to respond
+            await asyncio.sleep(1.5)
+
     if mode == "diff":
         # Return only new output since last read
         output = app.console.get_diff_by_node(node_name)

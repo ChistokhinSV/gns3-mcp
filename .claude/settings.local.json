@@ -57,7 +57,11 @@
       "Bash(git commit:*)",
       "Bash(git tag:*)",
       "Bash(git push)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "mcp__gns3-mcp__list_projects",
+      "mcp__gns3-mcp__list_nodes",
+      "mcp__gns3-mcp__node",
+      "mcp__gns3-mcp__console"
     ],
     "deny": [],
     "ask": []
