@@ -10,11 +10,18 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.47.0
+## Current Version: v0.48.0
 
-**Latest Release:** v0.47.0 - Aggressive Tool Consolidation (GM-26)
+**Latest Release:** v0.48.0 - List Action Integration (removes convenience wrappers)
 
-### Recent Changes (v0.26.0 - v0.47.0)
+### Recent Changes (v0.26.0 - v0.48.0)
+
+**v0.48.0** - List action integration in CRUD tools
+- **Removed**: `list_projects()`, `list_nodes()`, `get_topology()` convenience wrappers (3 tools removed)
+- **Added**: `list` action to `project()`, `node()`, `link()`, `drawing()` CRUD tools
+- **Consistent Pattern**: All CRUD tools now have `list` action with `project_id` and `format` parameters
+- **Tool Count**: 12 tools (down from 15 in v0.47.0) - 20% reduction
+- **search_tools()**: Updated TOOL_REGISTRY with new actions
 
 **v0.47.0** - **BREAKING**: Aggressive tool consolidation (32 → 15 tools, 53% reduction)
 - **Core CRUD Tools**: 7 consolidated tools with `action` parameters
@@ -26,13 +33,12 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - **No Backward Compatibility**: Breaking changes, all individual tools replaced
 - **Prompts Updated**: All 5 workflow prompts use new CRUD-style APIs
 - **Tests Pass**: Fixed `Literal` import error, all 202 tests pass
-**v0.46.0** - Resource query tools for Claude Desktop compatibility
+**v0.46.0** - Resource query tools for Claude Desktop compatibility (DEPRECATED in v0.48.0)
 - **4 New Tools**: `query_resource()`, `list_projects()`, `list_nodes()`, `get_topology()`
 - **Claude Desktop Support**: All 25+ resources now accessible via tools
-- **Convenience Shortcuts**: 3 high-use operations (projects, nodes, topology)
-- **Universal Query**: Single tool provides access to all resource URIs
-- **GM-4 Aligned**: Minimal tool count (4 vs 25), will optimize later
-- **Resource Preservation**: All resources remain for Claude Code compatibility
+- **Convenience Shortcuts**: 3 high-use operations (projects, nodes, topology) - removed in v0.48.0
+- **Universal Query**: `query_resource()` remains for advanced use cases
+- **Note**: v0.48.0 integrated list functionality into CRUD tools, removing the 3 convenience wrappers
 **v0.40.0** - Wildcard bulk operations, topology report resource, structured exceptions
 - **Bulk Node Operations**: Wildcard patterns (`"*"`, `"Router*"`), JSON arrays, parallel execution
 - **Topology Report**: Single-resource overview of nodes/links/statistics (replaces 3+ tool calls)
@@ -52,11 +58,11 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 **v0.26.0** - Multi-proxy support for isolated network access
 
 ### Current State
-- **15 Tools**: CRUD-style consolidation (v0.47.0: 53% reduction from 32 tools)
-  - 7 CRUD tools (gns3_connection, project, node, link, drawing, project_docs, snapshot)
+- **12 Tools**: CRUD-style consolidation (v0.48.0: 20% reduction from v0.47.0, 63% from original 32 tools)
+  - 7 CRUD tools with integrated `list` action (gns3_connection, project, node, link, drawing, project_docs, node_file)
   - Batch-only console/SSH operations
   - Tool discovery with `search_tools()`
-  - 8 legacy tools preserved (Docker ops, export, convenience wrappers)
+  - 5 additional tools (query_resource, export_topology_diagram)
 - **25 Resources**: Text table output, topology_report (v0.40.0), URIs, complete metadata
 - **5 Prompts**: Guided workflows for SSH setup, topology discovery, troubleshooting, lab setup, node setup
   - All prompts updated with CRUD-style examples (v0.47.0)

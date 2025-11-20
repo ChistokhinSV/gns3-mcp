@@ -72,9 +72,6 @@ from tools.project_tools import (
     open_project_impl,
 )
 from tools.resource_tools import (
-    get_topology as get_topology_impl,
-)
-from tools.resource_tools import (
     list_nodes as list_nodes_impl,
 )
 from tools.resource_tools import (
@@ -1008,15 +1005,21 @@ async def gns3_connection(
 )
 async def project(
     ctx: Context,
-    action: Annotated[Literal["open", "create", "close"], "Action: 'open', 'create', or 'close'"],
+    action: Annotated[
+        Literal["list", "open", "create", "close"], "Action: 'list', 'open', 'create', or 'close'"
+    ],
     name: Annotated[str | None, "Project name (required for 'open' and 'create')"] = None,
     path: Annotated[str | None, "Optional project directory path (for 'create')"] = None,
+    format: Annotated[
+        str, "Output format: 'table' (default) or 'json' (for 'list' action)"
+    ] = "table",
 ) -> str:
     """Manage GNS3 projects
 
     CRUD-style project management tool.
 
     Actions:
+        - list: List all projects
         - open: Open a project by name
         - create: Create a new project and auto-open it
         - close: Close the currently opened project
@@ -1025,11 +1028,16 @@ async def project(
         action: Project action to perform
         name: Project name (required for open/create)
         path: Optional project directory path (create only)
+        format: Output format for 'list' action
 
     Returns:
-        JSON with ProjectInfo for created project
+        JSON with ProjectInfo for created project, or list of projects
 
     Examples:
+        # List all projects
+        >>> project(action="list")
+        >>> project(action="list", format="json")
+
         # Open existing project
         >>> project(action="open", name="My Lab")
 
@@ -1039,14 +1047,13 @@ async def project(
 
         # Close current project
         >>> project(action="close")
-
-    To list available projects:
-        list_projects()                          # Convenience tool
-        query_resource("projects://")            # Universal resource query
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    if action == "open":
+    if action == "list":
+        return await list_projects_impl(app, format)
+
+    elif action == "open":
         if not name:
             raise ValueError("name parameter is required for 'open' action")
         return await open_project_impl(app, name)
@@ -1068,9 +1075,10 @@ async def project(
 async def node(
     ctx: Context,
     action: Annotated[
-        Literal["create", "delete", "set"],
-        "Action: 'create' (new node), 'delete' (remove node), or 'set' (configure/control node)",
+        Literal["list", "create", "delete", "set"],
+        "Action: 'list' (list nodes), 'create' (new node), 'delete' (remove node), or 'set' (configure/control node)",
     ],
+    project_id: Annotated[str | None, "Project ID (required for 'list')"] = None,
     node_name: Annotated[
         str | None,
         "Node name, wildcard pattern ('*', 'Router*', 'R[123]'), or JSON array ('[\"R1\",\"R2\"]'). Required for 'delete' and 'set'",
@@ -1093,6 +1101,9 @@ async def node(
     hdd_disk_image: Annotated[str | None, "HDD disk image path (QEMU nodes only)"] = None,
     adapters: Annotated[int | None, "Network adapters count (QEMU nodes only)"] = None,
     console_type: Annotated[str | None, "Console type: telnet/vnc/spice"] = None,
+    format: Annotated[
+        str, "Output format: 'table' (default) or 'json' (for 'list' action)"
+    ] = "table",
     compute_id: Annotated[str, "Compute server ID (for 'create')"] = "local",
     properties: Annotated[
         Dict[str, Any] | None, "Override template properties for 'create' (e.g., {'ram': 512})"
@@ -1107,6 +1118,7 @@ async def node(
     v0.40.0: Enhanced with wildcard and bulk operation support.
 
     Actions:
+        - list: List nodes in a project
         - create: Create new node from template at specified coordinates
         - delete: Delete node from project (WARNING: destructive, cannot be undone)
         - set: Configure node properties and/or control state (supports wildcards/bulk)
@@ -1130,6 +1142,10 @@ async def node(
         Multiple nodes: BatchOperationResult JSON with per-node success/failure
 
     Examples:
+        # List nodes in project
+        >>> node(action="list", project_id="abc-123")
+        >>> node(action="list", project_id="abc-123", format="json")
+
         # Create new node
         >>> node(action="create", template_name="Alpine Linux", x=100, y=200)
         >>> node(action="create", template_name="Cisco IOSv", x=300, y=400, node_name="R1", properties={"ram": 1024})
@@ -1145,15 +1161,15 @@ async def node(
 
         # Configure node properties
         >>> node(action="set", node_name="R1", x=100, y=200, ram=2048)
-
-    To query node information:
-        list_nodes(project_id)                       # Convenience tool
-        query_resource(f"nodes://{project_id}/")     # Universal query
-        get_topology(project_id)                     # Full topology with links
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    if action == "create":
+    if action == "list":
+        if not project_id:
+            raise ValueError("project_id is required for 'list' action")
+        return await list_nodes_impl(app, project_id, format)
+
+    elif action == "create":
         # Create new node from template
         if not template_name:
             raise ValueError("template_name is required for 'create' action")
@@ -1321,30 +1337,38 @@ async def console(
 )
 async def link(
     ctx: Context,
-    connections: Annotated[
-        List[Dict[str, Any]], "List of connection operations (connect/disconnect)"
+    action: Annotated[
+        Literal["list", "batch"], "Action: 'list' (list links) or 'batch' (batch operations)"
     ],
+    project_id: Annotated[str | None, "Project ID (required for 'list')"] = None,
+    connections: Annotated[
+        List[Dict[str, Any]] | None, "List of connection operations (required for 'batch')"
+    ] = None,
+    format: Annotated[str, "Output format: 'table' (default) or 'json' (for 'list')"] = "table",
 ) -> str:
-    """Manage network connections (links) in batch with two-phase validation
+    """Manage network connections (links)
 
     v0.47.0: Renamed from set_network_connections to link (CRUD consolidation).
 
-    Two-phase execution prevents partial topology changes:
+    Actions:
+        - list: List all links in a project
+        - batch: Execute multiple connect/disconnect operations with two-phase validation
+
+    Two-phase execution for batch operations prevents partial topology changes:
     1. VALIDATE ALL operations (check nodes exist, ports free, adapters valid)
     2. EXECUTE ALL operations (only if all valid - atomic)
 
-    Workflow:
-        1. Use query_resource("links://{project_id}/") to see current topology
-        2. Identify link IDs to disconnect (if needed)
-        3. Call link() with disconnect + connect operations
-
-    Connection Operations:
+    Connection Operations (for 'batch' action):
         Connect: {action: "connect", node_a, node_b, port_a, port_b, adapter_a, adapter_b}
         Disconnect: {action: "disconnect", link_id}
 
     Examples:
-        # Connect two nodes
-        >>> link(connections=[{
+        # List links
+        >>> link(action="list", project_id="abc-123")
+        >>> link(action="list", project_id="abc-123", format="json")
+
+        # Connect two nodes (batch)
+        >>> link(action="batch", connections=[{
         ...     "action": "connect",
         ...     "node_a": "Router1",
         ...     "node_b": "Router2",
@@ -1354,18 +1378,30 @@ async def link(
         ...     "adapter_b": 0
         ... }])
 
-        # Disconnect link
-        >>> link(connections=[{"action": "disconnect", "link_id": "abc123"}])
+        # Disconnect link (batch)
+        >>> link(action="batch", connections=[{"action": "disconnect", "link_id": "abc123"}])
 
-    Returns: JSON with OperationResult (completed and failed operations)
+    Returns: JSON with OperationResult (completed and failed operations) or list of links
     """
     app: AppContext = ctx.request_context.lifespan_context
 
-    error = await validate_current_project(app)
-    if error:
-        return error
+    if action == "list":
+        if not project_id:
+            raise ValueError("project_id is required for 'list' action")
+        # Use query_resource to get links
+        resource_mgr = app.resource_manager
+        result = await resource_mgr.get_resource_content(f"links://{project_id}/", format)
+        return result
 
-    return await set_connection_impl(app, connections)
+    elif action == "batch":
+        if not connections:
+            raise ValueError("connections parameter is required for 'batch' action")
+
+        error = await validate_current_project(app)
+        if error:
+            return error
+
+        return await set_connection_impl(app, connections)
 
 
 @mcp.tool(
@@ -1576,9 +1612,10 @@ mcp.tool(
 async def drawing(
     ctx: Context,
     action: Annotated[
-        Literal["create", "update", "delete", "batch"],
-        "Action: 'create' (new drawing), 'update' (modify), 'delete' (remove), or 'batch' (create multiple)",
+        Literal["list", "create", "update", "delete", "batch"],
+        "Action: 'list' (list drawings), 'create' (new drawing), 'update' (modify), 'delete' (remove), or 'batch' (create multiple)",
     ],
+    project_id: Annotated[str | None, "Project ID (required for 'list')"] = None,
     drawing_id: Annotated[str | None, "Drawing ID (required for 'update' and 'delete')"] = None,
     drawing_type: Annotated[
         str | None,
@@ -1604,6 +1641,7 @@ async def drawing(
     rotation: Annotated[int | None, "Rotation angle in degrees (for 'update')"] = None,
     svg: Annotated[str | None, "SVG content (for 'update')"] = None,
     locked: Annotated[bool | None, "Lock/unlock drawing (for 'update')"] = None,
+    format: Annotated[str, "Output format: 'table' (default) or 'json' (for 'list')"] = "table",
     drawings: Annotated[
         list[dict] | None, "List of drawing definitions (required for 'batch')"
     ] = None,
@@ -1613,6 +1651,7 @@ async def drawing(
     v0.47.0: CRUD-style consolidation of create_drawing, update_drawing, delete_drawing, and create_drawings_batch.
 
     Actions:
+        - list: List all drawings in a project
         - create: Create new drawing (rectangle, ellipse, line, text)
         - update: Update existing drawing properties
         - delete: Delete drawing (WARNING: destructive, cannot be undone)
@@ -1622,6 +1661,10 @@ async def drawing(
         JSON with drawing info or batch operation results
 
     Examples:
+        # List drawings
+        >>> drawing(action="list", project_id="abc-123")
+        >>> drawing(action="list", project_id="abc-123", format="json")
+
         # Create rectangle
         >>> drawing(action="create", drawing_type="rectangle", x=100, y=100, width=200, height=100)
 
@@ -1641,6 +1684,14 @@ async def drawing(
         ... ])
     """
     app: AppContext = ctx.request_context.lifespan_context
+
+    if action == "list":
+        if not project_id:
+            raise ValueError("project_id is required for 'list' action")
+        # Use query_resource to get drawings
+        resource_mgr = app.resource_manager
+        result = await resource_mgr.get_resource_content(f"drawings://{project_id}/", format)
+        return result
 
     error = await validate_current_project(app)
     if error:
@@ -1802,56 +1853,6 @@ async def query_resource(
     return await query_resource_impl(app, uri, format)
 
 
-@mcp.tool(
-    name="list_projects",
-    tags={"resource", "project", "read-only", "claude-desktop"},
-)
-async def list_projects(
-    ctx: Context,
-    format: Annotated[str, "Output format: 'table' (default) or 'json'"] = "table",
-) -> str:
-    """List all GNS3 projects (convenience wrapper).
-
-    See tool implementation docstring for details.
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await list_projects_impl(app, format)
-
-
-@mcp.tool(
-    name="list_nodes",
-    tags={"resource", "node", "read-only", "claude-desktop"},
-)
-async def list_nodes(
-    ctx: Context,
-    project_id: Annotated[str, "GNS3 project ID (UUID format)"],
-    format: Annotated[str, "Output format: 'table' (default) or 'json'"] = "table",
-) -> str:
-    """List nodes in a GNS3 project (convenience wrapper).
-
-    See tool implementation docstring for details.
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await list_nodes_impl(app, project_id, format)
-
-
-@mcp.tool(
-    name="get_topology",
-    tags={"resource", "topology", "read-only", "claude-desktop"},
-)
-async def get_topology(
-    ctx: Context,
-    project_id: Annotated[str, "GNS3 project ID (UUID format)"],
-    format: Annotated[str, "Output format: 'table' (default) or 'json'"] = "table",
-) -> str:
-    """Get unified topology report for a project (convenience wrapper).
-
-    See tool implementation docstring for details.
-    """
-    app: AppContext = ctx.request_context.lifespan_context
-    return await get_topology_impl(app, project_id, format)
-
-
 # ============================================================================
 # MCP Tools - Tool Discovery (v0.47.0 - Aggressive Consolidation)
 # ============================================================================
@@ -1870,29 +1871,29 @@ TOOL_REGISTRY = {
         "categories": ["project", "management"],
         "capabilities": ["CRUD", "idempotent"],
         "resources": ["projects://"],
-        "description": "Manage GNS3 projects (open, create, close)",
-        "actions": ["open", "create", "close"],
+        "description": "Manage GNS3 projects (list, open, create, close)",
+        "actions": ["list", "open", "create", "close"],
     },
     "node": {
         "categories": ["node", "topology"],
         "capabilities": ["CRUD", "bulk", "wildcard", "parallel"],
         "resources": ["nodes://{project_id}/"],
-        "description": "Manage GNS3 nodes (create, delete, configure/control)",
-        "actions": ["create", "delete", "set"],
+        "description": "Manage GNS3 nodes (list, create, delete, configure/control)",
+        "actions": ["list", "create", "delete", "set"],
     },
     "link": {
         "categories": ["connection", "topology"],
         "capabilities": ["CRUD", "batch", "parallel"],
         "resources": ["links://{project_id}/"],
-        "description": "Manage network connections/links in batch",
-        "actions": ["connect", "disconnect"],
+        "description": "Manage network connections/links (list, batch operations)",
+        "actions": ["list", "batch"],
     },
     "drawing": {
         "categories": ["drawing", "visualization"],
         "capabilities": ["CRUD", "batch"],
         "resources": ["drawings://{project_id}/"],
-        "description": "Manage topology drawings (create, update, delete, batch)",
-        "actions": ["create", "update", "delete", "batch"],
+        "description": "Manage topology drawings (list, create, update, delete, batch)",
+        "actions": ["list", "create", "update", "delete", "batch"],
     },
     "node_file": {
         "categories": ["docker", "node"],
@@ -1927,27 +1928,6 @@ TOOL_REGISTRY = {
         "capabilities": [],
         "resources": ["*"],
         "description": "Universal resource query tool - access any GNS3 MCP resource by URI",
-        "actions": [],
-    },
-    "list_projects": {
-        "categories": ["resource", "project"],
-        "capabilities": [],
-        "resources": ["projects://"],
-        "description": "List all GNS3 projects (convenience wrapper)",
-        "actions": [],
-    },
-    "list_nodes": {
-        "categories": ["resource", "node"],
-        "capabilities": [],
-        "resources": ["nodes://{project_id}/"],
-        "description": "List nodes in a project (convenience wrapper)",
-        "actions": [],
-    },
-    "get_topology": {
-        "categories": ["resource", "topology"],
-        "capabilities": [],
-        "resources": ["topology://{project_id}"],
-        "description": "Get unified topology report (convenience wrapper)",
         "actions": [],
     },
     "export_topology_diagram": {

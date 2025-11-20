@@ -858,9 +858,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
     for op in operations:
         node_name = op["node_name"]
         if node_name not in nodes_accessed_status:
-            nodes_accessed_status[node_name] = app.console.has_accessed_terminal_by_node(
-                node_name
-            )
+            nodes_accessed_status[node_name] = app.console.has_accessed_terminal_by_node(node_name)
 
     # Determine if we need read-only mode for any nodes
     read_only_nodes = {node for node, accessed in nodes_accessed_status.items() if not accessed}
@@ -990,7 +988,7 @@ async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
     if read_only_nodes and skipped_indices:
         response["safety_policy"] = {
             "read_first_enforced": True,
-            "affected_nodes": sorted(list(read_only_nodes)),
+            "affected_nodes": sorted(read_only_nodes),
             "message": "Non-read operations skipped for terminals not accessed before. Read console first, then execute write operations in a separate batch.",
         }
 

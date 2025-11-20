@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     net-tools \
     dnsutils \
     curl \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /opt/gns3-ssh-proxy && chmod 755 /opt/gns3-ssh-proxy
 

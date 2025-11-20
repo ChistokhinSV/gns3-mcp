@@ -61,7 +61,20 @@
       "mcp__gns3-mcp__list_projects",
       "mcp__gns3-mcp__list_nodes",
       "mcp__gns3-mcp__node",
-      "mcp__gns3-mcp__console"
+      "mcp__gns3-mcp__console",
+      "mcp__lab-youtrack__get_issue_comments",
+      "Bash(docker build:*)",
+      "Bash(docker image:*)",
+      "Bash(docker run:*)",
+      "Bash(docker tag:*)",
+      "Bash(docker push:*)",
+      "mcp__gns3-mcp__query_resource",
+      "mcp__gns3-mcp__project_docs",
+      "mcp__gns3-mcp__ssh",
+      "Skill(gns3)",
+      "mcp__gns3-mcp__gns3_connection",
+      "Bash(.server.cmd status)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []

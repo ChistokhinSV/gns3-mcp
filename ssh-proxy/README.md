@@ -47,7 +47,7 @@ Storage:
 
 ```bash
 cd ssh-proxy
-docker build -t chistokhinsv/gns3-ssh-proxy:v0.2.1 .
+docker build -t chistokhinsv/gns3-ssh-proxy:v0.2.2 .
 ```
 
 ### 2. Deploy with Docker Compose (Recommended)
@@ -71,7 +71,7 @@ docker run -d \
   --network host \
   --restart unless-stopped \
   -v /opt/gns3-ssh-proxy:/opt/gns3-ssh-proxy \
-  chistokhinsv/gns3-ssh-proxy:v0.2.1
+  chistokhinsv/gns3-ssh-proxy:v0.2.2
 ```
 
 **Main Proxy (On GNS3 Host, with Discovery):**
@@ -86,7 +86,7 @@ docker run -d \
   -e GNS3_PORT=80 \
   -e GNS3_USERNAME=admin \
   -e GNS3_PASSWORD=yourpassword \
-  chistokhinsv/gns3-ssh-proxy:v0.2.1
+  chistokhinsv/gns3-ssh-proxy:v0.2.2
 ```
 
 ### 3. Verify
@@ -339,7 +339,15 @@ See [DEPLOYMENT.md](../DEPLOYMENT.md) for complete deployment instructions for G
 
 ## Version
 
-Current version: **0.2.1** (Feature - Diagnostic Tools & Shared Directory)
+Current version: **0.2.2** (Rebuild - SSH Dependencies Verified)
+
+**v0.2.2 Changes:**
+- **NEW**: OpenSSH client (`ssh` command) for direct SSH access from aux console
+- **NEW**: Can now SSH directly to devices from GNS3 auxiliary console
+- **VERIFIED**: Netmiko 4.6.0+ included (Python SSH automation)
+- **VERIFIED**: Paramiko 4.0.0 included (Python SSH library)
+- **USE CASE**: Connect via GNS3 aux console, use `ssh`, `ping`, `traceroute` commands
+- **NO BREAKING CHANGES**: Same API as v0.2.1
 
 **v0.2.1 Changes:**
 - **NEW**: Network diagnostic tools (ping, traceroute, ip, ss, netstat)
