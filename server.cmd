@@ -146,12 +146,15 @@ exit /b %errorlevel%
 echo === Installing GNS3 MCP HTTP Service ===
 echo.
 
-REM Check if already installed
+REM Check if already installed (try to uninstall first if in broken state)
 "%WINSW_EXE%" status >nul 2>&1
 if %errorlevel% equ 0 (
     echo Service already installed. Use 'reinstall' to update.
     exit /b 1
 )
+
+REM Try to clean up any broken installation
+"%WINSW_EXE%" uninstall >nul 2>&1
 
 REM Check if uvx is available
 where uvx >nul 2>&1
@@ -195,26 +198,29 @@ exit /b 0
 echo === Uninstalling GNS3 MCP HTTP Service ===
 echo.
 
-REM Check if installed
-"%WINSW_EXE%" status >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Service not installed
+REM Always try to stop service (ignore errors if not running)
+echo Stopping service...
+"%WINSW_EXE%" stop >nul 2>&1
+timeout /t 3 /nobreak >nul
+
+REM Always try to uninstall
+echo Removing service...
+"%WINSW_EXE%" uninstall >nul 2>&1
+if %errorlevel% equ 0 (
+    echo Service uninstalled successfully!
     exit /b 0
 )
 
-echo Stopping service...
-"%WINSW_EXE%" stop
-timeout /t 3 /nobreak >nul
-
-echo Removing service...
-"%WINSW_EXE%" uninstall
+REM Check if it failed because service wasn't installed
+"%WINSW_EXE%" status >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ERROR: Failed to remove service
-    exit /b 1
+    echo Service was not installed (cleaned up)
+    exit /b 0
 )
 
-echo Service uninstalled successfully!
-exit /b 0
+REM Service exists but couldn't uninstall
+echo ERROR: Failed to remove service
+exit /b 1
 
 :reinstall
 echo === Reinstalling GNS3 MCP HTTP Service ===
