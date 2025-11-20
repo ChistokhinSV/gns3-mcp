@@ -4,6 +4,20 @@ REM This ensures Windows service can find uvx even when PATH is not inherited
 
 setlocal enabledelayedexpansion
 
+REM Get script directory for .env loading
+set "SCRIPT_DIR=%~dp0"
+set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+
+REM Load environment variables from .env if exists (for service mode)
+if exist "%SCRIPT_DIR%\.env" (
+    for /f "usebackq tokens=1,2 delims==" %%a in ("%SCRIPT_DIR%\.env") do (
+        REM Skip comments and empty lines
+        echo %%a | findstr /r "^#" >nul || (
+            if not "%%a"=="" if not "%%b"=="" set "%%a=%%b"
+        )
+    )
+)
+
 REM Try to find uvx in common locations
 set "UVX_PATH="
 
