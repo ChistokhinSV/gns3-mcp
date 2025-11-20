@@ -131,7 +131,10 @@ class GNS3Client:
     def _headers(self) -> Dict[str, str]:
         """Get headers with Bearer token"""
         if not self.token:
-            raise RuntimeError("Not authenticated - call authenticate() first")
+            error_msg = f"GNS3 server unavailable or authentication failed ({self.base_url})"
+            if self.connection_error:
+                error_msg = f"GNS3 server unavailable: {self.connection_error} ({self.base_url})"
+            raise RuntimeError(error_msg)
         return {"Authorization": f"Bearer {self.token}"}
 
     def _extract_error(self, exception: Exception) -> str:

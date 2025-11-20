@@ -111,7 +111,7 @@ class TestHeaders:
         """Test headers fail without authentication"""
         with pytest.raises(RuntimeError) as exc:
             client._headers()
-        assert "Not authenticated" in str(exc.value)
+        assert "GNS3 server unavailable" in str(exc.value)
 
 
 # ===== Error Extraction Tests =====
