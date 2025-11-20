@@ -161,6 +161,14 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+echo Checking gns3-mcp from PyPI...
+uvx --from gns3-mcp gns3-mcp --version
+if %errorlevel% neq 0 (
+    echo WARNING: Failed to verify gns3-mcp from PyPI
+    echo Continuing with installation anyway...
+)
+echo.
+
 echo Installing service with WinSW...
 "%WINSW_EXE%" install
 if %errorlevel% neq 0 (
