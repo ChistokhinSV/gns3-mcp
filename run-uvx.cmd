@@ -109,7 +109,8 @@ echo.
 
 REM Download and install uv using the official standalone installer
 REM This is the recommended installation method for Windows
-%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -Command "& { try { irm https://astral.sh/uv/install.ps1 | iex } catch { Write-Host 'ERROR: Failed to install uv:' $_.Exception.Message; exit 1 } }"
+REM Use -ExecutionPolicy Bypass to work around restricted policy for service accounts
+%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& { try { irm https://astral.sh/uv/install.ps1 | iex } catch { Write-Host 'ERROR: Failed to install uv:' $_.Exception.Message; exit 1 } }"
 
 if %errorlevel% neq 0 (
     echo.
