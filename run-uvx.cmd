@@ -137,25 +137,34 @@ echo.
 
 REM Retry finding uvx in common locations after installation
 echo Searching for uvx after installation...
+echo.
+echo Debug info:
+echo   USERPROFILE=%USERPROFILE%
+echo   LOCALAPPDATA=%LOCALAPPDATA%
+echo.
 
-REM Check default uv install location first
-set "TEST_PATH=%USERPROFILE%\.cargo\bin\uvx.exe"
-if exist "!TEST_PATH!" (
-    echo [OK] Found uvx at: !TEST_PATH!
-    echo.
-    "!TEST_PATH!" %*
-    exit /b !errorlevel!
+REM Check all possible install locations
+set "LOCATIONS[0]=%USERPROFILE%\.cargo\bin\uvx.exe"
+set "LOCATIONS[1]=%USERPROFILE%\.local\bin\uvx.exe"
+set "LOCATIONS[2]=%LOCALAPPDATA%\Programs\uv\bin\uvx.exe"
+set "LOCATIONS[3]=%LOCALAPPDATA%\bin\uvx.exe"
+set "LOCATIONS[4]=%APPDATA%\uv\bin\uvx.exe"
+set "LOCATIONS[5]=%ProgramFiles%\uv\bin\uvx.exe"
+
+REM Try each location
+for /L %%i in (0,1,5) do (
+    set "TEST_PATH=!LOCATIONS[%%i]!"
+    if exist "!TEST_PATH!" (
+        echo [OK] Found uvx at: !TEST_PATH!
+        echo.
+        "!TEST_PATH!" %*
+        exit /b !errorlevel!
+    ) else (
+        echo [  ] Not found: !TEST_PATH!
+    )
 )
 
-REM Check user's .local directory (common on Windows)
-set "TEST_PATH=%LOCALAPPDATA%\bin\uvx.exe"
-if exist "!TEST_PATH!" (
-    echo [OK] Found uvx at: !TEST_PATH!
-    echo.
-    "!TEST_PATH!" %*
-    exit /b !errorlevel!
-)
-
+echo.
 REM Check PATH again (installer may have updated it)
 where uvx >nul 2>&1
 if %errorlevel% equ 0 (
