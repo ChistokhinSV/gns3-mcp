@@ -79,8 +79,7 @@ if %errorlevel% neq 0 (
     echo Requesting administrator privileges...
     echo.
     REM Use Windows PowerShell explicitly (not PowerShell Core/7)
-    REM Note: Using & instead of && for pause to ensure window stays open even on errors
-    %SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe -Command "Start-Process cmd -ArgumentList '/c cd /d \"%SCRIPT_DIR%\" && \"%~f0\" %COMMAND% & echo. & echo. & echo Press any key to close... & pause >nul' -Verb RunAs"
+    %SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe -Command "Start-Process cmd -ArgumentList '/c cd /d \"%SCRIPT_DIR%\" && \"%~f0\" %COMMAND%' -Verb RunAs"
     exit /b 0
 )
 REM Running as admin, proceed to command
