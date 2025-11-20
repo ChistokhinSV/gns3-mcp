@@ -74,7 +74,8 @@
       "Skill(gns3)",
       "mcp__gns3-mcp__gns3_connection",
       "Bash(.server.cmd status)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(just version-check:*)"
     ],
     "deny": [],
     "ask": []
