@@ -43,7 +43,7 @@
   <!-- Graceful Shutdown Configuration -->
   <!-- WinSW sends Ctrl+C (SIGINT) on stop, which our signal handler catches -->
   <stopparentprocessfirst>false</stopparentprocessfirst>
-  <stoptimeout>30sec</stoptimeout> <!-- Allow 30s for graceful shutdown -->
+  <stoptimeout>5sec</stoptimeout> <!-- Allow 5s for graceful shutdown -->
 
   <!-- Process Priority -->
   <priority>Normal</priority>
