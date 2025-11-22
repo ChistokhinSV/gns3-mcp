@@ -323,7 +323,9 @@ async def delete_drawing_impl(
 # ============================================================================
 
 
-async def create_drawings_batch_impl(app: "IAppContext", drawings: list[dict]) -> str:
+async def create_drawings_batch_impl(
+    gns3: "IGns3Client", current_project_id: str, drawings: list[dict]
+) -> str:
     """Create multiple drawing objects in batch with validation
 
     Two-phase execution:
@@ -331,7 +333,6 @@ async def create_drawings_batch_impl(app: "IAppContext", drawings: list[dict]) -
     2. CREATE ALL drawings (only if all valid, sequential execution)
 
     Args:
-        app: Application context
         drawings: List of drawing dicts, each containing:
             {
                 "drawing_type": "rectangle" | "ellipse" | "line" | "text",
@@ -509,7 +510,8 @@ async def create_drawings_batch_impl(app: "IAppContext", drawings: list[dict]) -
         try:
             # Execute drawing creation with all parameters
             result = await create_drawing_impl(
-                app,
+                gns3,
+                current_project_id,
                 drawing_type=drawing_type,
                 x=drawing["x"],
                 y=drawing["y"],

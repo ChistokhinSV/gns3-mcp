@@ -1512,7 +1512,7 @@ async def drawing(
         if not drawings:
             raise ValueError("drawings list is required for 'batch' action")
 
-        return await create_drawings_batch_impl(app, drawings)
+        return await create_drawings_batch_impl(app.gns3, app.current_project_id, drawings)
 
 
 # ============================================================================
