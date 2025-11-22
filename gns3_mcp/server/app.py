@@ -31,6 +31,11 @@ class AppContext(IAppContext):
     """
 
     # Required fields (no defaults) must come first in dataclasses
+    # IMPORTANT: Python dataclasses require all fields without defaults to appear before
+    # fields with defaults. Using field() for required fields ensures proper ordering,
+    # even though field() without arguments is functionally equivalent to no field() at all.
+    # This is a workaround for Python's dataclass field ordering validation.
+    # See: https://docs.python.org/3/library/dataclasses.html#mutable-default-values
     gns3: GNS3Client = field()
     console: ConsoleManager = field()
     dependencies: Dependencies = field()  # v0.50.0: DI container (GM-46)

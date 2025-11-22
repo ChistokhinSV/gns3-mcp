@@ -4,6 +4,50 @@ Utilities for working with global application context and validation.
 
 v0.49.0: Extracted from main.py for better modularity (GM-45)
 v0.50.0: Added get_dependencies() for DI container access (GM-46)
+
+IMPORTANT: HYBRID ACCESS PATTERN (Transitional)
+================================================
+
+This module supports TWO ways to access services:
+
+1. **Dependency Injection (RECOMMENDED for tools)**:
+   ```python
+   @mcp.tool()
+   async def my_tool(ctx: Context):
+       deps = ctx.request_context.lifespan_context.dependencies
+       gns3 = deps.get(IGns3Client)
+       console = deps.get(IConsoleManager)
+   ```
+
+   Advantages:
+   - Type-safe interface-based access
+   - Easy to mock for unit tests
+   - Explicit dependencies
+   - Thread-safe
+   - Follows SOLID principles
+
+2. **Global State (LEGACY - only for resources)**:
+   ```python
+   def resource_callback():
+       app = get_app()
+       gns3 = app.gns3
+       console = app.console
+   ```
+
+   Why still needed:
+   - FastMCP resources don't receive Context parameter
+   - Resource callbacks lack access to request context
+   - Global state is acceptable for resources until FastMCP adds context support
+
+Migration Strategy:
+-------------------
+- NEW CODE: Always use DI (pattern #1)
+- TOOLS: Migrate to DI when touching existing code
+- RESOURCES: Keep global state until FastMCP supports context in resources
+- TARGET: Pure DI architecture (eliminate global state entirely)
+
+See docs/MIGRATION_GM-46.md for detailed migration guide.
+See docs/DI_USAGE_GUIDE.md for usage patterns and examples.
 """
 
 import json
