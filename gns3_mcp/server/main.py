@@ -795,7 +795,7 @@ async def project(
         # Close current project
         >>> project(action="close")
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: IAppContext = ctx.request_context.lifespan_context
 
     if action == "list":
         return await list_projects_impl(app, format)
@@ -1130,7 +1130,7 @@ async def link(
 
     Returns: JSON with OperationResult (completed and failed operations) or list of links
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: IAppContext = ctx.request_context.lifespan_context
 
     if action == "list":
         if not project_id:
@@ -1203,7 +1203,7 @@ async def node_file(
         ...     "gateway": "10.199.0.1"
         ... }])
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: IAppContext = ctx.request_context.lifespan_context
 
     error = await validate_current_project(app)
     if error:
@@ -1430,7 +1430,7 @@ async def drawing(
         ...     {"drawing_type": "text", "x": 175, "y": 140, "text": "Router1", "z": 1}
         ... ])
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: IAppContext = ctx.request_context.lifespan_context
 
     if action == "list":
         if not project_id:
