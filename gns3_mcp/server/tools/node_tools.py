@@ -288,7 +288,8 @@ async def get_node_details_impl(app: "IAppContext", node_name: str) -> str:
 
 
 async def _set_single_node_impl(
-    app: "IAppContext",
+    gns3: "IGns3Client",
+    current_project_id: str,
     node: Dict[str, Any],
     action: str | None = None,
     x: int | None = None,
@@ -386,7 +387,7 @@ async def _set_single_node_impl(
         update_payload.update(hardware_props)
 
     if update_payload:
-        await app.gns3.update_node(app.current_project_id, node_id, update_payload)
+        await gns3.update_node(current_project_id, node_id, update_payload)
 
         # Build change summary
         changes = []
@@ -416,7 +417,7 @@ async def _set_single_node_impl(
         action_lower = action.lower()
 
         if action_lower == "start":
-            await app.gns3.start_node(app.current_project_id, node_id)
+            await gns3.start_node(current_project_id, node_id)
 
             # Poll for startup completion with progress notifications (v0.39.0)
             max_steps = 12
@@ -428,7 +429,7 @@ async def _set_single_node_impl(
                         message=f"Starting {node_name}... (step {step + 1}/{max_steps})",
                     )
 
-                nodes = await app.gns3.get_nodes(app.current_project_id)
+                nodes = await gns3.get_nodes(current_project_id)
                 current_node = next((n for n in nodes if n["node_id"] == node_id), None)
 
                 if current_node and current_node.get("status") == "started":
@@ -447,26 +448,26 @@ async def _set_single_node_impl(
                 results.append("Started (startup in progress)")
 
         elif action_lower == "stop":
-            await app.gns3.stop_node(app.current_project_id, node_id)
+            await gns3.stop_node(current_project_id, node_id)
             results.append("Stopped")
 
         elif action_lower == "suspend":
-            await app.gns3.suspend_node(app.current_project_id, node_id)
+            await gns3.suspend_node(current_project_id, node_id)
             results.append("Suspended")
 
         elif action_lower == "reload":
-            await app.gns3.reload_node(app.current_project_id, node_id)
+            await gns3.reload_node(current_project_id, node_id)
             results.append("Reloaded")
 
         elif action_lower == "restart":
-            await app.gns3.stop_node(app.current_project_id, node_id)
+            await gns3.stop_node(current_project_id, node_id)
             results.append("Stopped")
 
             # Wait for stop confirmation
             stopped = False
             for attempt in range(3):
                 await asyncio.sleep(5)
-                nodes = await app.gns3.get_nodes(app.current_project_id)
+                nodes = await gns3.get_nodes(current_project_id)
                 current_node = next((n for n in nodes if n["node_id"] == node_id), None)
                 if current_node and current_node["status"] == "stopped":
                     stopped = True
@@ -475,7 +476,7 @@ async def _set_single_node_impl(
             if not stopped:
                 results.append("Warning: Node may not have stopped completely")
 
-            await app.gns3.start_node(app.current_project_id, node_id)
+            await gns3.start_node(current_project_id, node_id)
             results.append("Started")
 
         else:
@@ -487,7 +488,8 @@ async def _set_single_node_impl(
 
 
 async def set_node_impl(
-    app: "IAppContext",
+    gns3: "IGns3Client",
+    current_project_id: str,
     node_name: str,
     action: str | None = None,
     x: int | None = None,
@@ -545,11 +547,11 @@ async def set_node_impl(
         For single node: Status message (backward compatible)
         For multiple nodes: BatchOperationResult JSON with per-node results
     """
-    if not app.current_project_id:
+    if not current_project_id:
         return project_not_found_error()
 
     # Get all nodes
-    nodes = await app.gns3.get_nodes(app.current_project_id)
+    nodes = await gns3.get_nodes(current_project_id)
 
     # Resolve node names
     resolved_names = resolve_node_names(node_name, nodes)
@@ -558,7 +560,7 @@ async def set_node_impl(
     if not resolved_names:
         available_nodes = [n["name"] for n in nodes]
         return node_not_found_error(
-            node_name=node_name, project_id=app.current_project_id, available_nodes=available_nodes
+            node_name=node_name, project_id=current_project_id, available_nodes=available_nodes
         )
 
     # Single node - backward compatible response
@@ -567,13 +569,14 @@ async def set_node_impl(
         if not node:
             return node_not_found_error(
                 node_name=resolved_names[0],
-                project_id=app.current_project_id,
+                project_id=current_project_id,
                 available_nodes=[n["name"] for n in nodes],
             )
 
         try:
             results = await _set_single_node_impl(
-                app,
+                gns3,
+                current_project_id,
                 node,
                 action,
                 x,
@@ -623,7 +626,8 @@ async def set_node_impl(
         for node in nodes_to_process:
             tasks.append(
                 _set_single_node_impl(
-                    app,
+                    gns3,
+                    current_project_id,
                     node,
                     action,
                     x,
@@ -655,7 +659,8 @@ async def set_node_impl(
         for node in nodes_to_process:
             try:
                 node_results = await _set_single_node_impl(
-                    app,
+                    gns3,
+                    current_project_id,
                     node,
                     action,
                     x,

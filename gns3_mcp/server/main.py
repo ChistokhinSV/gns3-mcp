@@ -959,7 +959,8 @@ async def node(
             raise ValueError("node_name is required for 'set' action")
 
         return await set_node_impl(
-            app,
+            app.gns3,
+            app.current_project_id,
             node_name,
             state_action,  # Renamed from 'action' to 'state_action'
             x,
