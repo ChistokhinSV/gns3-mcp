@@ -909,7 +909,7 @@ async def node(
         # Configure node properties
         >>> node(action="set", node_name="R1", x=100, y=200, ram=2048)
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: IAppContext = ctx.request_context.lifespan_context
 
     if action == "list":
         if not project_id:
@@ -1073,7 +1073,7 @@ async def console(
         ...     {"type": "keystroke", "node_name": "R1", "key": "ctrl_c"}  # Cancel if needed
         ... ])
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: IAppContext = ctx.request_context.lifespan_context
     return await console_batch_impl(app, operations)
 
 
@@ -1572,7 +1572,7 @@ async def ssh(
         ...     {"type": "command", "node_name": "R2", "command": "show ip int brief"}
         ... ])
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: IAppContext = ctx.request_context.lifespan_context
     return await ssh_batch_impl(app, operations)
 
 
