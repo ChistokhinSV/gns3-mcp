@@ -23,7 +23,7 @@ from fastmcp import Context
 from models import ErrorCode, NodeInfo, NodeSummary
 
 if TYPE_CHECKING:
-    from interfaces import IAppContext
+    from interfaces import IAppContext, IGns3Client
 
 logger = logging.getLogger(__name__)
 
@@ -911,28 +911,32 @@ async def delete_node_impl(app: "IAppContext", node_name: str) -> str:
         )
 
 
-async def get_node_file_impl(app: "IAppContext", node_name: str, file_path: str) -> str:
+async def get_node_file_impl(
+    gns3: "IGns3Client", current_project_id: str, node_name: str, file_path: str
+) -> str:
     """Read file from Docker node filesystem
 
     Args:
+        gns3: GNS3 API client
+        current_project_id: Current project ID
         node_name: Name of the node
         file_path: Path relative to container root (e.g., 'etc/network/interfaces')
 
     Returns:
         JSON with file contents
     """
-    if not app.current_project_id:
+    if not current_project_id:
         return project_not_found_error()
 
     try:
-        nodes = await app.gns3.get_nodes(app.current_project_id)
+        nodes = await gns3.get_nodes(current_project_id)
         node = next((n for n in nodes if n["name"] == node_name), None)
 
         if not node:
             available_nodes = [n["name"] for n in nodes]
             return node_not_found_error(
                 node_name=node_name,
-                project_id=app.current_project_id,
+                project_id=current_project_id,
                 available_nodes=available_nodes,
             )
 
@@ -950,7 +954,7 @@ async def get_node_file_impl(app: "IAppContext", node_name: str, file_path: str)
                 },
             )
 
-        content = await app.gns3.get_node_file(app.current_project_id, node["node_id"], file_path)
+        content = await gns3.get_node_file(current_project_id, node["node_id"], file_path)
 
         return json.dumps(
             {"node_name": node_name, "file_path": file_path, "content": content}, indent=2

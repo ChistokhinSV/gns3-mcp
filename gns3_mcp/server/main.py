@@ -1223,7 +1223,7 @@ async def node_file(
         if not file_path:
             raise ValueError("file_path is required for 'read' action")
 
-        return await get_node_file_impl(app, node_name, file_path)
+        return await get_node_file_impl(app.gns3, app.current_project_id, node_name, file_path)
 
     elif action == "write":
         # Write file to Docker node
