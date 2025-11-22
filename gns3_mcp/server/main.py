@@ -1161,7 +1161,7 @@ async def link(
         if error:
             return error
 
-        return await set_connection_impl(app, connections)
+        return await set_connection_impl(app.gns3, app.current_project_id, connections)
 
 
 @mcp.tool(

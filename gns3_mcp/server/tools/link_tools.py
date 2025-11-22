@@ -117,7 +117,9 @@ async def get_links_impl(gns3: "IGns3Client", project_id: str) -> str:
         )
 
 
-async def set_connection_impl(app: "IAppContext", connections: List[Dict[str, Any]]) -> str:
+async def set_connection_impl(
+    gns3: "IGns3Client", current_project_id: str, connections: List[Dict[str, Any]]
+) -> str:
     """Manage network connections (links) in batch with two-phase validation
 
     Two-phase execution prevents partial topology changes:
@@ -162,8 +164,8 @@ async def set_connection_impl(app: "IAppContext", connections: List[Dict[str, An
             )
 
         # Fetch topology data ONCE (not in loop - fixes N+1 issue)
-        nodes = await app.gns3.get_nodes(app.current_project_id)
-        links = await app.gns3.get_links(app.current_project_id)
+        nodes = await gns3.get_nodes(current_project_id)
+        links = await gns3.get_links(current_project_id)
 
         # PHASE 1: VALIDATE ALL operations (no state changes)
         validator = LinkValidator(nodes, links)
@@ -279,7 +281,7 @@ async def set_connection_impl(app: "IAppContext", connections: List[Dict[str, An
                         ]
                     }
 
-                    result = await app.gns3.create_link(app.current_project_id, link_spec)
+                    result = await gns3.create_link(current_project_id, link_spec)
 
                     completed.append(
                         CompletedOperation(
@@ -303,7 +305,7 @@ async def set_connection_impl(app: "IAppContext", connections: List[Dict[str, An
                     )
 
                 else:  # Disconnect
-                    await app.gns3.delete_link(app.current_project_id, op.link_id)
+                    await gns3.delete_link(current_project_id, op.link_id)
 
                     completed.append(
                         CompletedOperation(index=idx, action="disconnect", link_id=op.link_id)
