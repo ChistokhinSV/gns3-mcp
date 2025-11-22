@@ -5,6 +5,63 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.51.0] - 2025-11-22 - Architecture: Phase 2 - Tools Migration to DI
+
+### Changed
+- **All MCP Tools Migrated to Dependency Injection (GM-74)**
+  - Migrated 10 tools from global state to DI pattern (100% complete)
+  - Type hint changes only: `app: AppContext` → `app: IAppContext`
+  - Access via `ctx.request_context.lifespan_context` instead of `get_app()`
+  - Zero tools using global state - all use DI via FastMCP Context
+
+- **Batch 1 - Quick Wins (3 tools)**:
+  - `gns3_connection`: Connection management
+  - `project_docs`: Project documentation CRUD
+  - `query_resource`: Universal resource query
+
+- **Batch 2 - Core Tools (4 tools)**:
+  - `project`: Project management CRUD
+  - `link`: Network connections with batch operations
+  - `node_file`: Docker file operations
+  - `drawing`: Topology drawings with batch creation
+
+- **Batch 3 - Complex Tools (3 tools)**:
+  - `console`: Batch console operations
+  - `node`: Node management with wildcard bulk operations (most complex)
+  - `ssh`: Batch SSH operations with multi-proxy support
+
+### Technical Details
+- All 237 tests passing (no test changes needed - backward compatible)
+- No behavioral changes or regressions detected
+- Implementation functions unchanged (kept `app: IAppContext` parameter)
+- Resources still use global state (FastMCP limitation - deferred to Phase 3)
+- Minimal risk migration strategy: type hints only, no signature changes
+- Code coverage maintained at target levels
+
+### Documentation
+- **GLOBAL_STATE_TRANSITION.md** - Updated roadmap with Phase 2 completion
+  - Added completion summary with all migrated tools
+  - Updated progress tracking (Phase 2: 100%)
+  - Documented implementation approach and testing results
+- Version synchronized across all files (3 locations)
+
+### Commits
+- bb98303: Batch 1 migration (3 tools)
+- 5b31c31: Batch 2 migration (4 tools)
+- 13b6f17: Batch 3 migration (3 tools)
+- 9a0129f: Documentation update (transition roadmap)
+
+### Related Issues
+- GM-74: Phase 2 - Migrate Tools to Dependency Injection
+- GM-46: Implement DI Container (Phase 1 foundation)
+- GM-39: Epic - Architecture Refactoring
+
+### Migration Impact
+- **Developers**: Tools now access services via DI instead of global state
+- **Users**: No changes - tools work identically (backward compatible)
+- **Testing**: Easier mocking with DI pattern (future benefit)
+- **Next Phase**: Phase 3 will migrate resources to DI (blocked on FastMCP)
+
 ## [0.50.0] - 2025-11-22 - Architecture: Dependency Inversion & Modularization
 
 ### Added
