@@ -1048,7 +1048,10 @@ async def write_node_file_impl(
 
 
 async def configure_node_network_impl(
-    app: "IAppContext", node_name: str, interfaces: list[Dict[str, Any]]
+    gns3: "IGns3Client",
+    current_project_id: str,
+    node_name: str,
+    interfaces: list[Dict[str, Any]],
 ) -> str:
     """Configure network interfaces on Docker node
 
@@ -1068,7 +1071,7 @@ async def configure_node_network_impl(
     Returns:
         JSON confirmation with configured interfaces
     """
-    if not app.current_project_id:
+    if not current_project_id:
         return project_not_found_error()
 
     try:
@@ -1093,14 +1096,14 @@ async def configure_node_network_impl(
         interfaces_content = config.to_debian_interfaces()
 
         # Get node
-        nodes = await app.gns3.get_nodes(app.current_project_id)
+        nodes = await gns3.get_nodes(current_project_id)
         node = next((n for n in nodes if n["name"] == node_name), None)
 
         if not node:
             available_nodes = [n["name"] for n in nodes]
             return node_not_found_error(
                 node_name=node_name,
-                project_id=app.current_project_id,
+                project_id=current_project_id,
                 available_nodes=available_nodes,
             )
 
@@ -1119,24 +1122,24 @@ async def configure_node_network_impl(
             )
 
         # Write interfaces file
-        await app.gns3.write_node_file(
-            app.current_project_id, node["node_id"], "etc/network/interfaces", interfaces_content
+        await gns3.write_node_file(
+            current_project_id, node["node_id"], "etc/network/interfaces", interfaces_content
         )
 
         # Restart node to apply configuration
         # Note: Using restart action which stops with retry logic then starts
-        await app.gns3.stop_node(app.current_project_id, node["node_id"])
+        await gns3.stop_node(current_project_id, node["node_id"])
 
         # Wait for confirmed stop
         for _ in range(10):  # Try up to 10 times
             await asyncio.sleep(1)
-            nodes = await app.gns3.get_nodes(app.current_project_id)
+            nodes = await gns3.get_nodes(current_project_id)
             node = next((n for n in nodes if n["node_id"] == node["node_id"]), None)
             if node and node["status"] == "stopped":
                 break
 
         # Start node
-        await app.gns3.start_node(app.current_project_id, node["node_id"])
+        await gns3.start_node(current_project_id, node["node_id"])
 
         return json.dumps(
             {

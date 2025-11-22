@@ -1245,7 +1245,9 @@ async def node_file(
         if not interfaces:
             raise ValueError("interfaces list is required for 'configure_network' action")
 
-        return await configure_node_network_impl(app, node_name, interfaces)
+        return await configure_node_network_impl(
+            app.gns3, app.current_project_id, node_name, interfaces
+        )
 
 
 @mcp.tool(
