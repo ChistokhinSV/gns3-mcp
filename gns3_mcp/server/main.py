@@ -949,7 +949,9 @@ async def node(
         if error:
             return error
 
-        return await delete_node_impl(app, node_name)
+        return await delete_node_impl(
+            app.gns3, app.current_project_id, app.ssh_proxy_mapping, node_name
+        )
 
     elif action == "set":
         # Configure node properties and/or control state

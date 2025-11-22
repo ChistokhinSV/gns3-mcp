@@ -807,14 +807,16 @@ async def create_node_impl(
         )
 
 
-async def _cleanup_ssh_sessions_for_node(app: "IAppContext", node_name: str) -> None:
+async def _cleanup_ssh_sessions_for_node(
+    ssh_proxy_mapping: Dict[str, str], node_name: str
+) -> None:
     """Clean up SSH sessions for a node on all registered proxies (v0.34.0)
 
     Called automatically when a node is deleted. Attempts to disconnect SSH sessions
     on all proxies (host + lab proxies) and cleans up proxy mappings.
 
     Args:
-        app: Application context
+        ssh_proxy_mapping: SSH proxy node mapping
         node_name: Name of the deleted node
 
     Note:
@@ -859,14 +861,19 @@ async def _cleanup_ssh_sessions_for_node(app: "IAppContext", node_name: str) -> 
                     )
 
             # Clean up proxy mapping
-            app.ssh_proxy_mapping.pop(node_name, None)
+            ssh_proxy_mapping.pop(node_name, None)
 
         except Exception as e:
             # Log but don't raise - session cleanup should not block node deletion
             logger.warning(f"SSH session cleanup failed for node {node_name}: {e}")
 
 
-async def delete_node_impl(app: "IAppContext", node_name: str) -> str:
+async def delete_node_impl(
+    gns3: "IGns3Client",
+    current_project_id: str,
+    ssh_proxy_mapping: Dict[str, str],
+    node_name: str,
+) -> str:
     """Delete a node from the current project
 
     Also cleans up SSH sessions on all registered proxies.
@@ -878,21 +885,21 @@ async def delete_node_impl(app: "IAppContext", node_name: str) -> str:
         JSON confirmation message
     """
     try:
-        nodes = await app.gns3.get_nodes(app.current_project_id)
+        nodes = await gns3.get_nodes(current_project_id)
         node = next((n for n in nodes if n["name"] == node_name), None)
 
         if not node:
             available_nodes = [n["name"] for n in nodes]
             return node_not_found_error(
                 node_name=node_name,
-                project_id=app.current_project_id,
+                project_id=current_project_id,
                 available_nodes=available_nodes,
             )
 
-        await app.gns3.delete_node(app.current_project_id, node["node_id"])
+        await gns3.delete_node(current_project_id, node["node_id"])
 
         # Clean up SSH sessions on all registered proxies (v0.34.0)
-        await _cleanup_ssh_sessions_for_node(app, node_name)
+        await _cleanup_ssh_sessions_for_node(ssh_proxy_mapping, node_name)
 
         return json.dumps({"message": f"Node '{node_name}' deleted successfully"}, indent=2)
 
@@ -904,7 +911,7 @@ async def delete_node_impl(app: "IAppContext", node_name: str) -> str:
             suggested_action="Verify the node exists, stop it if running, and check GNS3 server is accessible",
             context={
                 "node_name": node_name,
-                "project_id": app.current_project_id,
+                "project_id": current_project_id,
                 "exception": str(e),
             },
         )
