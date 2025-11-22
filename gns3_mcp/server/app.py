@@ -14,9 +14,10 @@ from dataclasses import dataclass, field
 from typing import Dict
 
 from console_manager import ConsoleManager
+from di_container import Dependencies
 from fastmcp import FastMCP
 from gns3_client import GNS3Client
-from interfaces import IAppContext
+from interfaces import IAppContext, IConsoleManager, IGns3Client, IResourceManager
 from resources import ResourceManager
 
 logger = logging.getLogger(__name__)
@@ -24,12 +25,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AppContext(IAppContext):
-    """Application context with GNS3 client, console manager, and resource manager"""
+    """Application context with GNS3 client, console manager, and resource manager
 
-    gns3: GNS3Client
-    console: ConsoleManager
-    resource_manager: ResourceManager | None = None
-    current_project_id: str | None = None
+    v0.50.0: Added dependencies container for proper DI (GM-46)
+    """
+
+    # Required fields (no defaults) must come first in dataclasses
+    gns3: GNS3Client = field()
+    console: ConsoleManager = field()
+    dependencies: Dependencies = field()  # v0.50.0: DI container (GM-46)
+
+    # Optional fields (with defaults) come after required fields
+    resource_manager: ResourceManager | None = field(default=None)
+    current_project_id: str | None = field(default=None)
     cleanup_task: asyncio.Task | None = field(default=None)
     # v0.38.0: Background authentication task (non-blocking startup)
     auth_task: asyncio.Task | None = field(default=None)
@@ -138,14 +146,24 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     # Start periodic cleanup task
     cleanup_task = asyncio.create_task(periodic_console_cleanup(console))
 
+    # v0.50.0: Create DI container and register services (GM-46)
+    dependencies = Dependencies()
+    dependencies.register_instance(IGns3Client, gns3)
+    dependencies.register_instance(IConsoleManager, console)
+    logger.info(f"Registered services: {', '.join(dependencies.registered_services())}")
+
     # v0.38.0: Create context first (background auth needs it)
     # Server starts immediately without waiting for authentication
     context = AppContext(
         gns3=gns3,
         console=console,
+        dependencies=dependencies,
         current_project_id=None,  # Will be set by background auth task
         cleanup_task=cleanup_task,
     )
+
+    # Register AppContext itself in DI container
+    dependencies.register_instance(IAppContext, context)
 
     # Start background authentication task (non-blocking)
     auth_task = asyncio.create_task(background_authentication(gns3, context))
@@ -154,6 +172,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 
     # Initialize resource manager (needs context for callbacks)
     context.resource_manager = ResourceManager(context)
+    dependencies.register_instance(IResourceManager, context.resource_manager)
 
     # Import and set global app for static resources
     from context import set_app
@@ -167,6 +186,10 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         from context import clear_app
 
         clear_app()
+
+        # v0.50.0: Clear DI container (GM-46)
+        dependencies.clear()
+        logger.info("Cleared DI container")
 
         # Cleanup background tasks
         if cleanup_task:

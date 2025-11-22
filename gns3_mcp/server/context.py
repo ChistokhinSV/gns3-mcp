@@ -3,12 +3,14 @@
 Utilities for working with global application context and validation.
 
 v0.49.0: Extracted from main.py for better modularity (GM-45)
+v0.50.0: Added get_dependencies() for DI container access (GM-46)
 """
 
 import json
 import logging
 from typing import TYPE_CHECKING
 
+from di_container import Dependencies
 from models import ErrorResponse
 
 if TYPE_CHECKING:
@@ -53,6 +55,28 @@ def clear_app() -> None:
     """
     global _app
     _app = None
+
+
+def get_dependencies() -> Dependencies:
+    """Get DI container from global app context
+
+    v0.50.0: New helper for accessing DI container (GM-46)
+
+    Raises:
+        RuntimeError: If application not initialized
+
+    Returns:
+        Dependencies container
+
+    Example:
+        ```python
+        # In a tool/resource without FastMCP context
+        deps = get_dependencies()
+        gns3 = deps.get(IGns3Client)
+        ```
+    """
+    app = get_app()
+    return app.dependencies
 
 
 async def validate_current_project(app: "IAppContext") -> str | None:

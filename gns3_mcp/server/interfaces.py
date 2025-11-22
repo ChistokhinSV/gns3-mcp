@@ -654,3 +654,7 @@ class IAppContext(ABC):
     def ssh_proxy_mapping(self) -> Dict[str, str]:
         """Get SSH proxy mapping (node_name -> proxy_url)"""
         pass
+
+    # Dependencies attribute (not a property - simple state variable)
+    # Set in __init__ and accessed during operation:
+    # - dependencies: Dependencies
