@@ -681,7 +681,8 @@ async def set_node_impl(
 
 
 async def create_node_impl(
-    app: "IAppContext",
+    gns3: "IGns3Client",
+    current_project_id: str,
     template_name: str,
     x: int,
     y: int,
@@ -706,7 +707,7 @@ async def create_node_impl(
         JSON with created NodeInfo
     """
     try:
-        templates = await app.gns3.get_templates()
+        templates = await gns3.get_templates()
         template = next((t for t in templates if t["name"] == template_name), None)
 
         if not template:
@@ -721,8 +722,8 @@ async def create_node_impl(
         if properties:
             payload["properties"] = properties
 
-        result = await app.gns3.create_node_from_template(
-            app.current_project_id, template["template_id"], payload
+        result = await gns3.create_node_from_template(
+            current_project_id, template["template_id"], payload
         )
 
         # Workaround: If custom name was provided but API ignored it, rename the node
@@ -751,24 +752,22 @@ async def create_node_impl(
 
                 if needs_stop:
                     # Stop node before renaming
-                    await app.gns3.stop_node(app.current_project_id, node_id)
+                    await gns3.stop_node(current_project_id, node_id)
 
                     # Wait for node to stop
                     for _ in range(5):
                         await asyncio.sleep(1)
-                        nodes = await app.gns3.get_nodes(app.current_project_id)
+                        nodes = await gns3.get_nodes(current_project_id)
                         current_node = next((n for n in nodes if n["node_id"] == node_id), None)
                         if current_node and current_node["status"] == "stopped":
                             break
 
                 # Now rename the node
-                await app.gns3.update_node(
-                    app.current_project_id, node_id, {"name": requested_name}
-                )
+                await gns3.update_node(current_project_id, node_id, {"name": requested_name})
 
                 # Restart if we stopped it
                 if needs_stop:
-                    await app.gns3.start_node(app.current_project_id, node_id)
+                    await gns3.start_node(current_project_id, node_id)
                     node_status = "started"  # Update status in result
 
                 # Update result with corrected name
@@ -779,7 +778,7 @@ async def create_node_impl(
 
         # Convert to NodeSummary for clean output
         node_summary = NodeSummary(
-            project_id=app.current_project_id,
+            project_id=current_project_id,
             node_id=result["node_id"],
             name=result["name"],
             node_type=result["node_type"],

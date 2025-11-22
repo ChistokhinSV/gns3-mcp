@@ -936,7 +936,9 @@ async def node(
         if error:
             return error
 
-        return await create_node_impl(app, template_name, x, y, node_name, compute_id, properties)
+        return await create_node_impl(
+            app.gns3, app.current_project_id, template_name, x, y, node_name, compute_id, properties
+        )
 
     elif action == "delete":
         # Delete node
