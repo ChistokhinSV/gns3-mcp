@@ -1,0 +1,58 @@
+services:
+  # Main MCP server - provides MCP protocol access to GNS3
+  gns3-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chistokhinsv/gns3-mcp:latest
+    container_name: gns3-mcp-server
+    ports:
+      - "${HTTP_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - HTTP_HOST=0.0.0.0
+      - HTTP_PORT=${HTTP_PORT:-8000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - GNS3_HOST=${GNS3_HOST}
+      - GNS3_PORT=${GNS3_PORT:-80}
+      - GNS3_USER=${GNS3_USER}
+      - GNS3_PASSWORD=${GNS3_PASSWORD}
+      - GNS3_USE_HTTPS=${GNS3_USE_HTTPS:-false}
+      - GNS3_VERIFY_SSL=${GNS3_VERIFY_SSL:-true}
+      - MCP_API_KEY=${MCP_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - gns3-network
+
+  # SSH proxy - enables SSH access to lab devices
+  # REQUIRES network_mode: host to access isolated lab networks
+  ssh-proxy:
+    image: chistokhinsv/gns3-ssh-proxy:latest
+    container_name: gns3-ssh-proxy
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      - API_PORT=8022
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_BUFFER_SIZE=${MAX_BUFFER_SIZE:-10485760}
+      - TRIM_BUFFER_SIZE=${TRIM_BUFFER_SIZE:-5242880}
+      - MAX_HISTORY_JOBS=${MAX_HISTORY_JOBS:-1000}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8022/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  gns3-network:
+    driver: bridge

@@ -1,0 +1,69 @@
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Testing
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.tox/
+
+# Development tools
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation (not needed in runtime)
+docs/
+*.md
+!README.md
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+mcp-server/lib/
+mcp-server/*.mcpb
+
+# SSH proxy (separate container)
+ssh-proxy/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# CI/CD
+.github/
+.pre-commit-config.yaml
+
+# Linting config
+.ruff_cache/
+.mypy_cache/
+justfile
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
+issues.md
+MIGRATION*.md
+REFACTORING*.md

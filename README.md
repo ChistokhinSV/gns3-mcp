@@ -2,7 +2,7 @@
 
 Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS3 projects, nodes, and device consoles through Claude Desktop or any MCP-compatible client.
 
-**Version**: 0.47.0
+**Version**: 0.49.0
 
 ## Features
 
@@ -444,6 +444,174 @@ just build
 ```
 
 </details>
+
+---
+
+## Docker Deployment
+
+[![Docker Image Version](https://img.shields.io/docker/v/chistokhinsv/gns3-mcp)](https://hub.docker.com/r/chistokhinsv/gns3-mcp)
+[![Docker Pulls](https://img.shields.io/docker/pulls/chistokhinsv/gns3-mcp)](https://hub.docker.com/r/chistokhinsv/gns3-mcp)
+
+Run GNS3 MCP Server in Docker for isolated deployment, easier management, and multi-platform support.
+
+### Quick Start with Docker Compose
+
+**Prerequisites:**
+- Docker Desktop installed
+- GNS3 server running and accessible
+- Network access to GNS3 server
+
+**Step 1: Download docker-compose.yml**
+
+```bash
+curl -O https://raw.githubusercontent.com/ChistokhinSV/gns3-mcp/master/docker-compose.yml
+```
+
+**Step 2: Create .env file**
+
+```bash
+cat > .env <<EOF
+GNS3_HOST=192.168.1.20
+GNS3_PORT=80
+GNS3_USER=admin
+GNS3_PASSWORD=your-password
+HTTP_PORT=8000
+LOG_LEVEL=INFO
+EOF
+```
+
+Or copy from template:
+```bash
+curl -O https://raw.githubusercontent.com/ChistokhinSV/gns3-mcp/master/.env.example
+mv .env.example .env
+# Edit .env with your credentials
+```
+
+**Step 3: Start services**
+
+```bash
+# Start MCP server and SSH proxy
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Check health
+curl http://localhost:8000/health
+curl http://localhost:8022/health
+```
+
+**Step 4: Configure Claude Desktop/Code**
+
+For **Claude Code** (HTTP mode):
+```powershell
+claude mcp add --transport http gns3-mcp --url http://localhost:8000
+```
+
+For **Claude Desktop**, add to MCP configuration:
+```json
+{
+  "mcpServers": {
+    "gns3-mcp": {
+      "transport": {
+        "type": "http",
+        "url": "http://localhost:8000"
+      }
+    }
+  }
+}
+```
+
+### Using Docker Run (without compose)
+
+```bash
+docker run -d \
+  --name gns3-mcp-server \
+  -p 8000:8000 \
+  -e GNS3_HOST=192.168.1.20 \
+  -e GNS3_PORT=80 \
+  -e GNS3_USER=admin \
+  -e GNS3_PASSWORD=your-password \
+  --restart unless-stopped \
+  chistokhinsv/gns3-mcp:latest
+```
+
+### Container Management
+
+```bash
+# View logs
+docker-compose logs -f gns3-mcp
+docker-compose logs -f ssh-proxy
+
+# Restart services
+docker-compose restart
+
+# Stop services
+docker-compose down
+
+# Update to latest version
+docker-compose pull
+docker-compose up -d
+```
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GNS3_HOST` | Yes | - | GNS3 server IP/hostname |
+| `GNS3_PORT` | No | `80` | GNS3 API port |
+| `GNS3_USER` | Yes | - | GNS3 username |
+| `GNS3_PASSWORD` | Yes | - | GNS3 password |
+| `HTTP_PORT` | No | `8000` | MCP server port |
+| `LOG_LEVEL` | No | `INFO` | Logging level |
+| `GNS3_USE_HTTPS` | No | `false` | Use HTTPS for GNS3 |
+| `GNS3_VERIFY_SSL` | No | `true` | Verify SSL certs |
+
+See [.env.example](.env.example) for complete list.
+
+### Architecture
+
+The Docker deployment includes two containers:
+
+1. **gns3-mcp** - Main MCP server (port 8000)
+   - Provides MCP protocol access to GNS3
+   - HTTP/SSE transport modes
+   - Bridge network mode
+
+2. **gns3-ssh-proxy** - SSH gateway (port 8022)
+   - Enables SSH access to lab devices
+   - Host network mode (required for isolated lab networks)
+   - Netmiko-based automation
+
+### Troubleshooting
+
+**Container won't start:**
+```bash
+docker-compose logs gns3-mcp
+docker-compose logs ssh-proxy
+```
+
+**Cannot connect to GNS3:**
+```bash
+# Test from container
+docker exec gns3-mcp-server curl -v http://192.168.1.20/v3/version
+
+# Check connectivity
+docker exec gns3-mcp-server ping -c 3 192.168.1.20
+```
+
+**Health check failing:**
+```bash
+# Manual health check
+curl -v http://localhost:8000/health
+
+# Check container status
+docker ps --filter name=gns3-mcp
+```
+
+For more details, see [docs/DOCKER_HUB.md](docs/DOCKER_HUB.md).
+
+---
 
 ## Documentation
 

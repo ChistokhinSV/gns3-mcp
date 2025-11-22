@@ -12,7 +12,7 @@ Features:
 - Docker Integration: Configure container networks, read/write files
 """
 
-__version__ = "0.48.1"
+__version__ = "0.49.0"
 __author__ = "Sergei Chistokhin"
 __email__ = "Sergei@Chistokhin.com"
 __license__ = "MIT"

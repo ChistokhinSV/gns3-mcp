@@ -75,7 +75,14 @@
       "mcp__gns3-mcp__gns3_connection",
       "Bash(.server.cmd status)",
       "Bash(dir:*)",
-      "Bash(just version-check:*)"
+      "Bash(just version-check:*)",
+      "Bash(just docker-build:*)",
+      "mcp__lab-youtrack__find_projects",
+      "mcp__lab-youtrack__get_issue_fields_schema",
+      "Bash(docker version:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)"
     ],
     "deny": [],
     "ask": []

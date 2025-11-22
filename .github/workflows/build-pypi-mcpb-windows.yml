@@ -126,9 +126,9 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
           tag_name: v${{ steps.version.outputs.version }}
-          name: Release ${{ steps.version.outputs.version }} (Windows)
+          name: Release ${{ steps.version.outputs.version }}
           body: |
-            ## GNS3 MCP Server v${{ steps.version.outputs.version }} (Windows Build)
+            ## GNS3 MCP Server v${{ steps.version.outputs.version }}
 
             ### 🚀 Quick Installation (Claude Code)
 
@@ -168,9 +168,8 @@ jobs:
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details.
 
             ### Platform
-            - **Supported:** Windows only
+            - **Supported:** Windows for Desktop Extension (MCPB with UV binary), Linux and macOS for uv/pip and docker installations.
             - **Python:** 3.10-3.13
-            - **Package size:** ~21 MB (includes UV binary)
             - Built on: windows-latest runner
           draft: false
           prerelease: false

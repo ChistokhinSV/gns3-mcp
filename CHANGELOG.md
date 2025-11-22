@@ -5,6 +5,139 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.0] - 2025-11-22 - Feature: Docker Deployment Support
+
+### Added
+- **Docker Image** - Production-ready containerized MCP server (GM-38)
+  - Base image: python:3.13-slim with UV package manager
+  - Multi-platform support: linux/amd64, linux/arm64
+  - Health check endpoint for container monitoring
+  - Production dependencies only (no dev/test packages)
+  - Cairo libraries for SVG topology diagram rendering
+  - Exposed port: 8000 (configurable via HTTP_PORT)
+
+- **docker-compose.yml** - Complete stack deployment
+  - Service 1: gns3-mcp (MCP server, port 8000, bridge network)
+  - Service 2: ssh-proxy (SSH gateway, port 8022, host network)
+  - Shared .env configuration
+  - Auto-restart policies (unless-stopped)
+  - Health checks for both services
+  - Volume mounts for persistent configuration
+
+- **.env.example** - Environment variable template
+  - GNS3 server connection settings
+  - HTTP server configuration (host, port, API key)
+  - SSH proxy configuration (buffers, history limits)
+  - Comprehensive inline documentation
+  - All configurable parameters documented
+
+- **docs/DOCKER_HUB.md** - Docker Hub repository description
+  - Quick start guide with docker-compose
+  - Environment variables reference table
+  - Architecture diagram (2-container setup)
+  - Usage examples for Claude Desktop/Code
+  - Troubleshooting section
+  - Security considerations
+  - Links to documentation and GitHub
+
+- **GitHub Actions Workflow** - Automated Docker Hub releases
+  - File: .github/workflows/docker-release.yml
+  - Trigger: Tag push (v*)
+  - Multi-platform builds (amd64, arm64)
+  - Dual tagging: version + latest
+  - Auto-update Docker Hub description from docs/DOCKER_HUB.md
+  - Build cache optimization
+  - Release summary in GitHub Actions output
+
+- **Justfile Docker Commands** - Development tools (13 new commands)
+  - `just docker-build` - Build image locally
+  - `just docker-run` - Run container interactively
+  - `just docker-run-bg` - Run container in background
+  - `just docker-stop` - Stop and remove container
+  - `just docker-compose-up` - Start complete stack
+  - `just docker-compose-down` - Stop stack
+  - `just docker-compose-logs` - View logs (with service filter)
+  - `just docker-compose-restart` - Restart services
+  - `just docker-compose-update` - Pull latest and restart
+  - `just docker-test` - Automated health check test
+  - `just docker-push` - Push to Docker Hub (manual)
+  - `just docker-build-multi` - Multi-platform build (requires buildx)
+  - `just docker-clean` - Clean Docker resources
+
+### Changed
+- **README.md** - Added comprehensive Docker Deployment section
+  - Docker badges (version, pulls)
+  - Quick start with docker-compose
+  - Docker run examples (single container)
+  - Container management commands
+  - Environment variables table
+  - Architecture overview (2-container setup)
+  - Troubleshooting guide
+  - Links to detailed documentation
+
+- **Version** - Bumped to 0.49.0 (minor version)
+  - Updated: gns3_mcp/__init__.py
+  - Updated: pyproject.toml
+  - Updated: mcp-server/manifest.json
+  - Feature release (new deployment method)
+
+### Technical Details
+
+**Docker Image Structure**:
+- Base: python:3.13-slim (same as ssh-proxy for consistency)
+- Package manager: UV (10-100× faster than pip)
+- Dependencies: Production only (fastmcp, fastapi, httpx, telnetlib3, pydantic, python-dotenv, cairosvg, docker, tabulate, uvicorn)
+- Health check: curl http://localhost:8000/health every 30s
+- Entry point: python start_mcp.py --transport http --http-host 0.0.0.0
+- Environment: HTTP_HOST, HTTP_PORT, LOG_LEVEL, GNS3_* variables
+
+**Network Architecture**:
+- gns3-mcp: Bridge network (standard Docker networking)
+- ssh-proxy: Host network (required for isolated lab device access)
+- Reason: Lab devices on 10.x.x.x networks only accessible from host stack
+
+**Build Optimization**:
+- .dockerignore excludes: tests, docs, .git, venv, build artifacts, development tools
+- Multi-stage ready (single stage for now, can optimize later)
+- Build cache: Registry-based (chistokhinsv/gns3-mcp:buildcache)
+- Image size: ~200MB (estimated)
+
+**GitHub Actions Integration**:
+- Runs in parallel with PyPI release (separate workflow)
+- Uses GitHub secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN
+- peter-evans/dockerhub-description@v4 for description sync
+- docker/build-push-action@v5 for multi-platform builds
+- QEMU + Buildx for arm64 cross-compilation
+
+**Testing Requirements**:
+- [ ] Local build: just docker-build
+- [ ] Container start: just docker-run-bg
+- [ ] Health check: curl http://localhost:8000/health
+- [ ] Stack deployment: just docker-compose-up
+- [ ] SSH proxy connectivity
+- [ ] Claude Desktop/Code integration
+- [ ] CI/CD pipeline (tag push → Docker Hub)
+
+**Documentation Updates**:
+- README: New Docker Deployment section (158 lines)
+- Docker Hub: Complete image description (300+ lines)
+- .env.example: All environment variables documented (80 lines)
+- justfile: 13 Docker commands with inline help (100 lines)
+- CLAUDE.md: Docker workflow added to version history
+
+**Docker Hub Repository**:
+- Repository: chistokhinsv/gns3-mcp
+- Tags: 0.49.0, latest (auto-updated on release)
+- Platforms: linux/amd64, linux/arm64
+- Description: Auto-synced from docs/DOCKER_HUB.md
+- Pull command: `docker pull chistokhinsv/gns3-mcp:latest`
+
+**Issue Tracking**:
+- YouTrack: GM-38 (Docker image for MCP server HTTP mode)
+- Assigned to: claude
+- Status: Open
+- Contains: Implementation checklist, testing requirements, acceptance criteria
+
 ## [0.47.6] - 2025-11-19 - Fix: SSH Command Operation Parameter Mismatch
 
 ### Fixed

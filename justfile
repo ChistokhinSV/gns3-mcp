@@ -160,3 +160,104 @@ service-status:
 # Rebuild venv and lib folder
 venv-rebuild:
     .\server.cmd venv-recreate
+
+# ============================================================================
+# Docker Commands
+# ============================================================================
+
+# Build Docker image locally
+docker-build:
+    docker build -t gns3-mcp:dev -t chistokhinsv/gns3-mcp:latest .
+
+# Run Docker container locally (requires .env file)
+docker-run:
+    docker run --rm -it \
+      --name gns3-mcp-dev \
+      -p 8000:8000 \
+      --env-file .env \
+      gns3-mcp:dev
+
+# Run Docker container in background
+docker-run-bg:
+    docker run -d \
+      --name gns3-mcp-dev \
+      -p 8000:8000 \
+      --env-file .env \
+      --restart unless-stopped \
+      gns3-mcp:dev
+
+# Stop and remove Docker container
+docker-stop:
+    docker stop gns3-mcp-dev || true
+    docker rm gns3-mcp-dev || true
+
+# Start docker-compose stack (MCP + SSH proxy)
+docker-compose-up:
+    docker-compose up -d
+
+# Stop docker-compose stack
+docker-compose-down:
+    docker-compose down
+
+# View docker-compose logs (follow mode)
+docker-compose-logs service='':
+    @if [ -z "{{service}}" ]; then \
+        docker-compose logs -f; \
+    else \
+        docker-compose logs -f {{service}}; \
+    fi
+
+# Restart docker-compose services
+docker-compose-restart:
+    docker-compose restart
+
+# Pull latest images and restart
+docker-compose-update:
+    docker-compose pull
+    docker-compose up -d
+
+# Test Docker container (health check)
+docker-test:
+    @echo "Testing Docker container health..."
+    @echo ""
+    @echo "1. Building image..."
+    @just docker-build
+    @echo ""
+    @echo "2. Starting container..."
+    @just docker-run-bg
+    @echo ""
+    @echo "3. Waiting for container to start..."
+    @powershell -Command "Start-Sleep -Seconds 5"
+    @echo ""
+    @echo "4. Testing health endpoint..."
+    @curl -f http://localhost:8000/health || echo "Health check failed!"
+    @echo ""
+    @echo "5. Stopping container..."
+    @just docker-stop
+    @echo ""
+    @echo "Docker test complete!"
+
+# Build and push Docker image to Docker Hub (requires login)
+docker-push version='latest':
+    docker build -t chistokhinsv/gns3-mcp:{{version}} .
+    @if [ "{{version}}" != "latest" ]; then \
+        docker tag chistokhinsv/gns3-mcp:{{version}} chistokhinsv/gns3-mcp:latest; \
+    fi
+    docker push chistokhinsv/gns3-mcp:{{version}}
+    @if [ "{{version}}" != "latest" ]; then \
+        docker push chistokhinsv/gns3-mcp:latest; \
+    fi
+
+# Multi-platform Docker build (requires buildx)
+docker-build-multi version='latest':
+    docker buildx build --platform linux/amd64,linux/arm64 \
+      -t chistokhinsv/gns3-mcp:{{version}} \
+      -t chistokhinsv/gns3-mcp:latest \
+      --push .
+
+# Clean Docker resources
+docker-clean:
+    docker stop gns3-mcp-dev || true
+    docker rm gns3-mcp-dev || true
+    docker-compose down || true
+    docker image prune -f
