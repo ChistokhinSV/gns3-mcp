@@ -50,7 +50,8 @@ async def list_drawings_impl(app: "IAppContext") -> str:
 
 
 async def create_drawing_impl(
-    app: "IAppContext",
+    gns3: "IGns3Client",
+    current_project_id: str,
     drawing_type: str,
     x: int,
     y: int,
@@ -199,7 +200,7 @@ async def create_drawing_impl(
         # Create drawing in GNS3
         drawing_data = {"x": x, "y": y, "z": z, "svg": svg, "rotation": 0}
 
-        result = await app.gns3.create_drawing(app.current_project_id, drawing_data)
+        result = await gns3.create_drawing(current_project_id, drawing_data)
 
         return json.dumps({"message": message, "drawing": result}, indent=2)
 
@@ -214,7 +215,8 @@ async def create_drawing_impl(
 
 
 async def update_drawing_impl(
-    app: "IAppContext",
+    gns3: "IGns3Client",
+    current_project_id: str,
     drawing_id: str,
     x: int | None = None,
     y: int | None = None,
@@ -273,7 +275,7 @@ async def update_drawing_impl(
             )
 
         # Update drawing in GNS3
-        result = await app.gns3.update_drawing(app.current_project_id, drawing_id, update_data)
+        result = await gns3.update_drawing(current_project_id, drawing_id, update_data)
 
         return json.dumps({"message": "Drawing updated successfully", "drawing": result}, indent=2)
 
@@ -287,7 +289,9 @@ async def update_drawing_impl(
         )
 
 
-async def delete_drawing_impl(app: "IAppContext", drawing_id: str) -> str:
+async def delete_drawing_impl(
+    gns3: "IGns3Client", current_project_id: str, drawing_id: str
+) -> str:
     """Delete a drawing object from the current project
 
     Args:
@@ -297,7 +301,7 @@ async def delete_drawing_impl(app: "IAppContext", drawing_id: str) -> str:
         JSON confirmation message
     """
     try:
-        await app.gns3.delete_drawing(app.current_project_id, drawing_id)
+        await gns3.delete_drawing(current_project_id, drawing_id)
         return json.dumps({"message": f"Drawing {drawing_id} deleted successfully"}, indent=2)
 
     except Exception as e:
@@ -308,7 +312,7 @@ async def delete_drawing_impl(app: "IAppContext", drawing_id: str) -> str:
             suggested_action="Verify drawing ID exists using list_drawings() or resource projects://{id}/drawings/",
             context={
                 "drawing_id": drawing_id,
-                "project_id": app.current_project_id,
+                "project_id": current_project_id,
                 "exception": str(e),
             },
         )

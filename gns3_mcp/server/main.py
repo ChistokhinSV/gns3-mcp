@@ -1469,7 +1469,8 @@ async def drawing(
             raise ValueError("x and y coordinates are required for 'create' action")
 
         return await create_drawing_impl(
-            app,
+            app.gns3,
+            app.current_project_id,
             drawing_type,
             x,
             y,
@@ -1495,14 +1496,16 @@ async def drawing(
         if not drawing_id:
             raise ValueError("drawing_id is required for 'update' action")
 
-        return await update_drawing_impl(app, drawing_id, x, y, z, rotation, svg, locked)
+        return await update_drawing_impl(
+            app.gns3, app.current_project_id, drawing_id, x, y, z, rotation, svg, locked
+        )
 
     elif action == "delete":
         # Delete drawing
         if not drawing_id:
             raise ValueError("drawing_id is required for 'delete' action")
 
-        return await delete_drawing_impl(app, drawing_id)
+        return await delete_drawing_impl(app.gns3, app.current_project_id, drawing_id)
 
     elif action == "batch":
         # Create multiple drawings
