@@ -164,6 +164,40 @@ jobs:
             **Cursor/Windsurf:**
             See [full installation guide](https://github.com/${{ github.repository }}/blob/master/README.md#installation) for JSON configuration examples.
 
+            ### 🐳 Docker Deployment (NEW in v0.49.0)
+
+            **Quick Start with Docker Compose:**
+            ```bash
+            # Download docker-compose.yml and .env.example
+            curl -O https://raw.githubusercontent.com/${{ github.repository }}/master/docker-compose.yml
+            curl -O https://raw.githubusercontent.com/${{ github.repository }}/master/.env.example
+
+            # Configure credentials
+            mv .env.example .env
+            # Edit .env with your GNS3 server details
+
+            # Start stack (MCP server + SSH proxy)
+            docker-compose up -d
+            ```
+
+            **Docker Run (Single Container):**
+            ```bash
+            docker run -d \
+              --name gns3-mcp \
+              -p 8000:8000 \
+              -e GNS3_HOST=192.168.1.20 \
+              -e GNS3_PORT=80 \
+              -e GNS3_USER=admin \
+              -e GNS3_PASSWORD=your-password \
+              chistokhinsv/gns3-mcp:${{ steps.version.outputs.version }}
+            ```
+
+            **Docker Hub:**
+            - Image: `chistokhinsv/gns3-mcp:${{ steps.version.outputs.version }}`
+            - Tags: `${{ steps.version.outputs.version }}`, `latest`
+            - Platforms: linux/amd64, linux/arm64
+            - [View on Docker Hub](https://hub.docker.com/r/chistokhinsv/gns3-mcp)
+
             ### Changes
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details.
 
