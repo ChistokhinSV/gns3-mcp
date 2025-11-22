@@ -21,25 +21,25 @@ from models import (
 )
 
 if TYPE_CHECKING:
-    from interfaces import IAppContext
+    from interfaces import IAppContext, IGns3Client
 
 logger = logging.getLogger(__name__)
 
 
-async def get_links_impl(app: "IAppContext") -> str:
+async def get_links_impl(gns3: "IGns3Client", project_id: str) -> str:
     """List all network links in the current project
 
-    Returns link details including link IDs (needed for disconnect),
-    connected nodes, ports, adapters, and link type. Use this before
-    set_connection() to check current topology and find link IDs.
+    Args:
+        gns3: GNS3 API client
+        project_id: Current project ID
 
     Returns:
         JSON array of LinkInfo objects
     """
     try:
         # Get links and nodes directly from API
-        links = await app.gns3.get_links(app.current_project_id)
-        nodes = await app.gns3.get_nodes(app.current_project_id)
+        links = await gns3.get_links(project_id)
+        nodes = await gns3.get_nodes(project_id)
 
         # Create node ID to name mapping
         node_map = {n["node_id"]: n["name"] for n in nodes}
@@ -113,7 +113,7 @@ async def get_links_impl(app: "IAppContext") -> str:
             error_code=ErrorCode.GNS3_API_ERROR.value,
             details=str(e),
             suggested_action="Check that GNS3 server is running and a project is currently open",
-            context={"project_id": app.current_project_id, "exception": str(e)},
+            context={"project_id": project_id, "exception": str(e)},
         )
 
 

@@ -10,17 +10,20 @@ from error_utils import create_error_response
 from models import ErrorCode, TemplateInfo
 
 if TYPE_CHECKING:
-    from interfaces import IAppContext
+    from interfaces import IAppContext, IGns3Client
 
 
-async def list_templates_impl(app: "IAppContext") -> str:
+async def list_templates_impl(gns3: "IGns3Client") -> str:
     """List all available GNS3 templates
+
+    Args:
+        gns3: GNS3 API client
 
     Returns:
         JSON array of TemplateInfo objects
     """
     try:
-        templates = await app.gns3.get_templates()
+        templates = await gns3.get_templates()
 
         template_models = [
             TemplateInfo(
