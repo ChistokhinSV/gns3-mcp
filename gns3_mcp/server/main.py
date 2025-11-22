@@ -688,7 +688,7 @@ async def gns3_connection(
         {"success": true, "message": "Successfully reconnected to GNS3 server",
          "server": "http://192.168.1.20:80", "error": null}
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: IAppContext = ctx.request_context.lifespan_context
     gns3 = app.gns3
 
     if action == "check":
@@ -1276,7 +1276,7 @@ async def project_docs(
         ... - B-Rec2: 10.2.0.2/24
         ... \"\"\")
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: IAppContext = ctx.request_context.lifespan_context
 
     if not project_id:
         error = await validate_current_project(app)
@@ -1596,7 +1596,7 @@ async def query_resource(
 
     See tool implementation docstring for comprehensive URI pattern documentation.
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: IAppContext = ctx.request_context.lifespan_context
     return await query_resource_impl(app, uri, format)
 
 
