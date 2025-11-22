@@ -5,6 +5,51 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.50.0] - 2025-11-22 - Architecture: Dependency Inversion & Modularization
+
+### Added
+- **Abstract Interfaces (GM-44)** - Dependency inversion for testability
+  - IGns3Client: GNS3 v3 API client interface (50+ methods)
+  - IConsoleManager: Telnet console session management interface (15+ methods)
+  - IResourceManager: MCP resource management interface (20+ methods)
+  - IAppContext: Application context interface (5+ properties)
+  - All concrete classes now implement interfaces for better testing
+  - TYPE_CHECKING imports updated to use interfaces (9 files)
+
+- **App Lifecycle Module (GM-45)** - gns3_mcp/server/app.py (199 lines)
+  - AppContext dataclass: All application state in one place
+  - periodic_console_cleanup(): Background task for expired sessions
+  - background_authentication(): Non-blocking auth with exponential backoff
+  - app_lifespan(): Context manager for startup/shutdown
+
+- **Context Helpers Module (GM-45)** - gns3_mcp/server/context.py (140 lines)
+  - get_app(): Global context accessor for static resources
+  - set_app() / clear_app(): Lifecycle management
+  - validate_current_project(): Auto-connect validation logic
+
+### Changed
+- **main.py Refactoring (GM-45)** - Reduced from 2330 to 2075 lines (-11%)
+  - Extracted 255 lines of lifecycle and context code
+  - Removed unused imports (ConsoleManager, GNS3Client, ResourceManager, IAppContext)
+  - Updated _app references to use get_app() helper
+  - Improved separation of concerns (MCP registration vs app logic)
+
+- **Version** - Bumped to 0.50.0 (minor version)
+  - Updated: gns3_mcp/__init__.py
+  - Updated: pyproject.toml
+  - Updated: mcp-server/manifest.json
+
+### Technical Details
+- All 202 tests pass with new architecture
+- Mypy type checking updated for interface contracts
+- No breaking changes to public APIs
+- Part of 3-phase architecture improvement plan (GM-39 epic)
+
+### Related Issues
+- GM-44: Create abstraction interfaces (Phase 1)
+- GM-45: Split main.py into focused modules (Phase 1)
+- GM-39: Epic - Architecture refactoring
+
 ## [0.49.0] - 2025-11-22 - Feature: Docker Deployment Support
 
 ### Added
