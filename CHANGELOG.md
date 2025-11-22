@@ -5,6 +5,48 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.52.0] - 2025-11-22 - Architecture: Phase 2.5 - Pure DI in Implementation Layer
+
+### Changed
+- **Pure Dependency Injection Architecture (19 Implementation Functions Refactored)**
+  - Removed `app: IAppContext` parameter from all implementation functions
+  - Inject individual dependencies: `gns3: IGns3Client`, `current_project_id: str`
+  - Tool layer (main.py) accesses AppContext, implementation layer uses pure DI
+  - Cleaner separation of concerns between tool and implementation layers
+  - Improved testability and maintainability
+
+- **Batch A - Read-Only Operations (2 functions)**:
+  - `get_node_file_impl`: Docker file operations
+  - `query_resource_impl`: Resource query handler
+
+- **Batch B - State Write Operations (5 functions)**:
+  - `create_node_impl`: Node creation
+  - `delete_node_impl`: Node deletion with helper
+  - `write_node_file_impl`: Docker file writes
+  - `configure_node_network_impl`: Network configuration
+  - 3 drawing functions: `create_drawing_impl`, `update_drawing_impl`, `delete_drawing_impl`
+
+- **Batch C - Complex Operations (3 functions + helper)**:
+  - `create_drawings_batch_impl`: Batch drawing creation
+  - `set_connection_impl`: Link management with two-phase validation
+  - `set_node_impl`: Node properties with wildcard support
+  - `_set_single_node_impl`: Helper for single node operations
+
+### Technical Details
+- All 237 tests passing throughout refactoring
+- Zero behavioral changes or regressions
+- Consistent pattern applied: remove app parameter, add individual dependencies
+- AppContext completely eliminated from implementation layer
+- Interface-based design maintained (`IGns3Client`, `IResourceManager`, etc.)
+
+### Documentation
+- Updated manifest.json long_description with v0.52.0 details
+- Version synchronized across 3 files (gns3_mcp/__init__.py, pyproject.toml, manifest.json)
+
+### Commits
+- 11 total commits (10 refactoring batches + 1 version bump)
+- Each function refactored in isolated commit for clean history
+
 ## [0.51.0] - 2025-11-22 - Architecture: Phase 2 - Tools Migration to DI
 
 ### Changed

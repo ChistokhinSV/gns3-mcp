@@ -7,7 +7,7 @@ v0.50.0: Created for GM-46 - Dependency injection pattern
 
 import threading
 from enum import Enum
-from typing import Any, Callable, Dict, Generic, Type, TypeVar, cast
+from typing import Callable, Dict, Generic, Type, TypeVar, cast
 
 T = TypeVar("T")
 
@@ -164,7 +164,7 @@ class Dependencies:
         if interface not in self._registrations:
             raise KeyError(
                 f"Service not registered: {interface.__name__}. "
-                f"Available services: {', '.join(r.__name__ for r in self._registrations.keys())}"
+                f"Available services: {', '.join(r.__name__ for r in self._registrations)}"
             )
 
         registration = self._registrations[interface]
@@ -205,4 +205,4 @@ class Dependencies:
         Returns:
             List of interface names (e.g., ['IGns3Client', 'IConsoleManager'])
         """
-        return [iface.__name__ for iface in self._registrations.keys()]
+        return [iface.__name__ for iface in self._registrations]

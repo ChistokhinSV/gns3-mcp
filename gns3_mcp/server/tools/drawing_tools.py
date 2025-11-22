@@ -11,7 +11,7 @@ from export_tools import create_ellipse_svg, create_line_svg, create_rectangle_s
 from models import DrawingInfo, ErrorCode
 
 if TYPE_CHECKING:
-    from interfaces import IAppContext
+    from interfaces import IAppContext, IGns3Client
 
 
 async def list_drawings_impl(app: "IAppContext") -> str:
@@ -289,9 +289,7 @@ async def update_drawing_impl(
         )
 
 
-async def delete_drawing_impl(
-    gns3: "IGns3Client", current_project_id: str, drawing_id: str
-) -> str:
+async def delete_drawing_impl(gns3: "IGns3Client", current_project_id: str, drawing_id: str) -> str:
     """Delete a drawing object from the current project
 
     Args:

@@ -33,6 +33,7 @@ from export_tools import (
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastmcp import Context, FastMCP
+from interfaces import IAppContext
 from models import (
     ErrorResponse,
 )
