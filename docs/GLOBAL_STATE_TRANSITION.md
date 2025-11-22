@@ -297,6 +297,112 @@ def test_my_tool():
 
 **Outcome**: ✅ Phase 2 successfully completed in single release (v0.51.0) as planned.
 
+## Phase 2.5: Pure DI for Implementation Functions (🚧 In Progress)
+
+**Timeline**: v0.52.0
+**Status**: 🚧 In Progress - 4/19 functions refactored (21%)
+**Estimated Effort**: 1-2 releases
+
+### Goal
+
+Refactor implementation functions from accepting `app: IAppContext` to pure dependency injection with individual dependencies. This eliminates the app context parameter entirely from impl functions.
+
+### Pattern Established
+
+**Before** (Phase 2 - type hints only):
+```python
+async def open_project_impl(app: "IAppContext", name: str) -> str:
+    projects = await app.gns3.get_projects()  # Access via app
+    app.current_project_id = project_id       # Modify app state
+    return json_result
+```
+
+**After** (Phase 2.5 - pure DI):
+```python
+async def open_project_impl(gns3: "IGns3Client", name: str) -> tuple[str, str]:
+    projects = await gns3.get_projects()      # Direct dependency injection
+    return (json_result, new_project_id)      # Return state changes
+```
+
+**Caller Update** (main.py tool functions):
+```python
+async def project(ctx: Context, action: str, name: str, ...) -> str:
+    app: IAppContext = ctx.request_context.lifespan_context
+
+    result, new_project_id = await open_project_impl(app.gns3, name)
+    if new_project_id:  # Update state only on success
+        app.current_project_id = new_project_id
+    return result
+```
+
+### Implementation Strategy
+
+**Functional Style for State Management**:
+- Read-only dependencies: Injected directly (e.g., `gns3: IGns3Client`)
+- State that's read: Passed as input parameter (e.g., `current_project_id: str`)
+- State that's modified: Returned as output (e.g., `tuple[str, str]`)
+- Tool functions handle extracting deps and updating state
+
+**Benefits**:
+- Pure functions (easier to test, no hidden dependencies)
+- Explicit data flow (clear what goes in, what comes out)
+- No app context coupling in implementation layer
+- Maintains backward compatibility (tools handle state management)
+
+### Progress Tracking
+
+**Actually Used Impl Functions** (19 total, based on main.py imports):
+
+**✅ Completed** (4/19 = 21%):
+1. project_tools.py:
+   - ✅ list_projects_impl - Pure DI, added format parameter
+   - ✅ open_project_impl - Returns (result, new_project_id)
+   - ✅ create_project_impl - Returns (result, new_project_id)
+   - ✅ close_project_impl - Accepts current_project_id, returns (result, None)
+
+**🔄 Remaining** (15/19 = 79%):
+
+**Batch A - Simple Read-Only** (2 functions):
+- ❌ node_tools.py: get_node_file_impl
+- ❌ resource_tools.py: query_resource_impl (wrapper function)
+
+**Batch B - State Writes/Deletes** (7 functions):
+- ❌ node_tools.py: create_node_impl, delete_node_impl
+- ❌ node_tools.py: write_node_file_impl, configure_node_network_impl
+- ❌ drawing_tools.py: create_drawing_impl, update_drawing_impl, delete_drawing_impl
+
+**Batch C - Complex Batch/Wildcard Operations** (6 functions):
+- ❌ node_tools.py: set_node_impl (wildcards, parallel execution)
+- ❌ drawing_tools.py: create_drawings_batch_impl
+- ❌ console_tools.py: console_batch_impl
+- ❌ ssh_tools.py: ssh_batch_impl
+- ❌ link_tools.py: set_connection_impl
+
+**Unused Legacy Functions** (identified during refactoring):
+- template_tools.py: list_templates_impl (not imported, v0.48.0 moved to resources)
+- link_tools.py: get_links_impl (not imported, v0.48.0 moved to resources)
+- node_tools.py: list_nodes_impl (v0.48.0 moved to resource_tools)
+
+### Testing Results
+
+- All 237 tests passing after Phase 2 foundation
+- All 237 tests passing after 4 functions refactored
+- Zero regressions detected
+- Pattern validated across simple and stateful functions
+
+### Commits
+
+- c76c5d3: project_tools.py pure DI refactoring (4 functions)
+- 9c4fc5c: Establish pattern, document unused code
+
+### Next Steps
+
+1. Complete Batch A (simple read-only functions)
+2. Complete Batch B (state writes/deletes with similar patterns)
+3. Complete Batch C (complex batch operations - highest risk)
+4. Update DI_USAGE_GUIDE.md with pure DI examples
+5. Final release as v0.52.0
+
 ## Phase 3: Migrate Resources to DI (⏳ Blocked)
 
 **Timeline**: v0.53.0+ (pending FastMCP update)
