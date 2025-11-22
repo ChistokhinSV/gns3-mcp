@@ -977,7 +977,11 @@ async def get_node_file_impl(
 
 
 async def write_node_file_impl(
-    app: "IAppContext", node_name: str, file_path: str, content: str
+    gns3: "IGns3Client",
+    current_project_id: str,
+    node_name: str,
+    file_path: str,
+    content: str,
 ) -> str:
     """Write file to Docker node filesystem
 
@@ -992,18 +996,18 @@ async def write_node_file_impl(
     Returns:
         JSON confirmation message
     """
-    if not app.current_project_id:
+    if not current_project_id:
         return project_not_found_error()
 
     try:
-        nodes = await app.gns3.get_nodes(app.current_project_id)
+        nodes = await gns3.get_nodes(current_project_id)
         node = next((n for n in nodes if n["name"] == node_name), None)
 
         if not node:
             available_nodes = [n["name"] for n in nodes]
             return node_not_found_error(
                 node_name=node_name,
-                project_id=app.current_project_id,
+                project_id=current_project_id,
                 available_nodes=available_nodes,
             )
 
@@ -1021,7 +1025,7 @@ async def write_node_file_impl(
                 },
             )
 
-        await app.gns3.write_node_file(app.current_project_id, node["node_id"], file_path, content)
+        await gns3.write_node_file(current_project_id, node["node_id"], file_path, content)
 
         return json.dumps(
             {

@@ -1236,7 +1236,9 @@ async def node_file(
         if not content:
             raise ValueError("content is required for 'write' action")
 
-        return await write_node_file_impl(app, node_name, file_path, content)
+        return await write_node_file_impl(
+            app.gns3, app.current_project_id, node_name, file_path, content
+        )
 
     elif action == "configure_network":
         # Configure network interfaces (full workflow)
