@@ -21,15 +21,16 @@ if str(server_dir) not in sys.path:
 from error_utils import create_error_response  # noqa: E402
 from models import ErrorCode  # noqa: E402
 
-# AppContext imported only for type checking to avoid circular imports at runtime
+# Interfaces imported only for type checking to avoid circular imports at runtime
 if TYPE_CHECKING:
     from gns3_mcp.server.main import AppContext
+    from interfaces import IResourceManager
 
 logger = logging.getLogger(__name__)
 
 
 async def query_resource(
-    app: "AppContext",
+    resource_manager: "IResourceManager",
     uri: str,
     format: Literal["table", "json"] = "table",
 ) -> str:
@@ -109,7 +110,7 @@ async def query_resource(
     """
     try:
         # Delegate to resource manager
-        result = await app.resource_manager.get_resource(uri)
+        result = await resource_manager.get_resource(uri)
 
         # Resource implementations already return formatted output
         # If format is JSON and result is table, this needs conversion
@@ -162,7 +163,7 @@ async def list_projects(
         - open_project(name) - open a specific project
         - create_project(name) - create new project
     """
-    return await query_resource(app, "projects://", format)
+    return await query_resource(app.resource_manager, "projects://", format)
 
 
 async def list_nodes(
@@ -201,7 +202,7 @@ async def list_nodes(
         - set_node_properties() - configure nodes
         - create_node() - add new nodes
     """
-    return await query_resource(app, f"nodes://{project_id}/", format)
+    return await query_resource(app.resource_manager, f"nodes://{project_id}/", format)
 
 
 async def get_topology(
@@ -244,4 +245,6 @@ async def get_topology(
         - list_nodes(project_id) - just nodes, no links
         - query_resource(f"links://{project_id}/") - just links, no nodes
     """
-    return await query_resource(app, f"projects://{project_id}/topology_report", format)
+    return await query_resource(
+        app.resource_manager, f"projects://{project_id}/topology_report", format
+    )

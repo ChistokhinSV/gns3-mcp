@@ -1606,7 +1606,7 @@ async def query_resource(
     See tool implementation docstring for comprehensive URI pattern documentation.
     """
     app: IAppContext = ctx.request_context.lifespan_context
-    return await query_resource_impl(app, uri, format)
+    return await query_resource_impl(app.resource_manager, uri, format)
 
 
 # ============================================================================
