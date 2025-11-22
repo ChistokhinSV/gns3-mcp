@@ -10,18 +10,22 @@ from error_utils import create_error_response, project_not_found_error
 from models import ErrorCode, ProjectInfo
 
 if TYPE_CHECKING:
-    from interfaces import IAppContext
+    from interfaces import IAppContext, IGns3Client
 
 
-async def list_projects_impl(app: "IAppContext") -> str:
+async def list_projects_impl(gns3: "IGns3Client", format: str = "table") -> str:
     """List all GNS3 projects with their status
 
+    Args:
+        gns3: GNS3 API client
+        format: Output format ('table' or 'json')
+
     Returns:
-        JSON array of ProjectInfo objects
+        JSON array of ProjectInfo objects or formatted table
     """
     try:
         # Get projects directly from API
-        projects = await app.gns3.get_projects()
+        projects = await gns3.get_projects()
 
         # Convert to ProjectInfo models
         project_models = [
@@ -38,7 +42,16 @@ async def list_projects_impl(app: "IAppContext") -> str:
             for p in projects
         ]
 
-        return json.dumps([p.model_dump() for p in project_models], indent=2)
+        if format == "json":
+            return json.dumps([p.model_dump() for p in project_models], indent=2)
+        else:
+            # Table format
+            from tabulate import tabulate
+
+            headers = ["Name", "Status", "Project ID"]
+            rows = [[p.name, p.status, p.project_id] for p in project_models]
+            table = tabulate(rows, headers=headers, tablefmt="simple")
+            return table
 
     except Exception as e:
         return create_error_response(
@@ -50,27 +63,30 @@ async def list_projects_impl(app: "IAppContext") -> str:
         )
 
 
-async def open_project_impl(app: "IAppContext", project_name: str) -> str:
+async def open_project_impl(gns3: "IGns3Client", project_name: str) -> tuple[str, str]:
     """Open a GNS3 project by name
 
     Args:
+        gns3: GNS3 API client
         project_name: Name of the project to open
 
     Returns:
-        JSON with ProjectInfo for opened project
+        Tuple of (JSON with ProjectInfo for opened project, new project_id)
     """
     try:
         # Find project by name
-        projects = await app.gns3.get_projects()
+        projects = await gns3.get_projects()
 
         project = next((p for p in projects if p["name"] == project_name), None)
 
         if not project:
-            return project_not_found_error(project_name)
+            error_response = project_not_found_error(project_name)
+            # Return error response with empty project_id since we failed
+            return (error_response, "")
 
         # Open it
-        result = await app.gns3.open_project(project["project_id"])
-        app.current_project_id = project["project_id"]
+        result = await gns3.open_project(project["project_id"])
+        new_project_id = project["project_id"]
 
         # Return ProjectInfo
         project_info = ProjectInfo(
@@ -81,48 +97,51 @@ async def open_project_impl(app: "IAppContext", project_name: str) -> str:
             filename=result.get("filename"),
         )
 
-        return json.dumps(project_info.model_dump(), indent=2)
+        return (json.dumps(project_info.model_dump(), indent=2), new_project_id)
 
     except Exception as e:
-        return create_error_response(
+        error_response = create_error_response(
             error=f"Failed to open project '{project_name}'",
             error_code=ErrorCode.OPERATION_FAILED.value,
             details=str(e),
             suggested_action="Verify project exists in GNS3 and is not corrupted",
             context={"project_name": project_name, "exception": str(e)},
         )
+        return (error_response, "")
 
 
-async def create_project_impl(app: "IAppContext", name: str, path: str | None = None) -> str:
+async def create_project_impl(gns3: "IGns3Client", name: str, path: str | None = None) -> tuple[str, str]:
     """Create a new GNS3 project and auto-open it
 
     Args:
+        gns3: GNS3 API client
         name: Project name
         path: Optional project directory path
 
     Returns:
-        JSON with ProjectInfo for created project
+        Tuple of (JSON with ProjectInfo for created project, new project_id)
     """
     try:
         # Check if project with same name already exists
-        projects = await app.gns3.get_projects()
+        projects = await gns3.get_projects()
         existing = next((p for p in projects if p["name"] == name), None)
 
         if existing:
-            return create_error_response(
+            error_response = create_error_response(
                 error=f"Project '{name}' already exists",
                 error_code=ErrorCode.INVALID_PARAMETER.value,
                 details=f"Project with ID {existing['project_id']} already has this name",
                 suggested_action="Use open_project() to open existing project, or choose a different name",
                 context={"project_name": name, "existing_project_id": existing["project_id"]},
             )
+            return (error_response, "")
 
         # Create project
-        result = await app.gns3.create_project(name, path)
+        result = await gns3.create_project(name, path)
 
         # Auto-open the project
-        await app.gns3.open_project(result["project_id"])
-        app.current_project_id = result["project_id"]
+        await gns3.open_project(result["project_id"])
+        new_project_id = result["project_id"]
 
         # Return ProjectInfo
         project_info = ProjectInfo(
@@ -133,54 +152,59 @@ async def create_project_impl(app: "IAppContext", name: str, path: str | None = 
             filename=result.get("filename"),
         )
 
-        return json.dumps(project_info.model_dump(), indent=2)
+        return (json.dumps(project_info.model_dump(), indent=2), new_project_id)
 
     except Exception as e:
-        return create_error_response(
+        error_response = create_error_response(
             error=f"Failed to create project '{name}'",
             error_code=ErrorCode.OPERATION_FAILED.value,
             details=str(e),
             suggested_action="Verify GNS3 server is running and you have write permissions",
             context={"project_name": name, "path": path, "exception": str(e)},
         )
+        return (error_response, "")
 
 
-async def close_project_impl(app: "IAppContext") -> str:
+async def close_project_impl(gns3: "IGns3Client", current_project_id: str | None) -> tuple[str, None]:
     """Close the currently opened project
 
+    Args:
+        gns3: GNS3 API client
+        current_project_id: Current project ID to close
+
     Returns:
-        JSON with success message
+        Tuple of (JSON with success message, None to clear project_id)
     """
     try:
-        if not app.current_project_id:
-            return project_not_found_error()
+        if not current_project_id:
+            error_response = project_not_found_error()
+            return (error_response, None)
 
         # Get project name before closing
-        projects = await app.gns3.get_projects()
-        project = next((p for p in projects if p["project_id"] == app.current_project_id), None)
-        project_name = project["name"] if project else app.current_project_id
+        projects = await gns3.get_projects()
+        project = next((p for p in projects if p["project_id"] == current_project_id), None)
+        project_name = project["name"] if project else current_project_id
 
         # Close project
-        await app.gns3.close_project(app.current_project_id)
+        await gns3.close_project(current_project_id)
 
-        # Clear current project
-        old_project_id = app.current_project_id
-        app.current_project_id = None
-
-        return json.dumps(
+        # Return success with None to signal clearing current_project_id
+        result = json.dumps(
             {
                 "message": "Project closed successfully",
-                "project_id": old_project_id,
+                "project_id": current_project_id,
                 "project_name": project_name,
             },
             indent=2,
         )
+        return (result, None)
 
     except Exception as e:
-        return create_error_response(
+        error_response = create_error_response(
             error="Failed to close project",
             error_code=ErrorCode.OPERATION_FAILED.value,
             details=str(e),
             suggested_action="Verify project is still accessible in GNS3",
-            context={"project_id": app.current_project_id, "exception": str(e)},
+            context={"project_id": current_project_id, "exception": str(e)},
         )
+        return (error_response, None)

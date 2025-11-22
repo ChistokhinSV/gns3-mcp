@@ -798,20 +798,29 @@ async def project(
     app: IAppContext = ctx.request_context.lifespan_context
 
     if action == "list":
-        return await list_projects_impl(app, format)
+        return await list_projects_impl(app.gns3, format)
 
     elif action == "open":
         if not name:
             raise ValueError("name parameter is required for 'open' action")
-        return await open_project_impl(app, name)
+        result, new_project_id = await open_project_impl(app.gns3, name)
+        if new_project_id:  # Only update if successful (empty string means error)
+            app.current_project_id = new_project_id
+        return result
 
     elif action == "create":
         if not name:
             raise ValueError("name parameter is required for 'create' action")
-        return await create_project_impl(app, name, path)
+        result, new_project_id = await create_project_impl(app.gns3, name, path)
+        if new_project_id:  # Only update if successful
+            app.current_project_id = new_project_id
+        return result
 
     elif action == "close":
-        return await close_project_impl(app)
+        result, _ = await close_project_impl(app.gns3, app.current_project_id)
+        # Close always clears current_project_id (returns None)
+        app.current_project_id = None
+        return result
 
 
 @mcp.tool(
