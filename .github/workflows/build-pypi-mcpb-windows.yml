@@ -134,7 +134,6 @@ jobs:
 
             **Option 1: Using uvx (Recommended - Faster)**
             ```powershell
-            # Single command - no .env file needed!
             claude mcp add --transport stdio gns3-mcp --env GNS3_HOST=localhost --env GNS3_PORT=80 --env GNS3_USER=admin --env GNS3_PASSWORD=your-password --scope user -- uvx gns3-mcp@latest
             ```
 
@@ -144,18 +143,14 @@ jobs:
             ```
 
             **Option 2: Using pip (Traditional)**
+            Step 1: Install package
             ```powershell
-            # Step 1: Install package
             pip install gns3-mcp
+            ```
 
-            # Step 2: Add to Claude Code with credentials
-            claude mcp add --transport stdio gns3-mcp `
-              --env GNS3_HOST=localhost `
-              --env GNS3_PORT=80 `
-              --env GNS3_USER=admin `
-              --env GNS3_PASSWORD=your-password `
-              --scope user `
-              -- gns3-mcp
+            Step 2: Add to Claude Code with credentials
+            ```powershell
+            claude mcp add --transport stdio gns3-mcp --env GNS3_HOST=localhost --env GNS3_PORT=80 --env GNS3_USER=admin --env GNS3_PASSWORD=your-password --scope user -- gns3-mcp
             ```
 
             **Claude Desktop:**
@@ -167,20 +162,24 @@ jobs:
             ### 🐳 Docker Deployment (NEW in v0.49.0)
 
             **Quick Start with Docker Compose:**
+            - Download docker-compose.yml and .env.example:
             ```bash
-            # Download docker-compose.yml and .env.example
             curl -O https://raw.githubusercontent.com/${{ github.repository }}/master/docker-compose.yml
             curl -O https://raw.githubusercontent.com/${{ github.repository }}/master/.env.example
+            ```
 
-            # Configure credentials
+            - Configure credentials
+            ```bash
             mv .env.example .env
-            # Edit .env with your GNS3 server details
+            ```
+            - Edit .env with your GNS3 server details
 
-            # Start stack (MCP server + SSH proxy)
+            - Start stack (MCP server + SSH proxy)
+            ```bash
             docker-compose up -d
             ```
 
-            **Docker Run (Single Container):**
+            **Docker Run (MCP server only, SSH proxy in separate container):**
             ```bash
             docker run -d \
               --name gns3-mcp \

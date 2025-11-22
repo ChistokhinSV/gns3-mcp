@@ -9,11 +9,13 @@ import json
 import re
 from typing import TYPE_CHECKING, Any, Dict, List
 
+from interfaces import IResourceManager
+
 if TYPE_CHECKING:
-    from main import AppContext
+    from interfaces import IAppContext
 
 
-class ResourceManager:
+class ResourceManager(IResourceManager):
     """Manages MCP resources with URI routing"""
 
     # URI patterns with named groups
@@ -48,7 +50,7 @@ class ResourceManager:
         r"^proxies://(?P<proxy_id>[^/]+)$": "get_proxy",
     }
 
-    def __init__(self, app: "AppContext"):
+    def __init__(self, app: "IAppContext"):
         self.app = app
 
     def parse_uri(self, uri: str) -> tuple[str | None, Dict[str, str] | None]:

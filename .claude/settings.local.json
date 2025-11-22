@@ -82,7 +82,9 @@
       "Bash(docker version:*)",
       "Bash(docker logs:*)",
       "Bash(docker stop:*)",
-      "Bash(docker rm:*)"
+      "Bash(docker rm:*)",
+      "mcp__lab-youtrack__get_project",
+      "mcp__lab-youtrack__link_issues"
     ],
     "deny": [],
     "ask": []

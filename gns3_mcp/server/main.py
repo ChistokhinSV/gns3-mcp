@@ -37,6 +37,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastmcp import Context, FastMCP
 from gns3_client import GNS3Client
+from interfaces import IAppContext
 from models import (
     ErrorResponse,
 )
@@ -113,7 +114,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class AppContext:
+class AppContext(IAppContext):
     """Application context with GNS3 client, console manager, and resource manager"""
 
     gns3: GNS3Client

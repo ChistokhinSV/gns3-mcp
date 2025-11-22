@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 from tabulate import tabulate
 
 if TYPE_CHECKING:
-    from main import AppContext
+    from interfaces import IAppContext
 
 
 def format_table(data: List[Dict[str, Any]], columns: List[str]) -> str:
@@ -31,7 +31,7 @@ def format_table(data: List[Dict[str, Any]], columns: List[str]) -> str:
     return tabulate(rows, headers=columns, tablefmt="simple")
 
 
-async def list_projects_impl(app: "AppContext", detailed: bool = False) -> str:
+async def list_projects_impl(app: "IAppContext", detailed: bool = False) -> str:
     """
     List all GNS3 projects with their statuses and URIs
 
@@ -65,7 +65,7 @@ async def list_projects_impl(app: "AppContext", detailed: bool = False) -> str:
         return f"Error: Failed to list projects\nDetails: {str(e)}"
 
 
-async def get_project_impl(app: "AppContext", project_id: str) -> str:
+async def get_project_impl(app: "IAppContext", project_id: str) -> str:
     """
     Get project details by ID
 
@@ -92,7 +92,7 @@ async def get_project_impl(app: "AppContext", project_id: str) -> str:
         )
 
 
-async def list_nodes_impl(app: "AppContext", project_id: str) -> str:
+async def list_nodes_impl(app: "IAppContext", project_id: str) -> str:
     """
     List all nodes in a project
 
@@ -138,7 +138,7 @@ async def list_nodes_impl(app: "AppContext", project_id: str) -> str:
         return f"Error: Failed to list nodes in project {project_id}\nDetails: {str(e)}"
 
 
-async def get_node_impl(app: "AppContext", project_id: str, node_id: str) -> str:
+async def get_node_impl(app: "IAppContext", project_id: str, node_id: str) -> str:
     """
     Get detailed node information
 
@@ -201,7 +201,7 @@ async def get_node_impl(app: "AppContext", project_id: str, node_id: str) -> str
         )
 
 
-async def list_links_impl(app: "AppContext", project_id: str) -> str:
+async def list_links_impl(app: "IAppContext", project_id: str) -> str:
     """
     List all network links in a project
 
@@ -309,7 +309,7 @@ async def list_links_impl(app: "AppContext", project_id: str) -> str:
         )
 
 
-async def list_templates_impl(app: "AppContext") -> str:
+async def list_templates_impl(app: "IAppContext") -> str:
     """
     List available GNS3 templates
 
@@ -344,7 +344,7 @@ async def list_templates_impl(app: "AppContext") -> str:
         return f"Error: Failed to list templates\nDetails: {str(e)}"
 
 
-async def get_template_impl(app: "AppContext", template_id: str) -> str:
+async def get_template_impl(app: "IAppContext", template_id: str) -> str:
     """
     Get template details including usage notes
 
@@ -381,7 +381,7 @@ async def get_template_impl(app: "AppContext", template_id: str) -> str:
         )
 
 
-async def get_node_template_usage_impl(app: "AppContext", project_id: str, node_id: str) -> str:
+async def get_node_template_usage_impl(app: "IAppContext", project_id: str, node_id: str) -> str:
     """
     Get template usage notes for a specific node
 
@@ -441,7 +441,7 @@ async def get_node_template_usage_impl(app: "AppContext", project_id: str, node_
         )
 
 
-async def list_drawings_impl(app: "AppContext", project_id: str) -> str:
+async def list_drawings_impl(app: "IAppContext", project_id: str) -> str:
     """
     List all drawing objects in a project
 
@@ -487,7 +487,7 @@ async def list_drawings_impl(app: "AppContext", project_id: str) -> str:
         )
 
 
-async def list_snapshots_impl(app: "AppContext", project_id: str) -> str:
+async def list_snapshots_impl(app: "IAppContext", project_id: str) -> str:
     """
     List all snapshots in a project
 
@@ -531,7 +531,7 @@ async def list_snapshots_impl(app: "AppContext", project_id: str) -> str:
         )
 
 
-async def get_snapshot_impl(app: "AppContext", project_id: str, snapshot_id: str) -> str:
+async def get_snapshot_impl(app: "IAppContext", project_id: str, snapshot_id: str) -> str:
     """
     Get snapshot details by ID
 
@@ -589,7 +589,7 @@ async def get_snapshot_impl(app: "AppContext", project_id: str, snapshot_id: str
         )
 
 
-async def get_project_readme_impl(app: "AppContext", project_id: str):
+async def get_project_readme_impl(app: "IAppContext", project_id: str):
     """Resource handler for projects://{id}/readme
 
     Returns project README/notes in markdown format
@@ -611,7 +611,7 @@ async def get_project_readme_impl(app: "AppContext", project_id: str):
         )
 
 
-async def get_topology_report_impl(app: "AppContext", project_id: str):
+async def get_topology_report_impl(app: "IAppContext", project_id: str):
     """Resource handler for projects://{id}/topology_report
 
     v0.40.0: Unified topology report with nodes, links, and statistics.

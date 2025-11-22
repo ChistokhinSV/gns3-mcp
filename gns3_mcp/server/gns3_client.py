@@ -11,11 +11,12 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 import httpx
+from interfaces import IGns3Client
 
 logger = logging.getLogger(__name__)
 
 
-class GNS3Client:
+class GNS3Client(IGns3Client):
     """Async client for GNS3 v3 API"""
 
     def __init__(

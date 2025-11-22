@@ -10,10 +10,10 @@ from error_utils import create_error_response, project_not_found_error
 from models import ErrorCode, ProjectInfo
 
 if TYPE_CHECKING:
-    from main import AppContext
+    from interfaces import IAppContext
 
 
-async def list_projects_impl(app: "AppContext") -> str:
+async def list_projects_impl(app: "IAppContext") -> str:
     """List all GNS3 projects with their status
 
     Returns:
@@ -50,7 +50,7 @@ async def list_projects_impl(app: "AppContext") -> str:
         )
 
 
-async def open_project_impl(app: "AppContext", project_name: str) -> str:
+async def open_project_impl(app: "IAppContext", project_name: str) -> str:
     """Open a GNS3 project by name
 
     Args:
@@ -93,7 +93,7 @@ async def open_project_impl(app: "AppContext", project_name: str) -> str:
         )
 
 
-async def create_project_impl(app: "AppContext", name: str, path: str | None = None) -> str:
+async def create_project_impl(app: "IAppContext", name: str, path: str | None = None) -> str:
     """Create a new GNS3 project and auto-open it
 
     Args:
@@ -145,7 +145,7 @@ async def create_project_impl(app: "AppContext", name: str, path: str | None = N
         )
 
 
-async def close_project_impl(app: "AppContext") -> str:
+async def close_project_impl(app: "IAppContext") -> str:
     """Close the currently opened project
 
     Returns:

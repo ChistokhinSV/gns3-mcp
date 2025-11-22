@@ -14,7 +14,7 @@ from models import ErrorCode
 from tabulate import tabulate
 
 if TYPE_CHECKING:
-    from main import AppContext
+    from interfaces import IAppContext
 
 
 # SSH Proxy API URL (same as ssh_tools.py)
@@ -40,7 +40,7 @@ def format_table(data: List[Dict[str, Any]], columns: List[str]) -> str:
     return tabulate(rows, headers=columns, tablefmt="simple")
 
 
-async def list_console_sessions_impl(app: "AppContext", project_id: str | None = None) -> str:
+async def list_console_sessions_impl(app: "IAppContext", project_id: str | None = None) -> str:
     """
     List all active console sessions (optionally filtered by project)
 
@@ -89,7 +89,7 @@ async def list_console_sessions_impl(app: "AppContext", project_id: str | None =
         return f"Error: Failed to list console sessions\nDetails: {str(e)}"
 
 
-async def get_console_session_impl(app: "AppContext", node_name: str) -> str:
+async def get_console_session_impl(app: "IAppContext", node_name: str) -> str:
     """
     Get console session status for a specific node
 
@@ -139,7 +139,7 @@ async def get_console_session_impl(app: "AppContext", node_name: str) -> str:
         )
 
 
-async def list_ssh_sessions_impl(app: "AppContext", project_id: str | None = None) -> str:
+async def list_ssh_sessions_impl(app: "IAppContext", project_id: str | None = None) -> str:
     """
     List all active SSH sessions (optionally filtered by project) (Multi-Proxy Aggregation v0.26.0)
 
@@ -236,7 +236,7 @@ async def list_ssh_sessions_impl(app: "AppContext", project_id: str | None = Non
             return f"Error: Failed to list SSH sessions\nDetails: {str(e)}\nSuggestion: Ensure SSH proxy service is running"
 
 
-async def get_ssh_session_impl(app: "AppContext", node_name: str) -> str:
+async def get_ssh_session_impl(app: "IAppContext", node_name: str) -> str:
     """
     Get SSH session status for a specific node (Multi-Proxy Aware v0.26.0)
 
@@ -287,7 +287,7 @@ async def get_ssh_session_impl(app: "AppContext", node_name: str) -> str:
 
 
 async def get_ssh_history_impl(
-    app: "AppContext", node_name: str, limit: int = 50, search: str | None = None
+    app: "IAppContext", node_name: str, limit: int = 50, search: str | None = None
 ) -> str:
     """
     Get SSH command history for a specific node (Multi-Proxy Aware v0.26.0)
@@ -345,7 +345,7 @@ async def get_ssh_history_impl(
 
 
 async def get_ssh_buffer_impl(
-    app: "AppContext", node_name: str, mode: str = "diff", pages: int = 1
+    app: "IAppContext", node_name: str, mode: str = "diff", pages: int = 1
 ) -> str:
     """
     Get SSH continuous buffer for a specific node (Multi-Proxy Aware v0.26.0)
@@ -398,7 +398,7 @@ async def get_ssh_buffer_impl(
             )
 
 
-async def get_proxy_status_impl(app: "AppContext") -> str:
+async def get_proxy_status_impl(app: "IAppContext") -> str:
     """
     Get SSH proxy service status
 
@@ -444,7 +444,7 @@ async def get_proxy_status_impl(app: "AppContext") -> str:
             )
 
 
-async def get_proxy_registry_impl(app: "AppContext") -> str:
+async def get_proxy_registry_impl(app: "IAppContext") -> str:
     """
     Get proxy registry (host proxy + discovered lab proxies via Docker API)
 
@@ -496,7 +496,7 @@ async def get_proxy_registry_impl(app: "AppContext") -> str:
             return format_table([host_proxy], columns=["proxy_id", "hostname", "type", "url"])
 
 
-async def list_proxy_sessions_impl(app: "AppContext") -> str:
+async def list_proxy_sessions_impl(app: "IAppContext") -> str:
     """
     List all SSH sessions across all proxies (Multi-Proxy Aggregation v0.26.0)
 
@@ -577,7 +577,7 @@ async def list_proxy_sessions_impl(app: "AppContext") -> str:
             return f"Error: Failed to list proxy sessions\nDetails: {str(e)}\nSuggestion: Ensure SSH proxy service is running"
 
 
-async def list_project_proxies_impl(app: "AppContext", project_id: str) -> str:
+async def list_project_proxies_impl(app: "IAppContext", project_id: str) -> str:
     """
     List proxies for specific project (template-style resource)
 
@@ -604,7 +604,7 @@ async def list_project_proxies_impl(app: "AppContext", project_id: str) -> str:
             return json.dumps([], indent=2)
 
 
-async def get_proxy_impl(app: "AppContext", proxy_id: str) -> str:
+async def get_proxy_impl(app: "IAppContext", proxy_id: str) -> str:
     """
     Get specific proxy details by proxy_id
 

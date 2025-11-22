@@ -20,10 +20,10 @@ from error_utils import (
 from models import ConsoleStatus, ErrorCode
 
 if TYPE_CHECKING:
-    from main import AppContext
+    from interfaces import IAppContext
 
 
-async def _auto_connect_console(app: "AppContext", node_name: str) -> str | None:
+async def _auto_connect_console(app: "IAppContext", node_name: str) -> str | None:
     """Auto-connect to console if not already connected
 
     Returns:
@@ -73,7 +73,9 @@ async def _auto_connect_console(app: "AppContext", node_name: str) -> str | None
         )
 
 
-async def send_console_impl(app: "AppContext", node_name: str, data: str, raw: bool = False) -> str:
+async def send_console_impl(
+    app: "IAppContext", node_name: str, data: str, raw: bool = False
+) -> str:
     """Send data to console (auto-connects if needed)
 
     Sends data immediately to console without waiting for response.
@@ -153,7 +155,7 @@ async def send_console_impl(app: "AppContext", node_name: str, data: str, raw: b
 
 
 async def read_console_impl(
-    app: "AppContext",
+    app: "IAppContext",
     node_name: str,
     mode: str = "diff",
     pages: int = 1,
@@ -356,7 +358,7 @@ def _grep_filter(
     return "\n".join(result)
 
 
-async def disconnect_console_impl(app: "AppContext", node_name: str) -> str:
+async def disconnect_console_impl(app: "IAppContext", node_name: str) -> str:
     """Disconnect console session
 
     Args:
@@ -379,7 +381,7 @@ async def disconnect_console_impl(app: "AppContext", node_name: str) -> str:
     )
 
 
-async def get_console_status_impl(app: "AppContext", node_name: str) -> str:
+async def get_console_status_impl(app: "IAppContext", node_name: str) -> str:
     """Check console connection status for a node
 
     Shows connection state and buffer size. Does NOT show current prompt or
@@ -437,7 +439,7 @@ async def get_console_status_impl(app: "AppContext", node_name: str) -> str:
 
 
 async def send_and_wait_console_impl(
-    app: "AppContext",
+    app: "IAppContext",
     node_name: str,
     command: str,
     wait_pattern: str | None = None,
@@ -610,7 +612,7 @@ async def send_and_wait_console_impl(
     )
 
 
-async def send_keystroke_impl(app: "AppContext", node_name: str, key: str) -> str:
+async def send_keystroke_impl(app: "IAppContext", node_name: str, key: str) -> str:
     """Send special keystroke to console (auto-connects if needed)
 
     Sends special keys like arrows, function keys, control sequences for
@@ -714,7 +716,7 @@ async def send_keystroke_impl(app: "AppContext", node_name: str, key: str) -> st
         )
 
 
-async def console_batch_impl(app: "AppContext", operations: list[dict]) -> str:
+async def console_batch_impl(app: "IAppContext", operations: list[dict]) -> str:
     """Execute multiple console operations in batch with validation
 
     Two-phase execution:

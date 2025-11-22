@@ -23,7 +23,7 @@ from fastmcp import Context
 from models import ErrorCode, NodeInfo, NodeSummary
 
 if TYPE_CHECKING:
-    from main import AppContext
+    from interfaces import IAppContext
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +181,7 @@ def resolve_node_names(node_spec: str, all_nodes: List[Dict[str, Any]]) -> List[
     return []
 
 
-async def list_nodes_impl(app: "AppContext") -> str:
+async def list_nodes_impl(app: "IAppContext") -> str:
     """List all nodes in the current project with basic info (lightweight)
 
     Returns only essential node information to avoid large outputs.
@@ -220,7 +220,7 @@ async def list_nodes_impl(app: "AppContext") -> str:
         )
 
 
-async def get_node_details_impl(app: "AppContext", node_name: str) -> str:
+async def get_node_details_impl(app: "IAppContext", node_name: str) -> str:
     """Get detailed information about a specific node
 
     Args:
@@ -288,7 +288,7 @@ async def get_node_details_impl(app: "AppContext", node_name: str) -> str:
 
 
 async def _set_single_node_impl(
-    app: "AppContext",
+    app: "IAppContext",
     node: Dict[str, Any],
     action: str | None = None,
     x: int | None = None,
@@ -487,7 +487,7 @@ async def _set_single_node_impl(
 
 
 async def set_node_impl(
-    app: "AppContext",
+    app: "IAppContext",
     node_name: str,
     action: str | None = None,
     x: int | None = None,
@@ -681,7 +681,7 @@ async def set_node_impl(
 
 
 async def create_node_impl(
-    app: "AppContext",
+    app: "IAppContext",
     template_name: str,
     x: int,
     y: int,
@@ -808,7 +808,7 @@ async def create_node_impl(
         )
 
 
-async def _cleanup_ssh_sessions_for_node(app: "AppContext", node_name: str) -> None:
+async def _cleanup_ssh_sessions_for_node(app: "IAppContext", node_name: str) -> None:
     """Clean up SSH sessions for a node on all registered proxies (v0.34.0)
 
     Called automatically when a node is deleted. Attempts to disconnect SSH sessions
@@ -867,7 +867,7 @@ async def _cleanup_ssh_sessions_for_node(app: "AppContext", node_name: str) -> N
             logger.warning(f"SSH session cleanup failed for node {node_name}: {e}")
 
 
-async def delete_node_impl(app: "AppContext", node_name: str) -> str:
+async def delete_node_impl(app: "IAppContext", node_name: str) -> str:
     """Delete a node from the current project
 
     Also cleans up SSH sessions on all registered proxies.
@@ -911,7 +911,7 @@ async def delete_node_impl(app: "AppContext", node_name: str) -> str:
         )
 
 
-async def get_node_file_impl(app: "AppContext", node_name: str, file_path: str) -> str:
+async def get_node_file_impl(app: "IAppContext", node_name: str, file_path: str) -> str:
     """Read file from Docker node filesystem
 
     Args:
@@ -967,7 +967,7 @@ async def get_node_file_impl(app: "AppContext", node_name: str, file_path: str) 
 
 
 async def write_node_file_impl(
-    app: "AppContext", node_name: str, file_path: str, content: str
+    app: "IAppContext", node_name: str, file_path: str, content: str
 ) -> str:
     """Write file to Docker node filesystem
 
@@ -1034,7 +1034,7 @@ async def write_node_file_impl(
 
 
 async def configure_node_network_impl(
-    app: "AppContext", node_name: str, interfaces: list[Dict[str, Any]]
+    app: "IAppContext", node_name: str, interfaces: list[Dict[str, Any]]
 ) -> str:
     """Configure network interfaces on Docker node
 

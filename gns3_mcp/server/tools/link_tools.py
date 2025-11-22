@@ -21,12 +21,12 @@ from models import (
 )
 
 if TYPE_CHECKING:
-    from main import AppContext
+    from interfaces import IAppContext
 
 logger = logging.getLogger(__name__)
 
 
-async def get_links_impl(app: "AppContext") -> str:
+async def get_links_impl(app: "IAppContext") -> str:
     """List all network links in the current project
 
     Returns link details including link IDs (needed for disconnect),
@@ -117,7 +117,7 @@ async def get_links_impl(app: "AppContext") -> str:
         )
 
 
-async def set_connection_impl(app: "AppContext", connections: List[Dict[str, Any]]) -> str:
+async def set_connection_impl(app: "IAppContext", connections: List[Dict[str, Any]]) -> str:
     """Manage network connections (links) in batch with two-phase validation
 
     Two-phase execution prevents partial topology changes:

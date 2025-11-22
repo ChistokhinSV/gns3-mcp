@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Dict
 
 import telnetlib3
+from interfaces import IConsoleManager
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class ConsoleSession:
         return age > SESSION_TIMEOUT
 
 
-class ConsoleManager:
+class ConsoleManager(IConsoleManager):
     """Manages multiple console sessions
 
     Thread-safe management of telnet console connections with automatic

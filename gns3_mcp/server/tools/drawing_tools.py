@@ -11,10 +11,10 @@ from export_tools import create_ellipse_svg, create_line_svg, create_rectangle_s
 from models import DrawingInfo, ErrorCode
 
 if TYPE_CHECKING:
-    from main import AppContext
+    from interfaces import IAppContext
 
 
-async def list_drawings_impl(app: "AppContext") -> str:
+async def list_drawings_impl(app: "IAppContext") -> str:
     """List all drawing objects in the current project
 
     Returns:
@@ -50,7 +50,7 @@ async def list_drawings_impl(app: "AppContext") -> str:
 
 
 async def create_drawing_impl(
-    app: "AppContext",
+    app: "IAppContext",
     drawing_type: str,
     x: int,
     y: int,
@@ -214,7 +214,7 @@ async def create_drawing_impl(
 
 
 async def update_drawing_impl(
-    app: "AppContext",
+    app: "IAppContext",
     drawing_id: str,
     x: int | None = None,
     y: int | None = None,
@@ -287,7 +287,7 @@ async def update_drawing_impl(
         )
 
 
-async def delete_drawing_impl(app: "AppContext", drawing_id: str) -> str:
+async def delete_drawing_impl(app: "IAppContext", drawing_id: str) -> str:
     """Delete a drawing object from the current project
 
     Args:
@@ -319,7 +319,7 @@ async def delete_drawing_impl(app: "AppContext", drawing_id: str) -> str:
 # ============================================================================
 
 
-async def create_drawings_batch_impl(app: "AppContext", drawings: list[dict]) -> str:
+async def create_drawings_batch_impl(app: "IAppContext", drawings: list[dict]) -> str:
     """Create multiple drawing objects in batch with validation
 
     Two-phase execution:

@@ -10,10 +10,10 @@ from error_utils import create_error_response
 from models import ErrorCode, TemplateInfo
 
 if TYPE_CHECKING:
-    from main import AppContext
+    from interfaces import IAppContext
 
 
-async def list_templates_impl(app: "AppContext") -> str:
+async def list_templates_impl(app: "IAppContext") -> str:
     """List all available GNS3 templates
 
     Returns:

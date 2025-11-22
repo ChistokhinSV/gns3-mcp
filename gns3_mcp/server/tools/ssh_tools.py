@@ -21,7 +21,7 @@ from fastmcp import Context
 from models import ErrorCode
 
 if TYPE_CHECKING:
-    from main import AppContext
+    from interfaces import IAppContext
 
 
 # SSH Proxy API URL (defaults to GNS3 host IP)
@@ -34,7 +34,7 @@ SSH_PROXY_URL = os.getenv("SSH_PROXY_URL", f"http://{_gns3_host}:8022")
 # ============================================================================
 
 
-def _get_proxy_url_for_node(app: "AppContext", node_name: str) -> str:
+def _get_proxy_url_for_node(app: "IAppContext", node_name: str) -> str:
     """
     Get proxy URL for a node from stored mapping
 
@@ -162,7 +162,7 @@ async def execute_local_command(
 
 
 async def configure_ssh_impl(
-    app: "AppContext",
+    app: "IAppContext",
     node_name: str,
     device_dict: Dict,
     persist: bool = True,
@@ -328,7 +328,7 @@ async def configure_ssh_impl(
 
 
 async def ssh_send_command_impl(
-    app: "AppContext",
+    app: "IAppContext",
     node_name: str,
     command: str,
     expect_string: str | None = None,
@@ -436,7 +436,7 @@ async def ssh_send_command_impl(
 
 
 async def ssh_send_config_set_impl(
-    app: "AppContext",
+    app: "IAppContext",
     node_name: str,
     config_commands: List[str],
     wait_timeout: int = 30,
@@ -549,7 +549,7 @@ async def ssh_send_config_set_impl(
 
 
 async def ssh_read_buffer_impl(
-    app: "AppContext", node_name: str, mode: str = "diff", pages: int = 1
+    app: "IAppContext", node_name: str, mode: str = "diff", pages: int = 1
 ) -> str:
     """
     Read continuous buffer (all commands combined)
@@ -599,7 +599,7 @@ async def ssh_read_buffer_impl(
 
 
 async def ssh_get_history_impl(
-    app: "AppContext", node_name: str, limit: int = 50, search: str | None = None
+    app: "IAppContext", node_name: str, limit: int = 50, search: str | None = None
 ) -> str:
     """
     List command history in execution order
@@ -650,7 +650,7 @@ async def ssh_get_history_impl(
             return json.dumps({"error": "History retrieval failed", "details": str(e)}, indent=2)
 
 
-async def ssh_get_command_output_impl(app: "AppContext", node_name: str, job_id: str) -> str:
+async def ssh_get_command_output_impl(app: "IAppContext", node_name: str, job_id: str) -> str:
     """
     Get specific command's full output
 
@@ -700,7 +700,7 @@ async def ssh_get_command_output_impl(app: "AppContext", node_name: str, job_id:
 # ============================================================================
 
 
-async def ssh_get_status_impl(app: "AppContext", node_name: str) -> str:
+async def ssh_get_status_impl(app: "IAppContext", node_name: str) -> str:
     """
     Check SSH session status
 
@@ -732,7 +732,7 @@ async def ssh_get_status_impl(app: "AppContext", node_name: str) -> str:
 # ============================================================================
 
 
-async def ssh_disconnect_impl(app: "AppContext", node_name: str) -> str:
+async def ssh_disconnect_impl(app: "IAppContext", node_name: str) -> str:
     """
     Disconnect SSH session for specific node
 
@@ -785,7 +785,7 @@ async def ssh_disconnect_impl(app: "AppContext", node_name: str) -> str:
 
 
 async def ssh_cleanup_sessions_impl(
-    app: "AppContext", keep_nodes: List[str] = None, clean_all: bool = False
+    app: "IAppContext", keep_nodes: List[str] = None, clean_all: bool = False
 ) -> str:
     """
     Clean orphaned/all SSH sessions
@@ -837,7 +837,7 @@ async def ssh_cleanup_sessions_impl(
 # ============================================================================
 
 
-async def ssh_get_job_status_impl(app: "AppContext", job_id: str) -> str:
+async def ssh_get_job_status_impl(app: "IAppContext", job_id: str) -> str:
     """
     Check job status by job_id (for async polling)
 
@@ -883,7 +883,7 @@ async def ssh_get_job_status_impl(app: "AppContext", job_id: str) -> str:
 # ============================================================================
 
 
-async def ssh_batch_impl(app: "AppContext", operations: list[dict]) -> str:
+async def ssh_batch_impl(app: "IAppContext", operations: list[dict]) -> str:
     """Execute multiple SSH operations in batch with validation
 
     Two-phase execution:
