@@ -799,7 +799,7 @@ async def project(
     app: IAppContext = ctx.request_context.lifespan_context
 
     if action == "list":
-        return await list_projects_impl(app.gns3, format)
+        return await list_projects_impl(app, format)
 
     elif action == "open":
         if not name:

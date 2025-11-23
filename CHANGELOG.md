@@ -5,6 +5,23 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.5] - 2025-11-23 - Environment Variable and Project Tool Fixes
+
+### Fixed
+- **Environment Variable Support**
+  - Fixed GNS3_HOST and GNS3_PORT environment variables not being read
+  - Server now correctly reads GNS3_HOST, GNS3_PORT, GNS3_USER from environment
+  - Falls back to command-line arguments if environment variables not set
+  - Fixes "Connection to localhost:80" issue when env vars were set but ignored
+- **Project Tool TypeError**
+  - Fixed `'GNS3Client' object has no attribute 'resource_manager'` error
+  - Project list action now correctly passes AppContext instead of GNS3Client
+  - Aligns with resource_tools.py list_projects function signature
+
+### Technical Details
+- Updated `app_lifespan` in app.py to read host, port, username from environment before args
+- Fixed project tool in main.py to call `list_projects_impl(app, format)` instead of `list_projects_impl(app.gns3, format)`
+
 ## [0.53.4] - 2025-11-23 - Pagination Fix & Dev Mode
 
 ### Fixed
