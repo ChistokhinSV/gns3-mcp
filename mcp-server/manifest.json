@@ -4,7 +4,7 @@
   "display_name": "GNS3 Lab Controller",
   "version": "0.53.1",
   "description": "GNS3 lab automation with AI agent",
-  "long_description": "GNS3 v3 lab automation MCP server. Create/modify nodes, configure via console/SSH, topology management. v0.53.1: Pure dependency injection architecture - 19 implementation functions refactored for cleaner separation of concerns, improved testability, and better maintainability.",
+  "long_description": "GNS3 v3 lab automation MCP server with 12 CRUD-style tools. Create/modify nodes, configure via console/SSH, topology management. v0.53.0: Enhanced console tools - keystroke improvements (space key, repeat, pattern-based, sequences) + pagination handling (--More--) for commands with long output. Fixes GM-76.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -55,120 +55,52 @@
   },
   "tools": [
     {
-      "name": "check_gns3_connection",
-      "description": "Check GNS3 server connection status with error details and last attempt time"
+      "name": "gns3_connection",
+      "description": "CRUD: Manage GNS3 server connection (check status, force retry). Actions: check, retry"
     },
     {
-      "name": "retry_gns3_connection",
-      "description": "Force immediate GNS3 reconnection attempt (bypasses backoff timer)"
+      "name": "project",
+      "description": "CRUD: Manage GNS3 projects (list, open, create, close). Actions: list, open, create, close"
     },
     {
-      "name": "open_project",
-      "description": "Open a GNS3 project by name"
+      "name": "node",
+      "description": "CRUD: Manage nodes (list, create, delete, set properties/state). Supports wildcards ('*', 'Router*'), JSON arrays, parallel execution. Actions: list, create, delete, set"
     },
     {
-      "name": "create_project",
-      "description": "Create a new GNS3 project and auto-open it"
+      "name": "link",
+      "description": "CRUD: Manage network connections (list, batch connect/disconnect). Two-phase validation. Actions: list, batch"
     },
     {
-      "name": "close_project",
-      "description": "Close the currently opened project"
+      "name": "node_file",
+      "description": "CRUD: Docker node file operations (read, write, configure network). Auto-restarts node for network config. Actions: read, write, configure_network"
     },
     {
-      "name": "set_node_properties",
-      "description": "Configure node properties and/or control state. v0.40.0: Supports wildcard patterns ('*', 'Router*'), JSON arrays, and parallel execution for bulk operations"
+      "name": "project_docs",
+      "description": "CRUD: Project documentation (get/update README). Store IP schemes, credentials, architecture notes. Actions: get, update"
     },
     {
-      "name": "create_node",
-      "description": "Create a new node from template at specified coordinates"
+      "name": "drawing",
+      "description": "CRUD: Topology drawings (list, create, update, delete, batch). Shapes: rectangle, ellipse, line, text. Actions: list, create, update, delete, batch"
     },
     {
-      "name": "send_console_data",
-      "description": "Send data to console (auto-connects)"
+      "name": "console",
+      "description": "Batch console operations (send, read, send_and_wait, keystroke). v0.53.0: Enhanced keystroke (space, repeat, pattern-based, sequences) + pagination handling (--More--). Operations: send, read, send_and_wait, keystroke"
     },
     {
-      "name": "read_console_output",
-      "description": "Read console output with mode parameter (mode='diff'/'last_page'/'num_pages'/'all', supports grep filtering)"
+      "name": "ssh",
+      "description": "Batch SSH operations (configure, command, disconnect). Multi-proxy support, auto-recovery (30min TTL). Operations: configure, command, disconnect"
     },
     {
-      "name": "disconnect_console",
-      "description": "Disconnect console session"
+      "name": "query_resource",
+      "description": "Universal resource query tool - access any MCP resource by URI pattern (projects://, nodes://, sessions://, etc.)"
     },
     {
-      "name": "send_console_keystroke",
-      "description": "Send special keystroke to console (navigation, editing, control keys)"
-    },
-    {
-      "name": "send_console_command_and_wait",
-      "description": "Send command and wait for prompt pattern with timeout (pattern matching + auto-polling, output and timing)"
-    },
-    {
-      "name": "console_batch_operations",
-      "description": "Execute multiple console operations in batch (send/send_and_wait/read/keystroke) with two-phase validation and full parameter support"
-    },
-    {
-      "name": "set_network_connections",
-      "description": "Batch manage network connections with two-phase validation"
-    },
-    {
-      "name": "delete_node",
-      "description": "Delete a node from the current project"
-    },
-    {
-      "name": "get_node_file",
-      "description": "Read file from Docker node filesystem"
-    },
-    {
-      "name": "write_node_file",
-      "description": "Write file to Docker node filesystem - requires manual node restart to apply changes"
-    },
-    {
-      "name": "configure_node_network",
-      "description": "Configure network interfaces on Docker node with static IP or DHCP - automatically restarts node to apply (returns configured interfaces)"
-    },
-    {
-      "name": "get_project_readme",
-      "description": "Get project README/notes in markdown format - IP schemes, credentials, architecture notes"
-    },
-    {
-      "name": "update_project_readme",
-      "description": "Update project README/notes - agent can store IP addresses, credentials, architecture diagrams, troubleshooting notes"
-    },
-    {
-      "name": "configure_ssh_session",
-      "description": "Configure SSH session with multi-proxy support and auto-recovery. Use proxy='host' (default) for main proxy, or proxy=proxy_id for lab proxies (discovered via gns3://proxy/registry). Auto-recovery: 30min TTL, health checks, auto-recreates stale sessions. After 'Socket is closed' error: just retry - no force needed. Requires SSH enabled on device first."
-    },
-    {
-      "name": "execute_ssh_command",
-      "description": "Execute SSH command(s) with auto-detection (string=show command, list=config commands)"
-    },
-    {
-      "name": "disconnect_ssh_session",
-      "description": "Disconnect SSH session (returns JSON status)"
-    },
-    {
-      "name": "ssh_batch_operations",
-      "description": "Execute multiple SSH operations in batch with two-phase validation"
+      "name": "search_tools",
+      "description": "Tool discovery - search/filter tools by category (project, node, console, ssh), capability (CRUD, batch, wildcard, parallel), or resource URI"
     },
     {
       "name": "export_topology_diagram",
       "description": "Export topology diagram as SVG/PNG with optional crop region"
-    },
-    {
-      "name": "create_drawing",
-      "description": "Create a drawing object - rectangle, ellipse, line, or text"
-    },
-    {
-      "name": "update_drawing",
-      "description": "Update properties of an existing drawing object"
-    },
-    {
-      "name": "delete_drawing",
-      "description": "Delete a drawing object from the current project"
-    },
-    {
-      "name": "create_drawings_batch",
-      "description": "Create multiple drawing objects in batch"
     }
   ],
   "prompts": [
