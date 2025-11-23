@@ -37,6 +37,10 @@ COPY server/ ./server/
 COPY config/nginx.conf /etc/nginx/sites-available/default
 COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Expose ports
 EXPOSE 8022 69/udp
 
@@ -47,5 +51,5 @@ ENV MAX_BUFFER_SIZE=10485760
 ENV TRIM_BUFFER_SIZE=5242880
 ENV MAX_HISTORY_JOBS=1000
 
-# Run all services via supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Run entrypoint script which ensures TFTP directory exists and starts supervisor
+CMD ["/usr/local/bin/docker-entrypoint.sh"]
