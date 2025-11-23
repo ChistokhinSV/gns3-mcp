@@ -5,6 +5,42 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.4] - 2025-11-23 - Pagination Fix & Dev Mode
+
+### Fixed
+- **Pagination Infinite Loop Bug (GM-76)**
+  - Fixed pagination detection checking entire accumulated output instead of latest chunk
+  - Prevented infinite loop where same `--More--` pattern detected repeatedly
+  - Now checks only the latest chunk for pagination prompts
+  - Strips pagination prompts from output while preserving all command data
+- **SyntaxWarning in Docstring**
+  - Fixed invalid escape sequence `\s` in pagination_patterns documentation
+- **MCP_API_KEY Auto-Generation**
+  - Auto-generates API key if not present in environment
+  - Logs warning with first 8 chars of generated key
+  - Recommends setting persistent key in .env for production
+
+### Added
+- **Dev Mode for Local Development**
+  - New `server.cmd dev` - run from local .py files with venv (picks up code changes)
+  - New `server.cmd dev-install` - install service from local source
+  - New `server.cmd dev-reinstall` - reinstall service from local source
+  - Auto-creates venv and installs dependencies if missing
+  - Service restarts pick up code changes immediately (no reinstall needed)
+- **Pagination Configuration**
+  - Added `pagination_key` parameter (default: " " for space)
+  - Can be configured to use enter (`"\n"`) or any other character
+  - `pagination_patterns` parameter for custom pagination prompts
+
+### Changed
+- **Console send_and_wait Enhancement**
+  - Better pagination handling with configurable key
+  - Pagination prompts stripped from output
+  - All command data preserved during pagination
+- **Server XML Configuration**
+  - Dev mode service loads environment variables from .env
+  - Includes MCP_API_KEY in service environment
+
 ## [0.53.3] - 2025-11-23 - Interface Implementation Fix
 
 ### Fixed

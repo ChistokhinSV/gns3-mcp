@@ -447,6 +447,7 @@ async def send_and_wait_console_impl(
     raw: bool = False,
     handle_pagination: bool = False,
     pagination_patterns: list[str] | None = None,
+    pagination_key: str = " ",
 ) -> str:
     """Send command and wait for specific prompt pattern
 
@@ -462,14 +463,15 @@ async def send_and_wait_console_impl(
     Workflow:
     1. Send command to console
     2. If wait_pattern provided: poll console until pattern appears or timeout
-    3. If handle_pagination enabled: auto-detect pagination prompts and send space
+    3. If handle_pagination enabled: auto-detect pagination prompts and send pagination_key
     4. Return all output accumulated during wait
 
-    Pagination Handling (GM-76):
+    Pagination Handling (GM-76, v0.53.4 fix):
     - When enabled, automatically detects pagination prompts like "--More--"
-    - Sends space key to continue paging through output
+    - Sends pagination_key (default: space) to continue paging through output
     - Continues until final wait_pattern appears or timeout
     - Useful for commands with long output (e.g., "show bgp l2vpn evpn")
+    - Pagination prompts are stripped from output while preserving all command data
 
     Args:
         node_name: Name of the node
@@ -481,12 +483,14 @@ async def send_and_wait_console_impl(
         raw: If True, send command without escape sequence processing (default: False)
         handle_pagination: If True, auto-detect and handle pagination prompts (default: False)
         pagination_patterns: List of regex patterns for pagination prompts
-                             Default: ["--More--", "---(more)---", "-- More --"]
+                             Default: ["--More--", "---(more)---", "-- More --", r"--\\s*More\\s*--"]
+        pagination_key: Key to send when pagination detected (default: " " for space)
+                        Can be "\n" for enter, or any other character
 
     Returns:
         JSON with:
         {
-            "output": "console output",
+            "output": "console output",  # Pagination prompts stripped, all data preserved
             "pattern_found": true/false,
             "timeout_occurred": true/false,
             "wait_time": 2.5,  # seconds actually waited
@@ -624,18 +628,29 @@ async def send_and_wait_console_impl(
             # Search the complete accumulated output so far
             full_output_so_far = "".join(accumulated_output)
 
-            # Check for pagination prompts first (if enabled)
-            if handle_pagination and pagination_regexes:
+            # Check for pagination prompts in LATEST CHUNK only (v0.53.4 fix)
+            # This prevents re-detecting the same pagination prompt on every iteration
+            if handle_pagination and pagination_regexes and chunk:
                 pagination_detected = False
+                matched_pattern = None
                 for pag_re in pagination_regexes:
-                    if pag_re.search(full_output_so_far):
+                    match = pag_re.search(chunk)  # Search only new data
+                    if match:
                         pagination_detected = True
+                        matched_pattern = pag_re
                         break
 
                 if pagination_detected:
-                    # Send space to continue paging
-                    await app.console.send_by_node(node_name, " ")
+                    # Send pagination key to continue paging
+                    await app.console.send_by_node(node_name, pagination_key)
                     pagination_count += 1
+
+                    # Remove pagination prompt from accumulated output to keep output clean
+                    # but preserve all actual command data
+                    if matched_pattern:
+                        full_output_so_far = matched_pattern.sub("", full_output_so_far)
+                        accumulated_output = [full_output_so_far]
+
                     # Continue polling - don't check for final pattern yet
                     continue
 
@@ -1148,6 +1163,9 @@ async def console_batch_impl(app: "IAppContext", operations: list[dict]) -> str:
                     op.get("wait_pattern"),
                     op.get("timeout", 30),
                     op.get("raw", False),
+                    op.get("handle_pagination", False),
+                    op.get("pagination_patterns"),
+                    op.get("pagination_key", " "),
                 )
 
             elif op_type == "read":

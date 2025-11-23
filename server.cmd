@@ -1,15 +1,18 @@
 @echo off
 REM GNS3 MCP HTTP Server Management Script
 REM Uses WinSW (Windows Service Wrapper) to run as Windows service with uvx
-REM Usage: server.cmd [run|start|stop|restart|install|uninstall|reinstall|status|create-user]
-REM   (no params)      - Run server directly (development mode)
-REM   run             - Run server directly (development mode)
+REM Usage: server.cmd [run|dev|start|stop|restart|install|dev-install|uninstall|reinstall|dev-reinstall|status|create-user]
+REM   (no params)      - Run server directly with uvx (development mode)
+REM   run             - Run server directly with uvx (development mode)
+REM   dev             - Run server from local .py with venv (dev mode, picks up code changes)
 REM   start           - Start Windows service
 REM   stop            - Stop Windows service
 REM   restart         - Restart Windows service
-REM   install         - Install Windows service
+REM   install         - Install Windows service (uses uvx/PyPI)
+REM   dev-install     - Install Windows service from local .py (dev mode)
 REM   uninstall       - Remove Windows service
-REM   reinstall       - Reinstall Windows service
+REM   reinstall       - Reinstall Windows service (uses uvx/PyPI)
+REM   dev-reinstall   - Reinstall Windows service from local .py (dev mode)
 REM   status          - Show service status
 REM   create-user     - Create service user account (requires admin)
 
@@ -50,24 +53,30 @@ if "%COMMAND%"=="" set "COMMAND=run"
 
 REM Check for admin privileges if running install/uninstall/reinstall/start/stop/restart/create-user
 if /i "%COMMAND%"=="install" goto :check_admin
+if /i "%COMMAND%"=="dev-install" goto :check_admin
 if /i "%COMMAND%"=="uninstall" goto :check_admin
 if /i "%COMMAND%"=="reinstall" goto :check_admin
+if /i "%COMMAND%"=="dev-reinstall" goto :check_admin
 if /i "%COMMAND%"=="start" goto :check_admin
 if /i "%COMMAND%"=="stop" goto :check_admin
 if /i "%COMMAND%"=="restart" goto :check_admin
 if /i "%COMMAND%"=="create-user" goto :check_admin
 if /i "%COMMAND%"=="status" goto :status
 if /i "%COMMAND%"=="run" goto :run_direct
+if /i "%COMMAND%"=="dev" goto :run_dev
 
 echo Unknown command: %COMMAND%
-echo Usage: server.cmd [run^|start^|stop^|restart^|install^|uninstall^|reinstall^|status^|create-user]
-echo   run            - Run server directly (no service)
+echo Usage: server.cmd [run^|dev^|start^|stop^|restart^|install^|dev-install^|uninstall^|reinstall^|dev-reinstall^|status^|create-user]
+echo   run            - Run server directly with uvx (no service)
+echo   dev            - Run server from local .py with venv (dev mode)
 echo   start          - Start Windows service
 echo   stop           - Stop Windows service
 echo   restart        - Restart Windows service
-echo   install        - Install Windows service
+echo   install        - Install Windows service (uvx/PyPI)
+echo   dev-install    - Install Windows service from local .py (dev mode)
 echo   uninstall      - Remove Windows service
-echo   reinstall      - Reinstall Windows service
+echo   reinstall      - Reinstall Windows service (uvx/PyPI)
+echo   dev-reinstall  - Reinstall Windows service from local .py (dev mode)
 echo   status         - Show service status
 echo   create-user    - Create service user account (admin required)
 exit /b 1
@@ -84,8 +93,10 @@ if %errorlevel% neq 0 (
 )
 REM Running as admin, proceed to command
 if /i "%COMMAND%"=="install" goto :install
+if /i "%COMMAND%"=="dev-install" goto :dev_install
 if /i "%COMMAND%"=="uninstall" goto :uninstall
 if /i "%COMMAND%"=="reinstall" goto :reinstall
+if /i "%COMMAND%"=="dev-reinstall" goto :dev_reinstall
 if /i "%COMMAND%"=="start" goto :service_start
 if /i "%COMMAND%"=="stop" goto :service_stop
 if /i "%COMMAND%"=="restart" goto :service_restart
@@ -328,3 +339,176 @@ echo Verify service user:
 echo   .\server.cmd status
 echo.
 exit /b 0
+
+:run_dev
+echo === GNS3 MCP HTTP Server (Dev Mode - Local Source) ===
+echo.
+echo Running from local .py files with venv...
+echo Directory: %SCRIPT_DIR%
+echo.
+cd /d "%SCRIPT_DIR%"
+
+REM Check if venv exists, create if missing
+if not exist "%SCRIPT_DIR%\.venv\Scripts\python.exe" (
+    echo Virtual environment not found, creating...
+    echo.
+    echo Creating venv at: %SCRIPT_DIR%\.venv
+    python -m venv "%SCRIPT_DIR%\.venv"
+    if %errorlevel% neq 0 (
+        echo ERROR: Failed to create virtual environment
+        echo Make sure Python is installed: python --version
+        exit /b 1
+    )
+    echo [OK] Venv created
+    echo.
+    echo Installing dependencies from requirements.txt...
+    "%SCRIPT_DIR%\.venv\Scripts\pip.exe" install -r "%SCRIPT_DIR%\requirements.txt"
+    if %errorlevel% neq 0 (
+        echo ERROR: Failed to install dependencies
+        echo Check requirements.txt and network connection
+        exit /b 1
+    )
+    echo [OK] Dependencies installed
+    echo.
+)
+
+REM Load environment variables from .env if exists
+if exist "%SCRIPT_DIR%\.env" (
+    echo Loading environment variables from .env...
+    for /f "usebackq tokens=1,2 delims==" %%a in ("%SCRIPT_DIR%\.env") do (
+        REM Skip comments and empty lines
+        echo %%a | findstr /r "^#" >nul || (
+            if not "%%a"=="" if not "%%b"=="" set "%%a=%%b"
+        )
+    )
+    echo.
+)
+
+REM Run from local source using venv Python
+echo Running: .venv\Scripts\python -m gns3_mcp.server.main --transport http --http-port 8100
+echo.
+echo Server will pick up code changes on restart (Ctrl+C to stop)
+echo.
+".venv\Scripts\python.exe" -m gns3_mcp.server.main --host %GNS3_HOST% --port %GNS3_PORT% --username %USER% --password %PASSWORD% --transport http --http-port 8100
+exit /b %errorlevel%
+
+:dev_install
+echo === Installing GNS3 MCP HTTP Service (Dev Mode - Local Source) ===
+echo.
+
+REM Check if already installed
+"%WINSW_EXE%" status >nul 2>&1
+if %errorlevel% equ 0 (
+    echo Service already installed. Use 'dev-reinstall' to update.
+    exit /b 1
+)
+
+REM Try to clean up any broken installation
+"%WINSW_EXE%" uninstall >nul 2>&1
+
+REM Check if venv exists, create if missing
+if not exist "%SCRIPT_DIR%\.venv\Scripts\python.exe" (
+    echo Virtual environment not found, creating...
+    echo.
+    echo Creating venv at: %SCRIPT_DIR%\.venv
+    python -m venv "%SCRIPT_DIR%\.venv"
+    if %errorlevel% neq 0 (
+        echo ERROR: Failed to create virtual environment
+        echo Make sure Python is installed: python --version
+        exit /b 1
+    )
+    echo [OK] Venv created
+    echo.
+    echo Installing dependencies from requirements.txt...
+    "%SCRIPT_DIR%\.venv\Scripts\pip.exe" install -r "%SCRIPT_DIR%\requirements.txt"
+    if %errorlevel% neq 0 (
+        echo ERROR: Failed to install dependencies
+        echo Check requirements.txt and network connection
+        exit /b 1
+    )
+    echo [OK] Dependencies installed
+    echo.
+)
+
+REM Load environment variables from .env before creating config
+if exist "%SCRIPT_DIR%\.env" (
+    echo Loading environment variables from .env...
+    for /f "usebackq tokens=1,2 delims==" %%a in ("%SCRIPT_DIR%\.env") do (
+        REM Skip comments and empty lines
+        echo %%a | findstr /r "^#" >nul || (
+            if not "%%a"=="" if not "%%b"=="" set "%%a=%%b"
+        )
+    )
+)
+
+REM Create dev mode XML config
+echo Creating dev mode service configuration...
+call :create_dev_xml
+
+echo Installing service with WinSW...
+"%WINSW_EXE%" install
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to install service
+    echo Check GNS3-MCP-HTTP.xml configuration
+    exit /b 1
+)
+
+echo Starting service...
+"%WINSW_EXE%" start
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to start service
+    echo Check logs: %SCRIPT_DIR%\GNS3-MCP-HTTP.wrapper.log
+    exit /b 1
+)
+
+echo.
+echo Service installed and started successfully in DEV MODE!
+echo Server log: %SCRIPT_DIR%\mcp-http-server.log
+echo Wrapper log: %SCRIPT_DIR%\GNS3-MCP-HTTP.wrapper.log
+echo.
+echo NOTE: Restart service to pick up code changes: .\server.cmd restart
+exit /b 0
+
+:dev_reinstall
+echo === Reinstalling GNS3 MCP HTTP Service (Dev Mode - Local Source) ===
+echo.
+echo [1/3] Uninstalling existing service...
+call :uninstall
+echo.
+echo [2/3] Removing old venv...
+if exist "%SCRIPT_DIR%\.venv" (
+    echo Removing %SCRIPT_DIR%\.venv...
+    rmdir /s /q "%SCRIPT_DIR%\.venv"
+    echo Venv removed.
+)
+echo.
+echo [3/3] Installing fresh service with new venv...
+call :dev_install
+exit /b %errorlevel%
+
+:create_dev_xml
+REM Create XML configuration for dev mode (runs from local .py with venv)
+echo ^<?xml version="1.0" encoding="UTF-8"?^> > "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo ^<service^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<id^>GNS3-MCP-HTTP^</id^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<name^>GNS3 MCP HTTP Server (Dev)^</name^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<description^>GNS3 MCP Server via HTTP transport - DEV MODE (local source)^</description^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<executable^>%SCRIPT_DIR%\.venv\Scripts\python.exe^</executable^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<arguments^>-m gns3_mcp.server.main --transport http --http-port 8100^</arguments^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<workingdirectory^>%SCRIPT_DIR%^</workingdirectory^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+if not "%USER%"=="" echo   ^<env name="USER" value="%USER%"/^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+if not "%PASSWORD%"=="" echo   ^<env name="PASSWORD" value="%PASSWORD%"/^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+if not "%GNS3_HOST%"=="" echo   ^<env name="GNS3_HOST" value="%GNS3_HOST%"/^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+if not "%GNS3_PORT%"=="" echo   ^<env name="GNS3_PORT" value="%GNS3_PORT%"/^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+if not "%MCP_API_KEY%"=="" echo   ^<env name="MCP_API_KEY" value="%MCP_API_KEY%"/^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<logmode^>rotate^</logmode^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<log^>%SCRIPT_DIR%\mcp-http-server.log^</log^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<priority^>Normal^</priority^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<stoptimeout^>15 sec^</stoptimeout^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<startmode^>Automatic^</startmode^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<waithint^>15 sec^</waithint^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<sleeptime^>1 sec^</sleeptime^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo   ^<stopparentprocessfirst^>true^</stopparentprocessfirst^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo ^</service^> >> "%SCRIPT_DIR%\GNS3-MCP-HTTP.xml"
+echo Dev mode XML configuration created.
+goto :eof

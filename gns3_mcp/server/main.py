@@ -1017,7 +1017,10 @@ async def console(
             "command": "show ip interface brief\\n",
             "wait_pattern": "Router#",  // optional
             "timeout": 30,  // optional
-            "raw": false  // optional
+            "raw": false,  // optional
+            "handle_pagination": true,  // optional (v0.53.4: auto-handle --More--)
+            "pagination_patterns": ["--More--", "---(more)---"],  // optional (custom patterns)
+            "pagination_key": " "  // optional (default: space, can use "\\n" for enter)
         }
 
     - "read": Read console output (NOTE: returns empty if nothing sent yet - this is normal)
@@ -2053,10 +2056,16 @@ if __name__ == "__main__":
         # Add API key authentication middleware (CWE-306 fix)
         api_key = os.getenv("MCP_API_KEY")
         if not api_key:
-            raise ValueError(
-                "MCP_API_KEY required for HTTP transport (set in .env). "
-                'Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
+            # Auto-generate API key for dev/local use
+            import secrets
+
+            api_key = secrets.token_urlsafe(32)
+            logger.warning(
+                f"MCP_API_KEY not found in environment, auto-generated: {api_key[:8]}..."
             )
+            logger.warning("For production, set MCP_API_KEY in .env file to use a persistent key")
+            # Set it in environment for this session
+            os.environ["MCP_API_KEY"] = api_key
 
         @app.middleware("http")
         async def verify_api_key(request: Request, call_next):
