@@ -10,9 +10,10 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.48.0
+## Current Version: v0.48.0 (MCP Server) / v0.3.0 (SSH Proxy)
 
 **Latest Release:** v0.48.0 - List Action Integration (removes convenience wrappers)
+**SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
 ### Recent Changes (v0.26.0 - v0.48.0)
 
@@ -22,6 +23,15 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - **Consistent Pattern**: All CRUD tools now have `list` action with `project_id` and `format` parameters
 - **Tool Count**: 12 tools (down from 15 in v0.47.0) - 20% reduction
 - **search_tools()**: Updated TOOL_REGISTRY with new actions
+
+**SSH Proxy v0.3.0** - Multi-Service Architecture (TFTP, HTTP reverse proxy, HTTP client)
+- **TFTP Server**: tftpd-hpa on port 69/udp, read-write access, `/opt/gns3-ssh-proxy/tftp` root
+- **HTTP Reverse Proxy**: nginx on port 8023, URL: `http://proxy:8023/http-proxy/<ip>:<port>/`
+- **HTTP Client**: RESTful endpoint for making HTTP/HTTPS requests to device APIs
+- **MCP Tools**: Added `tftp` and `http_client` CRUD-style tools (14 tools total now)
+- **Supervisor**: Runs FastAPI, TFTP, and nginx in single container
+- **GitHub Actions**: Manual workflow for Docker build/push with automated Docker Hub description updates
+- **Documentation**: Updated ssh-proxy/README.md with features, architecture, API endpoints, usage examples
 
 **v0.47.0** - **BREAKING**: Aggressive tool consolidation (32 → 15 tools, 53% reduction)
 - **Core CRUD Tools**: 7 consolidated tools with `action` parameters
@@ -58,11 +68,13 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 **v0.26.0** - Multi-proxy support for isolated network access
 
 ### Current State
-- **12 Tools**: CRUD-style consolidation (v0.48.0: 20% reduction from v0.47.0, 63% from original 32 tools)
-  - 7 CRUD tools with integrated `list` action (gns3_connection, project, node, link, drawing, project_docs, node_file)
+- **14 Tools**: CRUD-style consolidation (v0.48.0: 20% reduction from v0.47.0, 63% from original 32 tools)
+  - 9 CRUD tools with integrated `list` action or CRUD operations:
+    - Core: gns3_connection, project, node, link, drawing, project_docs, node_file
+    - SSH Proxy (v0.3.0): tftp, http_client
   - Batch-only console/SSH operations
   - Tool discovery with `search_tools()`
-  - 5 additional tools (query_resource, export_topology_diagram)
+  - 3 additional tools (query_resource, export_topology_diagram)
 - **25 Resources**: Text table output, topology_report (v0.40.0), URIs, complete metadata
 - **5 Prompts**: Guided workflows for SSH setup, topology discovery, troubleshooting, lab setup, node setup
   - All prompts updated with CRUD-style examples (v0.47.0)

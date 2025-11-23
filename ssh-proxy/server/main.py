@@ -8,13 +8,19 @@ Provides REST API for SSH automation using Netmiko with dual storage:
 Port: 8022 (SSH-like mnemonic)
 """
 
+__version__ = "0.3.0"
+
+import base64
 import logging
 import os
 import subprocess
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
@@ -27,6 +33,11 @@ from .models import (
     ConfigureSSHResponse,
     ErrorResponse,
     HistoryResponse,
+    HTTPClientRequest,
+    HTTPClientResponse,
+    HTTPProxyDevice,
+    HTTPProxyRequest,
+    HTTPProxyResponse,
     Job,
     LocalExecuteRequest,
     LocalExecuteResponse,
@@ -34,7 +45,10 @@ from .models import (
     SendCommandRequest,
     SendConfigSetRequest,
     SessionStatusResponse,
-    SSHConnectionError
+    SSHConnectionError,
+    TFTPFile,
+    TFTPRequest,
+    TFTPResponse
 )
 from .session_manager import SSHSessionManager
 from .docker_discovery import DockerProxyDiscovery
@@ -99,8 +113,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="GNS3 SSH Proxy",
-    description="SSH automation proxy for GNS3 network labs with Netmiko and proxy discovery",
-    version="0.2.2",
+    description="SSH automation proxy for GNS3 network labs with Netmiko, TFTP, and HTTP reverse proxy",
+    version=__version__,
     lifespan=lifespan
 )
 
@@ -544,16 +558,21 @@ async def cleanup_sessions(request: CleanupRequest):
 @app.get("/proxy/registry")
 async def get_proxy_registry():
     """
-    Get registry of all discovered lab proxies
+    Get registry of all discovered lab proxies with TFTP and HTTP proxy status (v0.3.0)
 
     Discovers lab proxies via Docker API (only works on main proxy with
-    /var/run/docker.sock mounted).
+    /var/run/docker.sock mounted). Includes TFTP server and HTTP reverse proxy information.
 
     Returns:
         JSON object with:
         - available: bool - Docker API availability
         - proxies: list - Discovered lab proxies
         - count: int - Number of proxies found
+        - tftp_enabled: bool - TFTP server status (v0.3.0)
+        - tftp_port: int - TFTP server port (69)
+        - tftp_root: str - TFTP directory path
+        - http_proxy_enabled: bool - HTTP reverse proxy status (v0.3.0)
+        - http_proxy_devices: list - Registered devices for reverse proxy
 
     Example response:
         {
@@ -569,7 +588,12 @@ async def get_proxy_registry():
                     "discovered_via": "docker_api"
                 }
             ],
-            "count": 1
+            "count": 1,
+            "tftp_enabled": true,
+            "tftp_port": 69,
+            "tftp_root": "/opt/gns3-ssh-proxy/tftp",
+            "http_proxy_enabled": true,
+            "http_proxy_devices": [...]
         }
 
     Notes:
@@ -588,10 +612,39 @@ async def get_proxy_registry():
     try:
         proxies = await proxy_discovery.discover_proxies()
 
+        # Check TFTP server status (v0.3.0)
+        tftp_enabled = False
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", "in.tftpd"],
+                capture_output=True,
+                timeout=2
+            )
+            tftp_enabled = result.returncode == 0
+        except Exception:
+            pass
+
+        # Check nginx reverse proxy status (v0.3.0)
+        http_proxy_enabled = False
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", "nginx"],
+                capture_output=True,
+                timeout=2
+            )
+            http_proxy_enabled = result.returncode == 0
+        except Exception:
+            pass
+
         return {
             "available": True,
             "proxies": [p.to_dict() for p in proxies],
-            "count": len(proxies)
+            "count": len(proxies),
+            "tftp_enabled": tftp_enabled,
+            "tftp_port": 69,
+            "tftp_root": str(TFTP_ROOT),
+            "http_proxy_enabled": http_proxy_enabled,
+            "http_proxy_devices": list(http_proxy_devices.values())
         }
 
     except Exception as e:
@@ -695,6 +748,381 @@ async def local_execute(request: LocalExecuteRequest):
             exit_code=-1,
             execution_time=round(execution_time, 3),
             error=f"Command execution failed: {str(e)}"
+        )
+
+
+# ============================================================================
+# TFTP Management (v0.3.0)
+# ============================================================================
+
+TFTP_ROOT = Path("/opt/gns3-ssh-proxy/tftp")
+
+@app.post("/tftp", response_model=TFTPResponse)
+async def tftp_management(request: TFTPRequest):
+    """
+    Manage TFTP server files (CRUD-style with action parameter)
+
+    TFTP server runs on port 69/udp with root directory /opt/gns3-ssh-proxy/tftp.
+    Devices can upload/download firmware, configs, backups.
+
+    Actions:
+        - list: List files in TFTP directory
+        - upload: Upload file to TFTP (content is base64 encoded)
+        - download: Download file from TFTP (returns base64 encoded content)
+        - delete: Delete file from TFTP
+        - status: TFTP server status
+
+    Args:
+        request: TFTPRequest with action and optional filename/content
+
+    Returns:
+        TFTPResponse with success status, files list, or content
+
+    Examples:
+        # List files
+        POST /tftp {"action": "list"}
+
+        # Upload file
+        POST /tftp {"action": "upload", "filename": "config.txt", "content": "Y29uZmlnIGRhdGE="}
+
+        # Download file
+        POST /tftp {"action": "download", "filename": "config.txt"}
+
+        # Delete file
+        POST /tftp {"action": "delete", "filename": "old-firmware.bin"}
+    """
+    try:
+        if request.action == "list":
+            # List files in TFTP directory
+            if not TFTP_ROOT.exists():
+                TFTP_ROOT.mkdir(parents=True, exist_ok=True)
+
+            files = []
+            for item in TFTP_ROOT.iterdir():
+                stat = item.stat()
+                files.append(TFTPFile(
+                    filename=item.name,
+                    size=stat.st_size,
+                    modified=datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                    is_dir=item.is_dir()
+                ))
+
+            return TFTPResponse(
+                success=True,
+                action="list",
+                files=sorted(files, key=lambda f: f.filename)
+            )
+
+        elif request.action == "upload":
+            if not request.filename or not request.content:
+                raise HTTPException(status_code=400, detail="filename and content required for upload")
+
+            # Decode base64 content and write to file
+            try:
+                file_data = base64.b64decode(request.content)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid base64 content: {e}")
+
+            file_path = TFTP_ROOT / request.filename
+            file_path.write_bytes(file_data)
+
+            return TFTPResponse(
+                success=True,
+                action="upload",
+                message=f"Uploaded {request.filename} ({len(file_data)} bytes)"
+            )
+
+        elif request.action == "download":
+            if not request.filename:
+                raise HTTPException(status_code=400, detail="filename required for download")
+
+            file_path = TFTP_ROOT / request.filename
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
+
+            # Read file and encode as base64
+            file_data = file_path.read_bytes()
+            content_b64 = base64.b64encode(file_data).decode('utf-8')
+
+            return TFTPResponse(
+                success=True,
+                action="download",
+                content=content_b64,
+                message=f"Downloaded {request.filename} ({len(file_data)} bytes)"
+            )
+
+        elif request.action == "delete":
+            if not request.filename:
+                raise HTTPException(status_code=400, detail="filename required for delete")
+
+            file_path = TFTP_ROOT / request.filename
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail=f"File not found: {request.filename}")
+
+            file_path.unlink()
+
+            return TFTPResponse(
+                success=True,
+                action="delete",
+                message=f"Deleted {request.filename}"
+            )
+
+        elif request.action == "status":
+            # Check TFTP server status
+            try:
+                result = subprocess.run(
+                    ["pgrep", "-f", "in.tftpd"],
+                    capture_output=True,
+                    timeout=5
+                )
+                running = result.returncode == 0
+
+                return TFTPResponse(
+                    success=True,
+                    action="status",
+                    message=f"TFTP server: {'running' if running else 'stopped'}"
+                )
+            except Exception as e:
+                return TFTPResponse(
+                    success=False,
+                    action="status",
+                    error=f"Failed to check TFTP status: {e}"
+                )
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown action: {request.action}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[TFTP] Error in {request.action}: {e}")
+        return TFTPResponse(
+            success=False,
+            action=request.action,
+            error=str(e)
+        )
+
+
+# ============================================================================
+# HTTP Client (v0.3.0)
+# ============================================================================
+
+@app.post("/http-client", response_model=HTTPClientResponse)
+async def http_client(request: HTTPClientRequest):
+    """
+    Make HTTP/HTTPS requests to lab devices (CRUD-style with action parameter)
+
+    Useful for checking device APIs, health endpoints, retrieving data.
+    **Reverse HTTP/HTTPS proxy available** at http://proxy:8022/http-proxy/
+    for external device web UI access without SSH tunnel.
+
+    Actions:
+        - get: Make HTTP GET request to device URL
+        - status: Check if URL is reachable
+
+    Args:
+        request: HTTPClientRequest with action, url, timeout, verify_ssl, headers
+
+    Returns:
+        HTTPClientResponse with status_code, content, headers, or reachability
+
+    Examples:
+        # GET request
+        POST /http-client {"action": "get", "url": "http://10.1.1.1/api/health"}
+
+        # Check reachability
+        POST /http-client {"action": "status", "url": "https://10.1.1.1:443"}
+
+        # Custom headers
+        POST /http-client {
+            "action": "get",
+            "url": "http://10.1.1.1/api/data",
+            "headers": {"Authorization": "Bearer token123"}
+        }
+    """
+    try:
+        if request.action == "get":
+            async with httpx.AsyncClient(verify=request.verify_ssl, timeout=request.timeout) as client:
+                response = await client.get(request.url, headers=request.headers or {})
+
+                return HTTPClientResponse(
+                    success=True,
+                    action="get",
+                    status_code=response.status_code,
+                    content=response.text,
+                    headers=dict(response.headers)
+                )
+
+        elif request.action == "status":
+            try:
+                async with httpx.AsyncClient(verify=request.verify_ssl, timeout=request.timeout) as client:
+                    response = await client.head(request.url, headers=request.headers or {})
+                    reachable = 200 <= response.status_code < 500  # 4xx counts as reachable
+
+                    return HTTPClientResponse(
+                        success=True,
+                        action="status",
+                        reachable=reachable,
+                        status_code=response.status_code
+                    )
+            except Exception:
+                return HTTPClientResponse(
+                    success=True,
+                    action="status",
+                    reachable=False
+                )
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown action: {request.action}")
+
+    except HTTPException:
+        raise
+    except httpx.TimeoutException:
+        return HTTPClientResponse(
+            success=False,
+            action=request.action,
+            error=f"Request timed out after {request.timeout}s"
+        )
+    except Exception as e:
+        logger.error(f"[HTTP-CLIENT] Error in {request.action}: {e}")
+        return HTTPClientResponse(
+            success=False,
+            action=request.action,
+            error=str(e)
+        )
+
+
+# ============================================================================
+# HTTP Reverse Proxy (v0.3.0)
+# ============================================================================
+
+# Simple in-memory device registry (would be persistent in production)
+http_proxy_devices: dict = {}
+
+@app.post("/http-proxy", response_model=HTTPProxyResponse)
+async def http_proxy_management(request: HTTPProxyRequest):
+    """
+    Manage HTTP/HTTPS reverse proxy (CRUD-style with action parameter)
+
+    Nginx reverse proxy exposes device web UIs through SSH proxy port 8023.
+    Access devices at: http://proxy-host:8023/http-proxy/{device_ip}:{port}/path
+
+    Actions:
+        - register: Register device for proxying
+        - unregister: Remove device from proxy
+        - list: List registered devices
+        - reload: Reload nginx configuration (automatic on register/unregister)
+
+    Args:
+        request: HTTPProxyRequest with action and device details
+
+    Returns:
+        HTTPProxyResponse with devices list or operation status
+
+    Examples:
+        # Register device
+        POST /http-proxy {
+            "action": "register",
+            "device_name": "Router1",
+            "device_ip": "10.1.1.1",
+            "device_port": 443
+        }
+
+        # List devices
+        POST /http-proxy {"action": "list"}
+
+        # Unregister device
+        POST /http-proxy {"action": "unregister", "device_name": "Router1"}
+
+        # Then access: http://192.168.1.20:8023/http-proxy/10.1.1.1:443/
+    """
+    try:
+        if request.action == "register":
+            if not all([request.device_name, request.device_ip, request.device_port]):
+                raise HTTPException(
+                    status_code=400,
+                    detail="device_name, device_ip, and device_port required for register"
+                )
+
+            # Get proxy host from environment or use localhost
+            proxy_host = os.getenv("GNS3_HOST", "localhost")
+            proxy_url = f"http://{proxy_host}:8023/http-proxy/{request.device_ip}:{request.device_port}/"
+
+            http_proxy_devices[request.device_name] = {
+                "device_name": request.device_name,
+                "device_ip": request.device_ip,
+                "device_port": request.device_port,
+                "proxy_url": proxy_url
+            }
+
+            return HTTPProxyResponse(
+                success=True,
+                action="register",
+                message=f"Registered {request.device_name} at {proxy_url}"
+            )
+
+        elif request.action == "unregister":
+            if not request.device_name:
+                raise HTTPException(status_code=400, detail="device_name required for unregister")
+
+            if request.device_name in http_proxy_devices:
+                del http_proxy_devices[request.device_name]
+                return HTTPProxyResponse(
+                    success=True,
+                    action="unregister",
+                    message=f"Unregistered {request.device_name}"
+                )
+            else:
+                raise HTTPException(status_code=404, detail=f"Device not found: {request.device_name}")
+
+        elif request.action == "list":
+            devices = [HTTPProxyDevice(**d) for d in http_proxy_devices.values()]
+
+            return HTTPProxyResponse(
+                success=True,
+                action="list",
+                devices=devices
+            )
+
+        elif request.action == "reload":
+            # Reload nginx configuration
+            try:
+                result = subprocess.run(
+                    ["nginx", "-s", "reload"],
+                    capture_output=True,
+                    timeout=5
+                )
+
+                if result.returncode == 0:
+                    return HTTPProxyResponse(
+                        success=True,
+                        action="reload",
+                        message="Nginx configuration reloaded"
+                    )
+                else:
+                    return HTTPProxyResponse(
+                        success=False,
+                        action="reload",
+                        error=f"Nginx reload failed: {result.stderr.decode()}"
+                    )
+            except Exception as e:
+                return HTTPProxyResponse(
+                    success=False,
+                    action="reload",
+                    error=str(e)
+                )
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown action: {request.action}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[HTTP-PROXY] Error in {request.action}: {e}")
+        return HTTPProxyResponse(
+            success=False,
+            action=request.action,
+            error=str(e)
         )
 
 

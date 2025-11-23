@@ -357,6 +357,88 @@ class LocalExecuteResponse(BaseModel):
 
 
 # ============================================================================
+# TFTP Management (v0.3.0)
+# ============================================================================
+
+class TFTPRequest(BaseModel):
+    """Request for TFTP operations"""
+    action: str = Field(..., description="Action: list, upload, download, delete, status")
+    filename: Optional[str] = Field(default=None, description="Filename for upload/download/delete")
+    content: Optional[str] = Field(default=None, description="File content for upload (base64 encoded)")
+
+
+class TFTPFile(BaseModel):
+    """TFTP file information"""
+    filename: str
+    size: int
+    modified: str
+    is_dir: bool = False
+
+
+class TFTPResponse(BaseModel):
+    """Response from TFTP operations"""
+    success: bool
+    action: str
+    files: Optional[List[TFTPFile]] = None
+    content: Optional[str] = None  # base64 encoded for download
+    message: Optional[str] = None
+    error: Optional[str] = None
+
+
+# ============================================================================
+# HTTP Client (v0.3.0)
+# ============================================================================
+
+class HTTPClientRequest(BaseModel):
+    """Request for HTTP client operations"""
+    action: str = Field(..., description="Action: get, status")
+    url: str = Field(..., description="Target URL (http:// or https://)")
+    timeout: int = Field(default=10, description="Request timeout in seconds")
+    verify_ssl: bool = Field(default=False, description="Verify SSL certificates")
+    headers: Optional[dict] = Field(default=None, description="Custom HTTP headers")
+
+
+class HTTPClientResponse(BaseModel):
+    """Response from HTTP client operations"""
+    success: bool
+    action: str
+    status_code: Optional[int] = None
+    content: Optional[str] = None
+    headers: Optional[dict] = None
+    reachable: Optional[bool] = None  # For status action
+    error: Optional[str] = None
+
+
+# ============================================================================
+# HTTP Reverse Proxy (v0.3.0)
+# ============================================================================
+
+class HTTPProxyRequest(BaseModel):
+    """Request for HTTP reverse proxy management"""
+    action: str = Field(..., description="Action: register, unregister, list, reload")
+    device_name: Optional[str] = Field(default=None, description="Device identifier")
+    device_ip: Optional[str] = Field(default=None, description="Device IP address")
+    device_port: Optional[int] = Field(default=None, description="Device HTTP/HTTPS port")
+
+
+class HTTPProxyDevice(BaseModel):
+    """Registered device for HTTP reverse proxy"""
+    device_name: str
+    device_ip: str
+    device_port: int
+    proxy_url: str
+
+
+class HTTPProxyResponse(BaseModel):
+    """Response from HTTP reverse proxy operations"""
+    success: bool
+    action: str
+    devices: Optional[List[HTTPProxyDevice]] = None
+    message: Optional[str] = None
+    error: Optional[str] = None
+
+
+# ============================================================================
 # Internal Session State
 # ============================================================================
 

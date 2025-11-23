@@ -1,0 +1,86 @@
+name: Build and Push SSH Proxy Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_to_hub:
+        description: 'Push to Docker Hub'
+        required: true
+        default: 'true'
+        type: boolean
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from main.py
+        id: get_version
+        run: |
+          VERSION=$(grep '__version__ = ' ssh-proxy/server/main.py | cut -d'"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: ${{ inputs.push_to_hub == true }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ssh-proxy
+          push: ${{ inputs.push_to_hub }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/gns3-ssh-proxy:${{ steps.get_version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/gns3-ssh-proxy:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Prepare Docker Hub descriptions
+        if: ${{ inputs.push_to_hub == true }}
+        run: |
+          # Replace {VERSION} placeholder in long description
+          VERSION="${{ steps.get_version.outputs.version }}"
+          sed "s/{VERSION}/$VERSION/g" ssh-proxy/.dockerhub/description-long.md > /tmp/description-long.md
+
+          # Display descriptions for verification
+          echo "=== Short Description ==="
+          cat ssh-proxy/.dockerhub/description-short.txt
+          echo ""
+          echo "=== Long Description (first 20 lines) ==="
+          head -20 /tmp/description-long.md
+
+      - name: Update Docker Hub description
+        if: ${{ inputs.push_to_hub == true }}
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/gns3-ssh-proxy
+          short-description-file: ./ssh-proxy/.dockerhub/description-short.txt
+          readme-filepath: /tmp/description-long.md
+
+      - name: Summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ steps.get_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tags**:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/gns3-ssh-proxy:${{ steps.get_version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ secrets.DOCKERHUB_USERNAME }}/gns3-ssh-proxy:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.push_to_hub }}" == "true" ]; then
+            echo "**Status**: ✅ Pushed to Docker Hub" >> $GITHUB_STEP_SUMMARY
+            echo "**Docker Hub**: https://hub.docker.com/r/${{ secrets.DOCKERHUB_USERNAME }}/gns3-ssh-proxy" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Status**: 🏗️ Build only (not pushed)" >> $GITHUB_STEP_SUMMARY
+          fi

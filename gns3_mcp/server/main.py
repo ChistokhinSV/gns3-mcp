@@ -76,6 +76,12 @@ from tools.resource_tools import (
 from tools.resource_tools import (
     query_resource as query_resource_impl,
 )
+from tools.tftp_tools import (
+    tftp_impl,
+)
+from tools.http_client_tools import (
+    http_client_impl,
+)
 
 # Read version from package __init__.py (single source of truth for PyPI package)
 try:
@@ -1539,6 +1545,11 @@ async def ssh(
     - Mix local and remote operations in same batch
     - Useful for: connectivity tests before device access, ansible playbooks
 
+    SSH Proxy Services (v0.3.0):
+    - **TFTP Server**: Available on port 69/udp at /opt/gns3-ssh-proxy/tftp (use tftp tool)
+    - **HTTP/HTTPS Reverse Proxy**: Access device web UIs at http://proxy:8023/http-proxy/<ip>:<port>/
+    - **HTTP Client Tool**: Make GET requests to device APIs (use http_client tool)
+
     Two-phase execution prevents partial failures:
     1. VALIDATE ALL operations (check required params, valid types)
     2. EXECUTE ALL operations (only if all valid, sequential execution)
@@ -1595,6 +1606,163 @@ async def ssh(
     """
     app: IAppContext = ctx.request_context.lifespan_context
     return await ssh_batch_impl(app, operations)
+
+
+# ============================================================================
+# TFTP Management Tools (v0.3.0 - SSH Proxy Enhancement)
+# ============================================================================
+
+
+@mcp.tool(name="tftp", tags={"tftp", "file-transfer", "automation"})
+async def tftp(
+    ctx: Context,
+    action: Annotated[
+        str, "Action: 'list' (list files), 'upload' (upload file), 'download' (download file), 'delete' (delete file), 'status' (check TFTP server status)"
+    ],
+    filename: Annotated[str | None, "Filename for upload/download/delete operations"] = None,
+    content: Annotated[bytes | None, "File content for upload (raw bytes)"] = None,
+) -> str:
+    """Manage TFTP server files (CRUD-style)
+
+    v0.3.0: TFTP server integration for device firmware/config file serving
+
+    TFTP server runs on SSH proxy (port 69/udp) with root directory /opt/gns3-ssh-proxy/tftp.
+    Provides read-write access for devices to upload/download files.
+
+    Actions:
+        - list: List all files in TFTP root directory
+        - upload: Upload file to TFTP server (requires filename and content)
+        - download: Download file from TFTP server (requires filename)
+        - delete: Delete file from TFTP server (requires filename)
+        - status: Check TFTP server status
+
+    File Content Handling:
+        - Upload: Provide raw bytes in content parameter (base64 encoded automatically)
+        - Download: Returns file content as base64 encoded string
+
+    Returns:
+        JSON response with success status, action, and results
+
+    Examples:
+        # List TFTP files
+        >>> tftp(action="list")
+        {
+          "success": true,
+          "action": "list",
+          "files": [
+            {"filename": "config.txt", "size": 1024, "modified": "2025-01-15 10:30:00"},
+            {"filename": "firmware.bin", "size": 5242880, "modified": "2025-01-14 09:15:00"}
+          ]
+        }
+
+        # Upload configuration file
+        >>> tftp(action="upload", filename="startup-config.txt", content=b"hostname Router1\\n...")
+        {"success": true, "action": "upload", "message": "Uploaded startup-config.txt"}
+
+        # Download file
+        >>> tftp(action="download", filename="config.txt")
+        {"success": true, "action": "download", "content": "aG9zdG5hbWUgUm91dGVyMQo="}
+
+        # Delete file
+        >>> tftp(action="delete", filename="old-config.txt")
+        {"success": true, "action": "delete", "message": "Deleted old-config.txt"}
+
+        # Check TFTP server status
+        >>> tftp(action="status")
+        {
+          "success": true,
+          "action": "status",
+          "tftp_enabled": true,
+          "tftp_port": 69,
+          "tftp_root": "/opt/gns3-ssh-proxy/tftp",
+          "file_count": 5,
+          "total_size": 10485760
+        }
+    """
+    app: IAppContext = ctx.request_context.lifespan_context
+    return await tftp_impl(app, action, filename, content)
+
+
+# ============================================================================
+# HTTP Client Tools (v0.3.0 - SSH Proxy Enhancement)
+# ============================================================================
+
+
+@mcp.tool(name="http_client", tags={"http", "https", "web", "automation"})
+async def http_client(
+    ctx: Context,
+    action: Annotated[str, "Action: 'get' (HTTP GET request), 'status' (check reachability)"],
+    url: Annotated[str, "Target URL (http:// or https://)"],
+    timeout: Annotated[int, "Request timeout in seconds"] = 10,
+    verify_ssl: Annotated[bool, "Verify SSL certificates"] = False,
+    headers: Annotated[dict | None, "Optional custom HTTP headers"] = None,
+) -> str:
+    """HTTP/HTTPS client for lab device web interfaces (CRUD-style)
+
+    v0.3.0: HTTP client integration for accessing device APIs and web UIs
+
+    **Reverse HTTP/HTTPS proxy available** at http://proxy:8023/http-proxy/<device_ip>:<port>/
+    for external device web UI access without SSH tunnel.
+
+    Actions:
+        - get: Send HTTP GET request to device and return response
+        - status: Check if device web interface is reachable (HEAD request)
+
+    SSL Certificate Handling:
+        - verify_ssl=False (default): Ignore self-signed certificates
+        - verify_ssl=True: Verify SSL certificates (may fail for lab devices)
+
+    Reverse Proxy Alternative:
+        Instead of using this tool, you can also access device web UIs through the
+        reverse proxy at http://proxy:8023/http-proxy/<device_ip>:<port>/
+
+        Example: http://proxy:8023/http-proxy/10.1.1.1:443/ for HTTPS device
+
+        The reverse proxy handles SSL termination and provides persistent access
+        without needing to make API calls.
+
+    Returns:
+        JSON response with success status, action, and results
+
+    Examples:
+        # Get device web interface
+        >>> http_client(action="get", url="http://10.1.1.1")
+        {
+          "success": true,
+          "action": "get",
+          "status_code": 200,
+          "content": "<!DOCTYPE html>...",
+          "headers": {"content-type": "text/html", ...}
+        }
+
+        # Check device HTTPS API reachability
+        >>> http_client(action="status", url="https://10.1.1.2:443", verify_ssl=False)
+        {
+          "success": true,
+          "action": "status",
+          "reachable": true,
+          "status_code": 200
+        }
+
+        # Get JSON API with custom headers
+        >>> http_client(
+        ...     action="get",
+        ...     url="http://10.1.1.3/api/v1/status",
+        ...     headers={"Authorization": "Bearer token123", "Accept": "application/json"}
+        ... )
+        {
+          "success": true,
+          "action": "get",
+          "status_code": 200,
+          "content": "{\\"status\\": \\"online\\", ...}",
+          "headers": {"content-type": "application/json"}
+        }
+
+        # Alternative: Use reverse proxy (no tool needed)
+        # Access: http://proxy:8023/http-proxy/10.1.1.1:443/dashboard
+    """
+    app: IAppContext = ctx.request_context.lifespan_context
+    return await http_client_impl(app, action, url, timeout, verify_ssl, headers)
 
 
 # ============================================================================
@@ -1690,6 +1858,20 @@ TOOL_REGISTRY = {
         "resources": ["sessions://ssh/"],
         "description": "Execute SSH operations in batch (configure, command, disconnect)",
         "actions": ["batch"],
+    },
+    "tftp": {
+        "categories": ["tftp", "file-transfer"],
+        "capabilities": ["CRUD"],
+        "resources": [],
+        "description": "Manage TFTP server files (list, upload, download, delete, status)",
+        "actions": ["list", "upload", "download", "delete", "status"],
+    },
+    "http_client": {
+        "categories": ["http", "https", "web"],
+        "capabilities": ["CRUD"],
+        "resources": [],
+        "description": "HTTP/HTTPS client for device web interfaces (get, status). Reverse proxy available at http://proxy:8023/http-proxy/",
+        "actions": ["get", "status"],
     },
     "query_resource": {
         "categories": ["resource", "query"],

@@ -1,9 +1,24 @@
 # GNS3 SSH Proxy Service
 
-FastAPI service for SSH automation using Netmiko with dual storage architecture and proxy discovery.
+FastAPI service for SSH automation using Netmiko with TFTP server, HTTP reverse proxy, and multi-proxy architecture.
 
 ## Features
 
+- **TFTP Server** (v0.3.0+):
+  - Read-write TFTP server on port 69/udp
+  - Root directory: `/opt/gns3-ssh-proxy/tftp`
+  - Device firmware uploads/downloads, config file serving
+  - RESTful API for file management (list, upload, download, delete)
+- **HTTP/HTTPS Reverse Proxy** (v0.3.0+):
+  - Access device web UIs through single port (8023)
+  - URL format: `http://proxy:8023/http-proxy/<device_ip>:<port>/`
+  - Self-signed SSL certificates for HTTPS devices
+  - No SSH tunnel needed for external web UI access
+  - Dynamic device registration via REST API
+- **HTTP Client Tool** (v0.3.0+):
+  - Make HTTP/HTTPS GET requests to device APIs
+  - Check device web interface reachability
+  - Custom headers support for authentication
 - **Dual Storage System**:
   - Continuous buffer (real-time stream of all output)
   - Command history (per-command audit trail with searchable jobs)
@@ -26,19 +41,30 @@ FastAPI service for SSH automation using Netmiko with dual storage architecture 
 ## Architecture
 
 ```
-MCP Server (main.py)          SSH Proxy (FastAPI)          Network Devices
+MCP Server (main.py)          SSH Proxy (Multi-Service)    Network Devices
     |                              |                             |
-    | HTTP requests (port 8022)    |                             |
-    |----------------------------->|                             |
+    | HTTP API (port 8022)         | FastAPI + Supervisor        |
+    |----------------------------->| - SSH automation (8022)     |
+    |                              | - TFTP server (69/udp)      |
+    |                              | - HTTP proxy (8023)         |
+    |                              |                             |
     |                              | SSH connections (Netmiko)   |
     |                              |---------------------------->|
-    |                              |                             |
-    |<-----------------------------|                             |
+    |                              | TFTP transfers              |
+    |                              |<===========================>|
+    |                              | HTTP/HTTPS reverse proxy    |
+    |<-----------------------------|<===========================>|
     | JSON responses               |                             |
 
 Storage:
   - Buffer: Continuous stream (10MB max)
   - History: Job records with full output + metadata
+  - TFTP: /opt/gns3-ssh-proxy/tftp (shared with devices)
+
+Ports:
+  - 8022/tcp: FastAPI REST API
+  - 69/udp: TFTP server
+  - 8023/tcp: HTTP/HTTPS reverse proxy (nginx)
 ```
 
 ## Quick Start
@@ -47,7 +73,7 @@ Storage:
 
 ```bash
 cd ssh-proxy
-docker build -t chistokhinsv/gns3-ssh-proxy:v0.2.2 .
+docker build -t chistokhinsv/gns3-ssh-proxy:v0.3.0 .
 ```
 
 ### 2. Deploy with Docker Compose (Recommended)
@@ -71,10 +97,10 @@ docker run -d \
   --network host \
   --restart unless-stopped \
   -v /opt/gns3-ssh-proxy:/opt/gns3-ssh-proxy \
-  chistokhinsv/gns3-ssh-proxy:v0.2.2
+  chistokhinsv/gns3-ssh-proxy:v0.3.0
 ```
 
-**Main Proxy (On GNS3 Host, with Discovery):**
+**Main Proxy (On GNS3 Host, with Discovery + TFTP + HTTP Proxy):**
 ```bash
 docker run -d \
   --name gns3-ssh-proxy-main \
@@ -86,7 +112,12 @@ docker run -d \
   -e GNS3_PORT=80 \
   -e GNS3_USERNAME=admin \
   -e GNS3_PASSWORD=yourpassword \
-  chistokhinsv/gns3-ssh-proxy:v0.2.2
+  chistokhinsv/gns3-ssh-proxy:v0.3.0
+
+# Exposed ports:
+#   8022/tcp - FastAPI REST API
+#   69/udp   - TFTP server
+#   8023/tcp - HTTP/HTTPS reverse proxy (nginx)
 ```
 
 ### 3. Verify
@@ -97,29 +128,58 @@ curl http://localhost:8022/health
 
 # Test proxy discovery (main proxy only)
 curl http://localhost:8022/proxy/registry
+
+# Test TFTP server (v0.3.0+)
+curl -X POST http://localhost:8022/tftp -H "Content-Type: application/json" -d '{"action":"status"}'
+
+# Test HTTP reverse proxy (v0.3.0+)
+curl http://localhost:8023/http-proxy/10.1.1.1:80/
 ```
 
 ## API Endpoints
 
-### Session Management
+### SSH Session Management
 - **POST /ssh/configure** - Create/recreate SSH session
 - **GET /ssh/status/{node_name}** - Check session status
 - **POST /ssh/cleanup** - Clean orphaned/all sessions
 
-### Command Execution
+### SSH Command Execution
 - **POST /ssh/send_command** - Execute show command (adaptive async)
 - **POST /ssh/send_config_set** - Send configuration commands
 
-### Data Retrieval
+### SSH Data Retrieval
 - **GET /ssh/buffer/{node_name}** - Read continuous buffer (diff/last_page/num_pages/all)
 - **GET /ssh/history/{node_name}** - List command history
 - **GET /ssh/history/{node_name}/{job_id}** - Get specific command output
 - **GET /ssh/job/{job_id}** - Poll job status (async commands)
 
+### TFTP Management (v0.3.0+)
+- **POST /tftp** - CRUD-style TFTP operations
+  - `action: "list"` - List all files in TFTP root
+  - `action: "upload"` - Upload file (requires filename, content in base64)
+  - `action: "download"` - Download file (requires filename, returns base64)
+  - `action: "delete"` - Delete file (requires filename)
+  - `action: "status"` - Check TFTP server status
+
+### HTTP Client (v0.3.0+)
+- **POST /http-client** - Make HTTP/HTTPS requests to devices
+  - `action: "get"` - HTTP GET request (returns status, content, headers)
+  - `action: "status"` - Check device reachability (HEAD request)
+  - Supports custom headers and SSL verification options
+
+### HTTP Reverse Proxy Management (v0.3.0+)
+- **POST /http-proxy** - Manage HTTP/HTTPS reverse proxy
+  - `action: "register"` - Register device for reverse proxy access
+  - `action: "unregister"` - Remove device from proxy
+  - `action: "list"` - List all registered devices
+  - `action: "reload"` - Reload nginx configuration
+- **Access device web UIs**: `http://proxy:8023/http-proxy/<device_ip>:<port>/`
+
 ### Proxy Discovery (v0.2.0+)
 - **GET /proxy/registry** - Get registry of all discovered lab proxies
   - Only works on main proxy (with Docker socket mounted)
   - Returns empty list on lab proxies
+  - Includes TFTP and HTTP proxy status (v0.3.0+)
 
 ## Usage Example
 
@@ -176,6 +236,107 @@ curl -X POST http://localhost:8022/ssh/send_command \
 
 # Get history
 curl http://localhost:8022/ssh/history/R1?limit=10
+```
+
+### TFTP Server Usage (v0.3.0+)
+
+```bash
+# List TFTP files
+curl -X POST http://localhost:8022/tftp \
+  -H "Content-Type: application/json" \
+  -d '{"action": "list"}'
+
+# Upload configuration file
+curl -X POST http://localhost:8022/tftp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "upload",
+    "filename": "router-config.txt",
+    "content": "aG9zdG5hbWUgUm91dGVyMQo="
+  }'
+
+# Download file
+curl -X POST http://localhost:8022/tftp \
+  -H "Content-Type: application/json" \
+  -d '{"action": "download", "filename": "router-config.txt"}'
+
+# Delete file
+curl -X POST http://localhost:8022/tftp \
+  -H "Content-Type: application/json" \
+  -d '{"action": "delete", "filename": "old-config.txt"}'
+
+# Check TFTP server status
+curl -X POST http://localhost:8022/tftp \
+  -H "Content-Type: application/json" \
+  -d '{"action": "status"}'
+
+# From device (Cisco IOS example)
+Router# copy running-config tftp://10.1.1.254/backup-config.txt
+Router# copy tftp://10.1.1.254/new-config.txt running-config
+```
+
+### HTTP Client Usage (v0.3.0+)
+
+```bash
+# Get device web interface
+curl -X POST http://localhost:8022/http-client \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "get",
+    "url": "http://10.1.1.1",
+    "timeout": 10,
+    "verify_ssl": false
+  }'
+
+# Check device HTTPS API reachability
+curl -X POST http://localhost:8022/http-client \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "status",
+    "url": "https://10.1.1.2:443"
+  }'
+
+# Get JSON API with custom headers
+curl -X POST http://localhost:8022/http-client \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "get",
+    "url": "http://10.1.1.3/api/v1/status",
+    "headers": {
+      "Authorization": "Bearer token123",
+      "Accept": "application/json"
+    }
+  }'
+```
+
+### HTTP Reverse Proxy Usage (v0.3.0+)
+
+```bash
+# Register device for reverse proxy access
+curl -X POST http://localhost:8022/http-proxy \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "register",
+    "device_name": "R1-WebUI",
+    "device_ip": "10.1.1.1",
+    "device_port": 443
+  }'
+
+# List registered devices
+curl -X POST http://localhost:8022/http-proxy \
+  -H "Content-Type: application/json" \
+  -d '{"action": "list"}'
+
+# Access device web UI through reverse proxy
+curl http://localhost:8023/http-proxy/10.1.1.1:443/
+
+# Or open in browser (replace localhost with GNS3 host IP if accessing remotely)
+# http://192.168.1.20:8023/http-proxy/10.1.1.1:443/
+
+# Unregister device
+curl -X POST http://localhost:8022/http-proxy \
+  -H "Content-Type: application/json" \
+  -d '{"action": "unregister", "device_name": "R1-WebUI"}'
 ```
 
 ## Session Management (v0.1.6)

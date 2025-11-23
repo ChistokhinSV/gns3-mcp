@@ -5,6 +5,101 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - SSH Proxy v0.3.0 Enhancement
+
+### Added - SSH Proxy Multi-Service Architecture
+- **TFTP Server Integration**
+  - tftpd-hpa server on port 69/udp with root directory `/opt/gns3-ssh-proxy/tftp`
+  - Read-write access for device firmware uploads/downloads and config file serving
+  - RESTful API endpoint `/tftp` with CRUD-style actions: list, upload, download, delete, status
+  - Base64 encoding for file content transfer in API
+  - File metadata includes size, modification time, and directory flag
+- **HTTP/HTTPS Reverse Proxy**
+  - nginx reverse proxy on port 8023 for device web UI access
+  - URL format: `http://proxy:8023/http-proxy/<device_ip>:<port>/`
+  - Self-signed SSL certificates for HTTPS device backends
+  - Dynamic routing based on URL path regex
+  - No SSH tunnel needed for external web UI access
+  - RESTful API endpoint `/http-proxy` for device registration (register, unregister, list, reload)
+- **HTTP Client Tool**
+  - RESTful API endpoint `/http-client` for making HTTP/HTTPS requests to lab devices
+  - Actions: get (HTTP GET request), status (HEAD request for reachability)
+  - Custom headers support for authentication
+  - SSL verification control (default: ignore self-signed certificates)
+  - Useful for checking device APIs and health endpoints
+- **Supervisor Process Management**
+  - Runs multiple services in single container: FastAPI, TFTP, nginx
+  - Automatic service restart on failure
+  - Centralized logging via supervisord
+- **GitHub Actions Workflow**
+  - Manual workflow for building and pushing SSH proxy Docker images
+  - Automatic version extraction from `__version__` constant in main.py
+  - Multi-tag support: version tag + latest tag
+  - Automated Docker Hub description updates from repository files
+
+### Added - MCP Tools
+- **tftp Tool** (gns3_mcp/server/tools/tftp_tools.py)
+  - CRUD-style tool with action parameter: list, upload, download, delete, status
+  - Comprehensive docstring with usage examples and TFTP server details
+  - Calls ssh-proxy `/tftp` endpoint via httpx
+  - Added to TOOL_REGISTRY with categories: ["tftp", "file-transfer"]
+- **http_client Tool** (gns3_mcp/server/tools/http_client_tools.py)
+  - CRUD-style tool with action parameter: get, status
+  - Mentions reverse proxy availability in docstring: "Reverse HTTP/HTTPS proxy available at..."
+  - Calls ssh-proxy `/http-client` endpoint via httpx
+  - Added to TOOL_REGISTRY with categories: ["http", "https", "web"]
+- **Updated SSH Tool Description**
+  - Added "SSH Proxy Services (v0.3.0)" section documenting TFTP server, HTTP reverse proxy, and HTTP client tool availability
+  - Helps AI assistants discover and utilize new proxy services
+
+### Changed - SSH Proxy
+- **Dockerfile**
+  - Added system packages: tftpd-hpa, nginx, openssl, supervisor
+  - Created TFTP root directory with 777 permissions
+  - Generated self-signed SSL certificates for nginx
+  - Changed CMD to run supervisord instead of direct uvicorn
+  - Added nginx and supervisor configuration files
+- **FastAPI Endpoints** (ssh-proxy/server/main.py)
+  - Version bumped to 0.3.0
+  - Added `/tftp` endpoint with full CRUD operations (150 lines)
+  - Added `/http-client` endpoint for HTTP/HTTPS requests (90 lines)
+  - Added `/http-proxy` endpoint for reverse proxy management (130 lines)
+  - Updated `/proxy/registry` to include TFTP and HTTP proxy status
+  - Added imports: base64, httpx, Path, datetime
+- **Pydantic Models** (ssh-proxy/server/models.py)
+  - Added TFTPRequest, TFTPResponse, TFTPFile models (v0.3.0 section)
+  - Added HTTPClientRequest, HTTPClientResponse models (v0.3.0 section)
+  - Added HTTPProxyRequest, HTTPProxyResponse, HTTPProxyDevice models (v0.3.0 section)
+
+### Changed - Documentation
+- **ssh-proxy/README.md**
+  - Updated title: "with TFTP server, HTTP reverse proxy, and multi-proxy architecture"
+  - Added Features section describing TFTP, HTTP proxy, and HTTP client (v0.3.0+)
+  - Updated Architecture diagram showing multi-service container with ports
+  - Updated Quick Start section to version 0.3.0 with exposed ports documentation
+  - Added API Endpoints section for TFTP, HTTP client, and HTTP reverse proxy
+  - Added usage examples: TFTP server, HTTP client, HTTP reverse proxy (90 lines)
+- **ssh-proxy/.dockerhub/description-short.txt**
+  - Created Docker Hub short description (100 char limit)
+  - Highlights: SSH/TFTP/HTTP proxy, Netmiko, Ansible, diagnostics
+- **ssh-proxy/.dockerhub/description-long.md**
+  - Created Docker Hub full description with features, usage, diagrams
+  - Includes {VERSION} placeholder replaced by GitHub Actions
+  - Documents ports: 8022/tcp (API), 69/udp (TFTP), 8023/tcp (nginx)
+- **.github/workflows/build-ssh-proxy.yml**
+  - Created manual workflow for SSH proxy Docker build/push
+  - Extracts version from `__version__` constant in main.py
+  - Updates Docker Hub descriptions automatically
+  - Uses secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN
+
+### Technical Details
+- **Multi-Service Container**: Single Docker container runs FastAPI (8022), TFTP (69/udp), and nginx (8023) via supervisor
+- **TFTP File Transfer**: Base64 encoding in API, binary file handling in implementation
+- **HTTP Reverse Proxy**: nginx location regex matches `/http-proxy/{ip}:{port}/{path}`, determines protocol based on port (443 = HTTPS)
+- **SSL Verification**: nginx disables SSL verification for device backends (common for lab devices with self-signed certs)
+- **Supervisor Configuration**: Auto-restart enabled for all services, logs to /var/log/supervisor
+- **GitHub Actions**: Version extracted with grep/cut, description files support {VERSION} placeholder substitution
+
 ## [0.53.6] - 2025-11-23 - Link and Drawing Tool Fixes
 
 ### Fixed
