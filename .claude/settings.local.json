@@ -84,7 +84,9 @@
       "Bash(docker stop:*)",
       "Bash(docker rm:*)",
       "mcp__lab-youtrack__get_project",
-      "mcp__lab-youtrack__link_issues"
+      "mcp__lab-youtrack__link_issues",
+      "Bash(just release)",
+      "Bash(npx:*)"
     ],
     "deny": [],
     "ask": []

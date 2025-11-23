@@ -5,6 +5,23 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.2] - 2025-11-23 - Manifest Tool List Fix
+
+### Fixed
+- **Manifest Tool List Sync Issue**
+  - Updated manifest.json to reflect actual CRUD-style tools (v0.47.0/v0.48.0 consolidation)
+  - Replaced 29 outdated pre-consolidation tool names with 12 current CRUD tools
+  - Each tool description now includes supported actions and capabilities
+  - Updated long_description to mention v0.53.0 console enhancements
+
+### Changed
+- **Tool List (29 -> 12)**
+  - Old: Individual tools like `check_gns3_connection`, `open_project`, `send_console_data`, etc.
+  - New: CRUD tools like `gns3_connection`, `project`, `node`, `console`, `ssh`, etc.
+  - Better consistency with actual server implementation
+
+**Note:** This is a critical fix for Claude Desktop - manifest now accurately reflects available tools after CRUD consolidation.
+
 ## [0.53.0] - 2025-11-23 - Console Tools Enhancement (GM-76)
 
 ### Added
