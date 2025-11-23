@@ -11,9 +11,10 @@ for external device web UI access without SSH tunnel.
 import httpx
 import json
 import logging
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 
-from ..interfaces import IAppContext
+if TYPE_CHECKING:
+    from interfaces import IAppContext
 
 logger = logging.getLogger(__name__)
 
