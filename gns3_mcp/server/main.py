@@ -1154,9 +1154,7 @@ async def link(
         if not project_id:
             raise ValueError("project_id is required for 'list' action")
         # Use query_resource to get links
-        resource_mgr = app.resource_manager
-        result = await resource_mgr.get_resource_content(f"links://{project_id}/", format)
-        return result
+        return await query_resource_impl(app.resource_manager, f"links://{project_id}/", format)
 
     elif action == "batch":
         if not connections:
@@ -1458,9 +1456,7 @@ async def drawing(
         if not project_id:
             raise ValueError("project_id is required for 'list' action")
         # Use query_resource to get drawings
-        resource_mgr = app.resource_manager
-        result = await resource_mgr.get_resource_content(f"drawings://{project_id}/", format)
-        return result
+        return await query_resource_impl(app.resource_manager, f"drawings://{project_id}/", format)
 
     error = await validate_current_project(app)
     if error:

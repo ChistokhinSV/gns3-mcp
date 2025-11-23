@@ -5,6 +5,22 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.6] - 2025-11-23 - Link and Drawing Tool Fixes
+
+### Fixed
+- **Link Tool AttributeError**
+  - Fixed `'ResourceManager' object has no attribute 'get_resource_content'` error
+  - Link list action now correctly uses `query_resource_impl()`
+  - Changed from non-existent `get_resource_content()` to proper `query_resource()` call
+- **Drawing Tool AttributeError**
+  - Fixed same `get_resource_content` error in drawing tool
+  - Drawing list action now correctly uses `query_resource_impl()`
+
+### Technical Details
+- Updated link and drawing tools to use `query_resource_impl(app.resource_manager, uri, format)`
+- Removed incorrect direct calls to non-existent `resource_mgr.get_resource_content()` method
+- Both tools now properly delegate to ResourceManager through query_resource wrapper
+
 ## [0.53.5] - 2025-11-23 - Environment Variable and Project Tool Fixes
 
 ### Fixed
