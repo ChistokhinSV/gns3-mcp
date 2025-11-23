@@ -812,9 +812,7 @@ async def create_node_impl(
         )
 
 
-async def _cleanup_ssh_sessions_for_node(
-    ssh_proxy_mapping: Dict[str, str], node_name: str
-) -> None:
+async def _cleanup_ssh_sessions_for_node(ssh_proxy_mapping: Dict[str, str], node_name: str) -> None:
     """Clean up SSH sessions for a node on all registered proxies (v0.34.0)
 
     Called automatically when a node is deleted. Attempts to disconnect SSH sessions

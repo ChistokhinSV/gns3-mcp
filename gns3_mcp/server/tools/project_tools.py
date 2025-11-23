@@ -10,7 +10,7 @@ from error_utils import create_error_response, project_not_found_error
 from models import ErrorCode, ProjectInfo
 
 if TYPE_CHECKING:
-    from interfaces import IAppContext, IGns3Client
+    from interfaces import IGns3Client
 
 
 async def list_projects_impl(gns3: "IGns3Client", format: str = "table") -> str:
@@ -110,7 +110,9 @@ async def open_project_impl(gns3: "IGns3Client", project_name: str) -> tuple[str
         return (error_response, "")
 
 
-async def create_project_impl(gns3: "IGns3Client", name: str, path: str | None = None) -> tuple[str, str]:
+async def create_project_impl(
+    gns3: "IGns3Client", name: str, path: str | None = None
+) -> tuple[str, str]:
     """Create a new GNS3 project and auto-open it
 
     Args:
@@ -165,7 +167,9 @@ async def create_project_impl(gns3: "IGns3Client", name: str, path: str | None =
         return (error_response, "")
 
 
-async def close_project_impl(gns3: "IGns3Client", current_project_id: str | None) -> tuple[str, None]:
+async def close_project_impl(
+    gns3: "IGns3Client", current_project_id: str | None
+) -> tuple[str, None]:
     """Close the currently opened project
 
     Args:

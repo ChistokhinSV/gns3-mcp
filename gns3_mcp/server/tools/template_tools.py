@@ -10,7 +10,7 @@ from error_utils import create_error_response
 from models import ErrorCode, TemplateInfo
 
 if TYPE_CHECKING:
-    from interfaces import IAppContext, IGns3Client
+    from interfaces import IGns3Client
 
 
 async def list_templates_impl(gns3: "IGns3Client") -> str:

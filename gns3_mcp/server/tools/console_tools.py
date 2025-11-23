@@ -445,6 +445,8 @@ async def send_and_wait_console_impl(
     wait_pattern: str | None = None,
     timeout: int = 30,
     raw: bool = False,
+    handle_pagination: bool = False,
+    pagination_patterns: list[str] | None = None,
 ) -> str:
     """Send command and wait for specific prompt pattern
 
@@ -460,7 +462,14 @@ async def send_and_wait_console_impl(
     Workflow:
     1. Send command to console
     2. If wait_pattern provided: poll console until pattern appears or timeout
-    3. Return all output accumulated during wait
+    3. If handle_pagination enabled: auto-detect pagination prompts and send space
+    4. Return all output accumulated during wait
+
+    Pagination Handling (GM-76):
+    - When enabled, automatically detects pagination prompts like "--More--"
+    - Sends space key to continue paging through output
+    - Continues until final wait_pattern appears or timeout
+    - Useful for commands with long output (e.g., "show bgp l2vpn evpn")
 
     Args:
         node_name: Name of the node
@@ -470,6 +479,9 @@ async def send_and_wait_console_impl(
                       TIP: Check prompt first with read_console() to get exact pattern
         timeout: Maximum seconds to wait for pattern (default: 30)
         raw: If True, send command without escape sequence processing (default: False)
+        handle_pagination: If True, auto-detect and handle pagination prompts (default: False)
+        pagination_patterns: List of regex patterns for pagination prompts
+                             Default: ["--More--", "---(more)---", "-- More --"]
 
     Returns:
         JSON with:
@@ -477,7 +489,8 @@ async def send_and_wait_console_impl(
             "output": "console output",
             "pattern_found": true/false,
             "timeout_occurred": true/false,
-            "wait_time": 2.5  # seconds actually waited
+            "wait_time": 2.5,  # seconds actually waited
+            "pagination_handled": 5  # count of pagination prompts handled (if handle_pagination=True)
         }
 
     Example - Best practice workflow:
@@ -493,6 +506,16 @@ async def send_and_wait_console_impl(
             timeout=10
         )
         # Returns when "Router#" appears - command is complete
+
+    Example - Handle pagination (GM-76):
+        result = send_and_wait_console(
+            "R1",
+            "show bgp l2vpn evpn\n",
+            wait_pattern="Router#",
+            timeout=60,
+            handle_pagination=True  # Auto-send space at --More-- prompts
+        )
+        # Returns when "Router#" appears, after paging through all output
 
     Example - Wait for login prompt:
         result = send_and_wait_console(
@@ -534,10 +557,12 @@ async def send_and_wait_console_impl(
         command = command.replace("\\t", "\t")  # \t → tab
         command = command.replace("\\x1b", "\x1b")  # \x1b → ESC
 
-        # Then normalize all newlines to \r\n for console compatibility
-        command = command.replace("\r\n", "\n")  # Normalize CRLF to LF first
+        # Then normalize all newlines to LF for Unix/Linux compatibility
+        # This handles copy-pasted multi-line text
+        command = command.replace("\r\n", "\n")  # Normalize CRLF to LF
         command = command.replace("\r", "\n")  # Normalize CR to LF
-        command = command.replace("\n", "\r\n")  # Convert all LF to CRLF
+        # Note: Don't convert to CRLF - Unix/Linux devices expect LF only
+        # Windows/Cisco devices handle LF correctly via telnet protocol
 
     # Send command
     success = await app.console.send_by_node(node_name, command)
@@ -550,11 +575,31 @@ async def send_and_wait_console_impl(
             context={"node_name": node_name, "command": command[:100]},  # Truncate long commands
         )
 
+    # Default pagination patterns if not provided
+    if pagination_patterns is None:
+        pagination_patterns = ["--More--", "---(more)---", "-- More --", r"--\s*More\s*--"]
+
     # Wait for pattern or timeout
     start_time = time.time()
     pattern_found = False
     timeout_occurred = False
     accumulated_output = []  # Accumulate all output chunks
+    pagination_count = 0
+
+    # Compile pagination patterns if pagination handling enabled
+    pagination_regexes = []
+    if handle_pagination and wait_pattern:
+        try:
+            for pag_pattern in pagination_patterns:
+                pagination_regexes.append(re.compile(pag_pattern))
+        except re.error as e:
+            return create_error_response(
+                error=f"Invalid pagination pattern: {str(e)}",
+                error_code=ErrorCode.INVALID_PARAMETER.value,
+                details="One of the pagination patterns is not a valid regular expression",
+                suggested_action="Check pagination_patterns parameter",
+                context={"pagination_patterns": pagination_patterns, "regex_error": str(e)},
+            )
 
     if wait_pattern:
         try:
@@ -578,6 +623,23 @@ async def send_and_wait_console_impl(
 
             # Search the complete accumulated output so far
             full_output_so_far = "".join(accumulated_output)
+
+            # Check for pagination prompts first (if enabled)
+            if handle_pagination and pagination_regexes:
+                pagination_detected = False
+                for pag_re in pagination_regexes:
+                    if pag_re.search(full_output_so_far):
+                        pagination_detected = True
+                        break
+
+                if pagination_detected:
+                    # Send space to continue paging
+                    await app.console.send_by_node(node_name, " ")
+                    pagination_count += 1
+                    # Continue polling - don't check for final pattern yet
+                    continue
+
+            # Check for final pattern
             if pattern_re.search(full_output_so_far):
                 pattern_found = True
                 break
@@ -601,40 +663,69 @@ async def send_and_wait_console_impl(
     # Return all accumulated output
     final_output = "".join(accumulated_output)
 
-    return json.dumps(
-        {
-            "output": final_output,
-            "pattern_found": pattern_found,
-            "timeout_occurred": timeout_occurred,
-            "wait_time": round(wait_time, 2),
-        },
-        indent=2,
-    )
+    result = {
+        "output": final_output,
+        "pattern_found": pattern_found,
+        "timeout_occurred": timeout_occurred,
+        "wait_time": round(wait_time, 2),
+    }
+
+    # Add pagination count if pagination handling was enabled
+    if handle_pagination:
+        result["pagination_handled"] = pagination_count
+
+    return json.dumps(result, indent=2)
 
 
-async def send_keystroke_impl(app: "IAppContext", node_name: str, key: str) -> str:
-    """Send special keystroke to console (auto-connects if needed)
+async def send_keystroke_impl(
+    app: "IAppContext",
+    node_name: str,
+    key: str | None = None,
+    repeat: int = 1,
+    wait_pattern: str | None = None,
+    timeout: int = 30,
+    keys: list[str] | None = None,
+) -> str:
+    """Send special keystroke(s) to console (auto-connects if needed)
 
     Sends special keys like arrows, function keys, control sequences for
     navigating menus, editing in vim, or TUI applications.
 
     Supported Keys:
     - Navigation: "up", "down", "left", "right", "home", "end", "pageup", "pagedown"
-    - Editing: "enter", "backspace", "delete", "tab", "esc"
+    - Editing: "enter", "backspace", "delete", "tab", "esc", "space"
     - Control: "ctrl_c", "ctrl_d", "ctrl_z", "ctrl_a", "ctrl_e"
     - Function: "f1" through "f12"
 
+    Modes of Operation:
+    1. Single key (default): Send one keystroke
+    2. Repeated key: Send same key N times (use 'repeat' parameter)
+    3. Key sequence: Send multiple different keys (use 'keys' parameter)
+    4. Pattern-based: Keep sending key until pattern appears (use 'wait_pattern')
+
     Args:
         node_name: Name of the node
-        key: Special key to send (e.g., "up", "enter", "ctrl_c")
+        key: Special key to send (e.g., "up", "enter", "ctrl_c", "space")
+              Ignored if 'keys' parameter provided
+        repeat: Number of times to send the key (default: 1)
+                Max: 100 (safety limit)
+        wait_pattern: Optional regex pattern - keep sending key until pattern appears
+                      Overrides 'repeat' parameter
+        timeout: Max seconds to wait when using wait_pattern (default: 30)
+        keys: List of keys to send in sequence (e.g., ["esc", "esc", "esc"])
+              When provided, overrides 'key' and 'repeat' parameters
 
     Returns:
-        "Sent successfully" or error message
+        JSON with operation results or error message
 
-    Example - Navigate menu:
-        send_keystroke("R1", "down")
-        send_keystroke("R1", "down")
-        send_keystroke("R1", "enter")
+    Example - Navigate menu (repeat):
+        send_keystroke("R1", key="down", repeat=3)
+
+    Example - Page through output (pattern-based):
+        send_keystroke("R1", key="space", wait_pattern="Router#", timeout=60)
+
+    Example - Key sequence:
+        send_keystroke("R1", keys=["esc", "esc", ":wq", "enter"])
 
     Example - Exit vim:
         send_keystroke("R1", "esc")
@@ -672,6 +763,7 @@ async def send_keystroke_impl(app: "IAppContext", node_name: str, key: str) -> s
         "delete": "\x1b[3~",
         "tab": "\t",
         "esc": "\x1b",
+        "space": " ",
         # Control sequences
         "ctrl_c": "\x03",
         "ctrl_d": "\x04",
@@ -693,6 +785,67 @@ async def send_keystroke_impl(app: "IAppContext", node_name: str, key: str) -> s
         "f12": "\x1b[24~",
     }
 
+    # Parameter validation
+    if keys is None and key is None:
+        return validation_error(
+            message="Either 'key' or 'keys' parameter must be provided",
+            parameter="key/keys",
+            value=None,
+            valid_values=["key: <key_name>", "keys: [<key1>, <key2>, ...]"],
+        )
+
+    if repeat < 1 or repeat > 100:
+        return validation_error(
+            message=f"Invalid repeat count: {repeat}",
+            parameter="repeat",
+            value=repeat,
+            valid_values=["1-100"],
+        )
+
+    # Mode 1: Key sequence (multiple different keys)
+    if keys is not None:
+        keystrokes_sent = 0
+        failed_keys = []
+
+        for idx, k in enumerate(keys):
+            k_lower = k.lower()
+            if k_lower not in SPECIAL_KEYS:
+                return validation_error(
+                    message=f"Unknown key '{k}' at index {idx}",
+                    parameter=f"keys[{idx}]",
+                    value=k,
+                    valid_values=sorted(SPECIAL_KEYS.keys()),
+                )
+
+            keystroke = SPECIAL_KEYS[k_lower]
+            success = await app.console.send_by_node(node_name, keystroke)
+            if success:
+                keystrokes_sent += 1
+                if idx < len(keys) - 1:  # Add small delay between keys (except last)
+                    await asyncio.sleep(0.1)
+            else:
+                failed_keys.append(k)
+
+        return json.dumps(
+            {
+                "success": len(failed_keys) == 0,
+                "mode": "sequence",
+                "keystrokes_sent": keystrokes_sent,
+                "total_keys": len(keys),
+                "failed_keys": failed_keys if failed_keys else None,
+            },
+            indent=2,
+        )
+
+    # Validate single key parameter
+    if key is None:
+        return validation_error(
+            message="'key' parameter required when 'keys' not provided",
+            parameter="key",
+            value=None,
+            valid_values=sorted(SPECIAL_KEYS.keys()),
+        )
+
     key_lower = key.lower()
     if key_lower not in SPECIAL_KEYS:
         return validation_error(
@@ -703,6 +856,104 @@ async def send_keystroke_impl(app: "IAppContext", node_name: str, key: str) -> s
         )
 
     keystroke = SPECIAL_KEYS[key_lower]
+
+    # Mode 2: Pattern-based (keep sending until pattern appears)
+    if wait_pattern is not None:
+        try:
+            pattern_re = re.compile(wait_pattern)
+        except re.error as e:
+            return create_error_response(
+                error=f"Invalid regex pattern: {str(e)}",
+                error_code=ErrorCode.INVALID_PARAMETER.value,
+                details=f"Pattern '{wait_pattern}' is not a valid regular expression",
+                suggested_action="Check regex syntax and escape special characters",
+                context={"wait_pattern": wait_pattern, "regex_error": str(e)},
+            )
+
+        start_time = time.time()
+        keystrokes_sent = 0
+        pattern_found = False
+        accumulated_output = []
+
+        # Poll console and send keystroke repeatedly until pattern found or timeout
+        while (time.time() - start_time) < timeout:
+            # Send keystroke
+            success = await app.console.send_by_node(node_name, keystroke)
+            if not success:
+                return create_error_response(
+                    error=f"Failed to send keystroke to console for node '{node_name}'",
+                    error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
+                    details="Console session may have been disconnected",
+                    suggested_action="Check console connection with get_console_status()",
+                    context={
+                        "node_name": node_name,
+                        "key": key,
+                        "keystrokes_sent": keystrokes_sent,
+                    },
+                )
+            keystrokes_sent += 1
+
+            # Wait for output
+            await asyncio.sleep(0.5)
+            chunk = app.console.get_diff_by_node(node_name) or ""
+
+            if chunk:
+                accumulated_output.append(chunk)
+
+            # Check if pattern found
+            full_output = "".join(accumulated_output)
+            if pattern_re.search(full_output):
+                pattern_found = True
+                break
+
+        wait_time = time.time() - start_time
+
+        return json.dumps(
+            {
+                "success": pattern_found,
+                "mode": "pattern_based",
+                "keystrokes_sent": keystrokes_sent,
+                "pattern_found": pattern_found,
+                "timeout_occurred": not pattern_found,
+                "wait_time": round(wait_time, 2),
+                "output": "".join(accumulated_output),
+            },
+            indent=2,
+        )
+
+    # Mode 3: Repeated key (send same key N times)
+    if repeat > 1:
+        keystrokes_sent = 0
+        for i in range(repeat):
+            success = await app.console.send_by_node(node_name, keystroke)
+            if success:
+                keystrokes_sent += 1
+                if i < repeat - 1:  # Add small delay between keystrokes (except last)
+                    await asyncio.sleep(0.1)
+            else:
+                return create_error_response(
+                    error=f"Failed to send keystroke to console for node '{node_name}'",
+                    error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
+                    details=f"Console session may have been disconnected after {keystrokes_sent} keystrokes",
+                    suggested_action="Check console connection with get_console_status()",
+                    context={
+                        "node_name": node_name,
+                        "key": key,
+                        "keystrokes_sent": keystrokes_sent,
+                    },
+                )
+
+        return json.dumps(
+            {
+                "success": True,
+                "mode": "repeat",
+                "keystrokes_sent": keystrokes_sent,
+                "repeat": repeat,
+            },
+            indent=2,
+        )
+
+    # Mode 4: Single keystroke (default)
     success = await app.console.send_by_node(node_name, keystroke)
     if success:
         return "Sent successfully"

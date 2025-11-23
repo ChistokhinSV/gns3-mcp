@@ -21,7 +21,7 @@ from models import (
 )
 
 if TYPE_CHECKING:
-    from interfaces import IAppContext, IGns3Client
+    from interfaces import IGns3Client
 
 logger = logging.getLogger(__name__)
 

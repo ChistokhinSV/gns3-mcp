@@ -3,19 +3,17 @@
 Tests service registration, retrieval, lifetimes, and thread safety.
 """
 
+import sys
 import threading
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import List
 
 import pytest
 
-import sys
-from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "gns3_mcp" / "server"))
 
-from di_container import Dependencies, ServiceLifetime
-
+from di_container import Dependencies
 
 # ===== Test Interfaces and Implementations =====
 

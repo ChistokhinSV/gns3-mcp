@@ -23,8 +23,9 @@ from models import ErrorCode  # noqa: E402
 
 # Interfaces imported only for type checking to avoid circular imports at runtime
 if TYPE_CHECKING:
-    from gns3_mcp.server.main import AppContext
     from interfaces import IResourceManager
+
+    from gns3_mcp.server.main import AppContext
 
 logger = logging.getLogger(__name__)
 

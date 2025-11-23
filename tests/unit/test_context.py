@@ -4,19 +4,18 @@ Tests global context management and helper functions.
 """
 
 import json
-import pytest
-
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "gns3_mcp" / "server"))
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from context import clear_app, get_app, get_dependencies, set_app, validate_current_project
 from di_container import Dependencies
 from interfaces import IAppContext
-
 
 # ===== Test Fixtures =====
 

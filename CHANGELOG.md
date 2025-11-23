@@ -5,6 +5,72 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.0] - 2025-11-23 - Console Tools Enhancement (GM-76)
+
+### Added
+- **Enhanced Keystroke Tool (send_keystroke)**
+  - Added "space" key to SPECIAL_KEYS dictionary
+  - New modes of operation:
+    - **Repeat mode**: Send same key N times (max: 100)
+    - **Pattern-based mode**: Keep sending key until pattern appears in output
+    - **Key sequence mode**: Send multiple different keys in sequence
+  - New parameters:
+    - `repeat: int = 1` - Send key N times
+    - `wait_pattern: str | None` - Keep sending until pattern found
+    - `timeout: int = 30` - Max seconds when using wait_pattern
+    - `keys: list[str] | None` - Send multiple keys in sequence
+  - Enhanced return values with operation details (mode, keystrokes_sent, etc.)
+
+- **Pagination Handling in send_and_wait (GM-76 Fix)**
+  - Auto-detect and handle pagination prompts like "--More--"
+  - New parameters:
+    - `handle_pagination: bool = False` - Enable pagination handling
+    - `pagination_patterns: list[str]` - Configurable pagination patterns
+      - Default: `["--More--", "---(more)---", "-- More --", r"--\s*More\s*--"]`
+  - Automatically sends space when pagination detected
+  - Continues until final wait_pattern appears or timeout
+  - Returns pagination count in response: `"pagination_handled": N`
+
+### Changed
+- **send_keystroke_impl**: Signature updated with optional parameters (backward compatible)
+- **send_and_wait_console_impl**: Signature updated with pagination parameters (backward compatible)
+- Both tools maintain backward compatibility with existing code
+
+### Fixed
+- GM-76: Console commands with paginated output (e.g., NX-OS `show bgp l2vpn evpn`) no longer timeout
+- Commands with long output can now be fully retrieved without manual intervention
+
+### Examples
+
+**Keystroke Repeat:**
+```python
+send_keystroke("R1", key="down", repeat=3)  # Navigate menu
+```
+
+**Pattern-Based Pagination:**
+```python
+send_keystroke("R1", key="space", wait_pattern="Router#", timeout=60)
+```
+
+**Key Sequence:**
+```python
+send_keystroke("R1", keys=["esc", "esc", ":wq", "enter"])  # Exit vim
+```
+
+**Pagination Handling:**
+```python
+send_and_wait_console(
+    "R1",
+    "show bgp l2vpn evpn\n",
+    wait_pattern="Router#",
+    timeout=60,
+    handle_pagination=True  # Auto-send space at --More--
+)
+```
+
+### Related Issues
+- GM-76: Console tool: Handle pagination prompts (--More--) in command output
+
 ## [0.52.0] - 2025-11-22 - Architecture: Phase 2.5 - Pure DI in Implementation Layer
 
 ### Changed
