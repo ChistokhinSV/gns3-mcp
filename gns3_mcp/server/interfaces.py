@@ -611,19 +611,18 @@ class IAppContext(ABC):
 
     Defines the contract for the main application context that holds
     all major components and shared state.
+
+    Note: This interface uses simple attributes (not properties) for most fields
+    to match the dataclass implementation pattern. Only resource_manager and
+    current_project_id use property setters for lifecycle management.
     """
 
-    @property
-    @abstractmethod
-    def gns3(self) -> IGns3Client:
-        """Get GNS3 API client"""
-        pass
-
-    @property
-    @abstractmethod
-    def console(self) -> IConsoleManager:
-        """Get console manager"""
-        pass
+    # Simple attributes (set in __init__, accessed during operation)
+    # These are not @property/@abstractmethod because they're dataclass fields:
+    # - gns3: IGns3Client - GNS3 API client
+    # - console: IConsoleManager - Console session manager
+    # - dependencies: Dependencies - DI container
+    # - ssh_proxy_mapping: Dict[str, str] - Node name to proxy URL mapping
 
     @property
     @abstractmethod
@@ -648,13 +647,3 @@ class IAppContext(ABC):
     def current_project_id(self, value: str | None) -> None:
         """Set current project ID"""
         pass
-
-    @property
-    @abstractmethod
-    def ssh_proxy_mapping(self) -> Dict[str, str]:
-        """Get SSH proxy mapping (node_name -> proxy_url)"""
-        pass
-
-    # Dependencies attribute (not a property - simple state variable)
-    # Set in __init__ and accessed during operation:
-    # - dependencies: Dependencies

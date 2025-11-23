@@ -2078,7 +2078,7 @@ if __name__ == "__main__":
                 )
             return await call_next(request)
 
-        print("✓ API key authentication enabled (MCP_API_KEY required)")
+        print("[INFO] API key authentication enabled (MCP_API_KEY required)")
 
         # Run with uvicorn
         uvicorn.run(app, host=args.http_host, port=args.http_port, log_level="info")

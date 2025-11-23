@@ -28,6 +28,7 @@ class AppContext(IAppContext):
     """Application context with GNS3 client, console manager, and resource manager
 
     v0.50.0: Added dependencies container for proper DI (GM-46)
+    v0.53.3: Fixed interface implementation - use properties for lifecycle-managed fields
     """
 
     # Required fields (no defaults) must come first in dataclasses
@@ -41,13 +42,35 @@ class AppContext(IAppContext):
     dependencies: Dependencies = field()  # v0.50.0: DI container (GM-46)
 
     # Optional fields (with defaults) come after required fields
-    resource_manager: ResourceManager | None = field(default=None)
-    current_project_id: str | None = field(default=None)
+    # Private fields for properties
+    _resource_manager: ResourceManager | None = field(default=None, init=False, repr=False)
+    _current_project_id: str | None = field(default=None, init=False, repr=False)
+
     cleanup_task: asyncio.Task | None = field(default=None)
     # v0.38.0: Background authentication task (non-blocking startup)
     auth_task: asyncio.Task | None = field(default=None)
     # v0.26.0: Multi-proxy SSH support - maps node_name to proxy_url for routing
     ssh_proxy_mapping: Dict[str, str] = field(default_factory=dict)
+
+    @property
+    def resource_manager(self) -> ResourceManager | None:
+        """Get resource manager (may be None during initialization)"""
+        return self._resource_manager
+
+    @resource_manager.setter
+    def resource_manager(self, value: ResourceManager | None) -> None:
+        """Set resource manager"""
+        self._resource_manager = value
+
+    @property
+    def current_project_id(self) -> str | None:
+        """Get current project ID (None if no project open)"""
+        return self._current_project_id
+
+    @current_project_id.setter
+    def current_project_id(self, value: str | None) -> None:
+        """Set current project ID"""
+        self._current_project_id = value
 
 
 async def periodic_console_cleanup(console: ConsoleManager):
@@ -163,9 +186,9 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         gns3=gns3,
         console=console,
         dependencies=dependencies,
-        current_project_id=None,  # Will be set by background auth task
         cleanup_task=cleanup_task,
     )
+    # current_project_id will be set by background auth task (property defaults to None)
 
     # Register AppContext itself in DI container
     dependencies.register_instance(IAppContext, context)

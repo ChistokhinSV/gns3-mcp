@@ -86,7 +86,10 @@
       "mcp__lab-youtrack__get_project",
       "mcp__lab-youtrack__link_issues",
       "Bash(just release)",
-      "Bash(npx:*)"
+      "Bash(npx:*)",
+      "Bash(findstr:*)",
+      "Bash(1)",
+      "Bash(uv cache clean:*)"
     ],
     "deny": [],
     "ask": []

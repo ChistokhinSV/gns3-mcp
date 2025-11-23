@@ -5,6 +5,24 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.3] - 2025-11-23 - Interface Implementation Fix
+
+### Fixed
+- **AppContext Interface Mismatch**
+  - Fixed `TypeError: Can't instantiate abstract class AppContext without an implementation for abstract methods`
+  - Removed `@property` decorators from `gns3`, `console`, and `ssh_proxy_mapping` in `IAppContext` interface
+  - These fields are now simple dataclass attributes instead of properties (matching implementation)
+  - Kept `resource_manager` and `current_project_id` as properties with setters for lifecycle management
+  - Updated AppContext dataclass to use properties with private fields for lifecycle-managed attributes
+- **Unicode Encoding Issue**
+  - Replaced Unicode checkmark character (✓) in print statement with ASCII-safe text "[INFO]"
+  - Fixes `UnicodeEncodeError` on Windows consoles with non-UTF-8 encoding (cp1251)
+
+### Changed
+- **Architecture Documentation**
+  - Updated interface documentation to clarify which fields are properties vs. simple attributes
+  - Added comments explaining dataclass field ordering requirements
+
 ## [0.53.2] - 2025-11-23 - Manifest Tool List Fix
 
 ### Fixed
