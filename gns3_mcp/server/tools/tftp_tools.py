@@ -6,10 +6,12 @@ TFTP server runs on port 69/udp with root directory /opt/gns3-ssh-proxy/tftp.
 """
 
 import base64
-import httpx
 import json
 import logging
-from typing import Literal, TYPE_CHECKING
+import os
+from typing import TYPE_CHECKING, Literal
+
+import httpx
 
 if TYPE_CHECKING:
     from interfaces import IAppContext
@@ -17,7 +19,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # SSH Proxy API URL (defaults to GNS3 host IP)
-import os
 _gns3_host = os.getenv("GNS3_HOST", "localhost")
 SSH_PROXY_URL = os.getenv("SSH_PROXY_URL", f"http://{_gns3_host}:8022")
 
@@ -49,31 +50,27 @@ async def tftp_impl(
 
         if content:
             # Encode content as base64
-            content_b64 = base64.b64encode(content).decode('utf-8')
+            content_b64 = base64.b64encode(content).decode("utf-8")
             request_data["content"] = content_b64
 
         # Make request to SSH proxy
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{SSH_PROXY_URL}/tftp",
-                json=request_data
-            )
+            response = await client.post(f"{SSH_PROXY_URL}/tftp", json=request_data)
             response.raise_for_status()
             return json.dumps(response.json(), indent=2)
 
     except httpx.HTTPStatusError as e:
         error_detail = e.response.text
         logger.error(f"[TFTP] HTTP error {e.response.status_code}: {error_detail}")
-        return json.dumps({
-            "success": False,
-            "action": action,
-            "error": f"HTTP {e.response.status_code}: {error_detail}"
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "action": action,
+                "error": f"HTTP {e.response.status_code}: {error_detail}",
+            },
+            indent=2,
+        )
 
     except Exception as e:
         logger.error(f"[TFTP] Error in {action}: {e}")
-        return json.dumps({
-            "success": False,
-            "action": action,
-            "error": str(e)
-        }, indent=2)
+        return json.dumps({"success": False, "action": action, "error": str(e)}, indent=2)

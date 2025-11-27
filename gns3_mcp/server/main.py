@@ -53,6 +53,9 @@ from tools.drawing_tools import (
     delete_drawing_impl,
     update_drawing_impl,
 )
+from tools.http_client_tools import (
+    http_client_impl,
+)
 from tools.link_tools import set_connection_impl
 from tools.node_tools import (
     configure_node_network_impl,
@@ -78,9 +81,6 @@ from tools.resource_tools import (
 )
 from tools.tftp_tools import (
     tftp_impl,
-)
-from tools.http_client_tools import (
-    http_client_impl,
 )
 
 # Read version from package __init__.py (single source of truth for PyPI package)
@@ -1020,7 +1020,7 @@ async def console(
         {
             "type": "send_and_wait",
             "node_name": "R1",
-            "command": "show ip interface brief\\n",
+            "command": "show ip interface brief\\n",  // optional (v0.49.0: omit for wait-only mode)
             "wait_pattern": "Router#",  // optional
             "timeout": 30,  // optional
             "raw": false,  // optional
@@ -1028,6 +1028,8 @@ async def console(
             "pagination_patterns": ["--More--", "---(more)---"],  // optional (custom patterns)
             "pagination_key": " "  // optional (default: space, can use "\\n" for enter)
         }
+        Wait-only mode (v0.49.0): Omit "command" to just wait for pattern without sending anything.
+        Useful for monitoring boot sequences or waiting for specific output to appear.
 
     - "read": Read console output (NOTE: returns empty if nothing sent yet - this is normal)
         {
@@ -1617,7 +1619,8 @@ async def ssh(
 async def tftp(
     ctx: Context,
     action: Annotated[
-        str, "Action: 'list' (list files), 'upload' (upload file), 'download' (download file), 'delete' (delete file), 'status' (check TFTP server status)"
+        str,
+        "Action: 'list' (list files), 'upload' (upload file), 'download' (download file), 'delete' (delete file), 'status' (check TFTP server status)",
     ],
     filename: Annotated[str | None, "Filename for upload/download/delete operations"] = None,
     content: Annotated[bytes | None, "File content for upload (raw bytes)"] = None,

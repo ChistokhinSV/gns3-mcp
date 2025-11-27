@@ -441,7 +441,7 @@ async def get_console_status_impl(app: "IAppContext", node_name: str) -> str:
 async def send_and_wait_console_impl(
     app: "IAppContext",
     node_name: str,
-    command: str,
+    command: str | None = None,
     wait_pattern: str | None = None,
     timeout: int = 30,
     raw: bool = False,
@@ -475,9 +475,11 @@ async def send_and_wait_console_impl(
 
     Args:
         node_name: Name of the node
-        command: Command to send (include \n for newline)
+        command: Command to send (include \n for newline), or None/empty to skip sending.
+                 When None/empty: only waits for pattern without sending anything (wait-only mode)
         wait_pattern: Optional regex pattern to wait for (e.g., "Router[>#]", "Login:")
-                      If None, waits 2 seconds and returns output
+                      If None and command provided: waits 2 seconds and returns output
+                      If None and no command: returns immediately with current diff
                       TIP: Check prompt first with read_console() to get exact pattern
         timeout: Maximum seconds to wait for pattern (default: 30)
         raw: If True, send command without escape sequence processing (default: False)
@@ -533,6 +535,15 @@ async def send_and_wait_console_impl(
     Example - No pattern (just wait 2s):
         result = send_and_wait_console("R1", "enable\n")
         # Sends command, waits 2s, returns output
+
+    Example - Wait-only mode (no command, just wait for pattern):
+        result = send_and_wait_console(
+            "R1",
+            command=None,  # Don't send anything
+            wait_pattern="login:",  # Wait for this pattern
+            timeout=60
+        )
+        # Returns when "login:" appears in console output
     """
     # Auto-connect
     error = await _auto_connect_console(app, node_name)
@@ -542,42 +553,51 @@ async def send_and_wait_console_impl(
             indent=2,
         )
 
-    # Check if terminal has been accessed (read) before sending
-    if not app.console.has_accessed_terminal_by_node(node_name):
-        return create_error_response(
-            error=f"Cannot send to console for node '{node_name}' - terminal not accessed yet",
-            error_code=ErrorCode.OPERATION_FAILED.value,
-            details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending commands",
-            suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
-            context={"node_name": node_name, "reason": "terminal_not_accessed"},
-        )
+    # Determine if we're in wait-only mode (no command to send)
+    wait_only = not command  # True if command is None or empty string
 
-    # Process escape sequences unless raw mode
-    if not raw:
-        # First handle escape sequences (backslash-escaped strings)
-        command = command.replace("\\r\\n", "\r\n")  # \r\n → CR+LF
-        command = command.replace("\\n", "\n")  # \n → LF
-        command = command.replace("\\r", "\r")  # \r → CR
-        command = command.replace("\\t", "\t")  # \t → tab
-        command = command.replace("\\x1b", "\x1b")  # \x1b → ESC
+    # Only check terminal access and send if we have a command
+    if not wait_only:
+        assert command is not None  # Type narrowing for mypy
+        # Check if terminal has been accessed (read) before sending
+        if not app.console.has_accessed_terminal_by_node(node_name):
+            return create_error_response(
+                error=f"Cannot send to console for node '{node_name}' - terminal not accessed yet",
+                error_code=ErrorCode.OPERATION_FAILED.value,
+                details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending commands",
+                suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
+                context={"node_name": node_name, "reason": "terminal_not_accessed"},
+            )
 
-        # Then normalize all newlines to LF for Unix/Linux compatibility
-        # This handles copy-pasted multi-line text
-        command = command.replace("\r\n", "\n")  # Normalize CRLF to LF
-        command = command.replace("\r", "\n")  # Normalize CR to LF
-        # Note: Don't convert to CRLF - Unix/Linux devices expect LF only
-        # Windows/Cisco devices handle LF correctly via telnet protocol
+        # Process escape sequences unless raw mode
+        if not raw:
+            # First handle escape sequences (backslash-escaped strings)
+            command = command.replace("\\r\\n", "\r\n")  # \r\n → CR+LF
+            command = command.replace("\\n", "\n")  # \n → LF
+            command = command.replace("\\r", "\r")  # \r → CR
+            command = command.replace("\\t", "\t")  # \t → tab
+            command = command.replace("\\x1b", "\x1b")  # \x1b → ESC
 
-    # Send command
-    success = await app.console.send_by_node(node_name, command)
-    if not success:
-        return create_error_response(
-            error=f"Failed to send command to console for node '{node_name}'",
-            error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
-            details="Console session may have been disconnected",
-            suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
-            context={"node_name": node_name, "command": command[:100]},  # Truncate long commands
-        )
+            # Then normalize all newlines to LF for Unix/Linux compatibility
+            # This handles copy-pasted multi-line text
+            command = command.replace("\r\n", "\n")  # Normalize CRLF to LF
+            command = command.replace("\r", "\n")  # Normalize CR to LF
+            # Note: Don't convert to CRLF - Unix/Linux devices expect LF only
+            # Windows/Cisco devices handle LF correctly via telnet protocol
+
+        # Send command
+        success = await app.console.send_by_node(node_name, command)
+        if not success:
+            return create_error_response(
+                error=f"Failed to send command to console for node '{node_name}'",
+                error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
+                details="Console session may have been disconnected",
+                suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
+                context={
+                    "node_name": node_name,
+                    "command": command[:100],
+                },  # Truncate long commands
+            )
 
     # Default pagination patterns if not provided
     if pagination_patterns is None:
@@ -666,12 +686,19 @@ async def send_and_wait_console_impl(
             if final_chunk:
                 accumulated_output.append(final_chunk)
     else:
-        # No pattern - just wait 2 seconds
-        await asyncio.sleep(2)
-        # Collect output after waiting
-        output_chunk = app.console.get_diff_by_node(node_name) or ""
-        if output_chunk:
-            accumulated_output.append(output_chunk)
+        # No pattern provided
+        if wait_only:
+            # Wait-only mode without pattern - return current diff immediately
+            output_chunk = app.console.get_diff_by_node(node_name) or ""
+            if output_chunk:
+                accumulated_output.append(output_chunk)
+        else:
+            # Command was sent but no pattern - wait 2 seconds for response
+            await asyncio.sleep(2)
+            # Collect output after waiting
+            output_chunk = app.console.get_diff_by_node(node_name) or ""
+            if output_chunk:
+                accumulated_output.append(output_chunk)
 
     wait_time = time.time() - start_time
 
@@ -683,6 +710,7 @@ async def send_and_wait_console_impl(
         "pattern_found": pattern_found,
         "timeout_occurred": timeout_occurred,
         "wait_time": round(wait_time, 2),
+        "wait_only": wait_only,
     }
 
     # Add pagination count if pagination handling was enabled
@@ -1095,14 +1123,8 @@ async def console_batch_impl(app: "IAppContext", operations: list[dict]) -> str:
                 )
 
         elif op_type == "send_and_wait":
-            if "command" not in op:
-                return create_error_response(
-                    error=f"Operation {idx} (type='send_and_wait') missing required parameter 'command'",
-                    error_code=ErrorCode.INVALID_PARAMETER.value,
-                    details="send_and_wait operations require 'command' parameter",
-                    suggested_action="Add 'command' field to operation",
-                    context={"operation_index": idx, "node_name": node_name},
-                )
+            # command is optional - if not provided, operates in wait-only mode
+            pass
 
         elif op_type == "keystroke":
             if "key" not in op:

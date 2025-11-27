@@ -5,6 +5,19 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.7] - 2025-11-27
+
+### Added
+- **Wait-only mode for send_and_wait console operation**
+  - `command` parameter is now optional (can be `None` or empty string)
+  - When omitted, skips sending and only waits for `wait_pattern` to appear
+  - Useful for monitoring boot sequences or waiting for specific output without sending commands
+  - Returns `wait_only: true` in response to indicate mode
+  - Example: `{"type": "send_and_wait", "node_name": "R1", "wait_pattern": "login:", "timeout": 60}`
+
+### Fixed
+- Import ordering in `http_client_tools.py` and `tftp_tools.py` (E402 linting errors)
+
 ## [Unreleased] - SSH Proxy v0.3.0 Enhancement
 
 ### Added - SSH Proxy Multi-Service Architecture
