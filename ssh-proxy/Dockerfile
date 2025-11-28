@@ -33,6 +33,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code (most frequently changing layer)
 COPY server/ ./server/
 
+# Copy static files for web UI (v0.4.0)
+COPY static/ ./static/
+
 # Copy nginx and supervisor configurations
 COPY config/nginx.conf /etc/nginx/sites-available/default
 COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf

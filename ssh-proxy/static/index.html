@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GNS3 Traffic Monitor</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- D3.js for topology visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>GNS3 Traffic Monitor</h1>
+            <div class="header-controls">
+                <select id="project-select">
+                    <option value="">Select Project...</option>
+                </select>
+                <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
+            </div>
+        </header>
+
+        <!-- Main content area -->
+        <main class="main-content">
+            <!-- Topology view -->
+            <section class="topology-panel">
+                <div class="panel-header">
+                    <h2>Topology</h2>
+                    <span id="topology-status" class="status-badge">No project selected</span>
+                </div>
+                <div id="topology-container">
+                    <svg id="topology-svg"></svg>
+                </div>
+                <div class="panel-footer">
+                    <span id="node-count">0 nodes</span>
+                    <span id="link-count">0 links</span>
+                </div>
+            </section>
+
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <!-- Widgets panel -->
+                <section class="widgets-panel panel">
+                    <div class="panel-header">
+                        <h3>Traffic Widgets</h3>
+                        <span id="widget-count" class="badge">0</span>
+                    </div>
+                    <div id="widgets-list" class="list-container">
+                        <p class="empty-message">No widgets active</p>
+                    </div>
+                </section>
+
+                <!-- Bridges panel -->
+                <section class="bridges-panel panel">
+                    <div class="panel-header">
+                        <h3>Bridges</h3>
+                        <span id="bridge-count" class="badge">0</span>
+                    </div>
+                    <div id="bridges-list" class="list-container">
+                        <p class="empty-message">No bridges found</p>
+                    </div>
+                </section>
+
+                <!-- Selected link panel -->
+                <section class="selected-panel panel" id="selected-link-panel" style="display: none;">
+                    <div class="panel-header">
+                        <h3>Selected Link</h3>
+                        <button id="close-selected" class="btn-icon">&times;</button>
+                    </div>
+                    <div class="selected-content">
+                        <p><strong>Link ID:</strong> <span id="selected-link-id"></span></p>
+                        <p><strong>Endpoints:</strong> <span id="selected-endpoints"></span></p>
+                        <p><strong>Status:</strong> <span id="selected-status"></span></p>
+                        <div class="selected-actions">
+                            <button id="create-widget-btn" class="btn btn-primary">Create Widget</button>
+                            <button id="delete-widget-btn" class="btn btn-danger" style="display: none;">Delete Widget</button>
+                        </div>
+                    </div>
+                </section>
+            </aside>
+        </main>
+
+        <!-- Footer status bar -->
+        <footer class="footer">
+            <span id="connection-status" class="status-indicator connected">Connected</span>
+            <span id="last-update">Last update: --</span>
+            <span id="auto-refresh-status">Auto-refresh: 15s</span>
+        </footer>
+    </div>
+
+    <!-- Modal for errors/messages -->
+    <div id="modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Message</h3>
+                <button id="modal-close" class="btn-icon">&times;</button>
+            </div>
+            <div id="modal-body">
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

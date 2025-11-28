@@ -8,7 +8,7 @@ Provides REST API for SSH automation using Netmiko with dual storage:
 Port: 8022 (SSH-like mnemonic)
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 import base64
 import logging
@@ -25,6 +25,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from .models import (
+    BridgeInfo,
     BufferResponse,
     CleanupRequest,
     CleanupResponse,
@@ -48,10 +49,15 @@ from .models import (
     SSHConnectionError,
     TFTPFile,
     TFTPRequest,
-    TFTPResponse
+    TFTPResponse,
+    TopologyInfo,
+    WidgetInfo,
+    WidgetRequest,
+    WidgetResponse,
 )
 from .session_manager import SSHSessionManager
 from .docker_discovery import DockerProxyDiscovery
+from .widget_manager import WidgetManager
 
 # ============================================================================
 # Logging Configuration
@@ -70,12 +76,13 @@ logger = logging.getLogger(__name__)
 
 session_manager: Optional[SSHSessionManager] = None
 proxy_discovery: Optional[DockerProxyDiscovery] = None
+widget_manager: Optional[WidgetManager] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize and cleanup resources"""
-    global session_manager, proxy_discovery
+    global session_manager, proxy_discovery, widget_manager
 
     logger.info("SSH Proxy Service starting...")
     session_manager = SSHSessionManager()
@@ -93,12 +100,34 @@ async def lifespan(app: FastAPI):
         gns3_password=gns3_pass
     )
 
+    # Initialize widget manager (v0.4.0)
+    widget_manager = WidgetManager(
+        gns3_host=gns3_host,
+        gns3_port=gns3_port,
+        gns3_username=gns3_user,
+        gns3_password=gns3_pass,
+        proxy_id=os.getenv("PROXY_ID", "main")
+    )
+    try:
+        await widget_manager.initialize()
+        logger.info("Widget manager initialized")
+    except Exception as e:
+        logger.warning(f"Widget manager init failed (non-fatal): {e}")
+
     logger.info(f"SSH Proxy Service ready on port {os.getenv('API_PORT', 8022)}")
 
     yield
 
     # Cleanup on shutdown
     logger.info("SSH Proxy Service shutting down...")
+
+    # Shutdown widget manager first (deletes widgets from GNS3)
+    if widget_manager:
+        try:
+            await widget_manager.shutdown()
+        except Exception as e:
+            logger.warning(f"Widget manager shutdown failed: {e}")
+
     if session_manager:
         # Close all sessions
         await session_manager.cleanup_sessions(keep_nodes=[], clean_all=True)
@@ -1123,6 +1152,262 @@ async def http_proxy_management(request: HTTPProxyRequest):
             success=False,
             action=request.action,
             error=str(e)
+        )
+
+
+# ============================================================================
+# Traffic Widget Endpoints (v0.4.0)
+# ============================================================================
+
+@app.post("/api/widgets", response_model=WidgetResponse)
+async def manage_widgets(request: WidgetRequest):
+    """
+    Manage traffic graph widgets (CRUD-style with action parameter)
+
+    Widgets display real-time traffic statistics as mini bar charts
+    embedded in GNS3 topology via the Drawing API.
+
+    Actions:
+        - create: Create widget for a link (requires link_id, project_id)
+        - delete: Delete widget by ID (requires widget_id)
+        - list: List all widgets managed by this proxy
+        - refresh: Force immediate update of all widgets
+
+    Args:
+        request: WidgetRequest with action and parameters
+
+    Returns:
+        WidgetResponse with widget info or operation status
+
+    Examples:
+        # Create widget for a link
+        POST /api/widgets {
+            "action": "create",
+            "link_id": "abc-123",
+            "project_id": "def-456"
+        }
+
+        # List widgets
+        POST /api/widgets {"action": "list"}
+
+        # Delete widget
+        POST /api/widgets {"action": "delete", "widget_id": "widget-uuid"}
+
+        # Force refresh
+        POST /api/widgets {"action": "refresh"}
+    """
+    if not widget_manager:
+        raise HTTPException(
+            status_code=503,
+            detail="Widget manager not initialized"
+        )
+
+    try:
+        if request.action == "create":
+            if not request.link_id or not request.project_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="link_id and project_id required for create"
+                )
+
+            widget = await widget_manager.create_widget(
+                link_id=request.link_id,
+                project_id=request.project_id,
+                x=request.x,
+                y=request.y
+            )
+
+            return WidgetResponse(
+                success=True,
+                action="create",
+                widget=widget,
+                message=f"Created widget for link {request.link_id}"
+            )
+
+        elif request.action == "delete":
+            if not request.widget_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="widget_id required for delete"
+                )
+
+            widget = await widget_manager.delete_widget(request.widget_id)
+
+            return WidgetResponse(
+                success=True,
+                action="delete",
+                widget=widget,
+                message=f"Deleted widget {request.widget_id}"
+            )
+
+        elif request.action == "list":
+            widgets = widget_manager.list_widgets()
+
+            return WidgetResponse(
+                success=True,
+                action="list",
+                widgets=widgets,
+                message=f"Found {len(widgets)} widgets"
+            )
+
+        elif request.action == "refresh":
+            count = await widget_manager.refresh_widgets()
+
+            return WidgetResponse(
+                success=True,
+                action="refresh",
+                message=f"Refreshed {count} widgets"
+            )
+
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown action: {request.action}"
+            )
+
+    except ValueError as e:
+        return WidgetResponse(
+            success=False,
+            action=request.action,
+            error=str(e)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[WIDGET] Error in {request.action}: {e}")
+        return WidgetResponse(
+            success=False,
+            action=request.action,
+            error=str(e)
+        )
+
+
+@app.get("/api/widgets", response_model=WidgetResponse)
+async def get_widgets():
+    """
+    List all traffic widgets
+
+    Returns:
+        WidgetResponse with list of widgets
+    """
+    if not widget_manager:
+        raise HTTPException(
+            status_code=503,
+            detail="Widget manager not initialized"
+        )
+
+    widgets = widget_manager.list_widgets()
+
+    return WidgetResponse(
+        success=True,
+        action="list",
+        widgets=widgets,
+        message=f"Found {len(widgets)} widgets"
+    )
+
+
+@app.get("/api/widgets/{widget_id}")
+async def get_widget(widget_id: str):
+    """
+    Get specific widget details
+
+    Returns:
+        WidgetInfo for the requested widget
+    """
+    if not widget_manager:
+        raise HTTPException(
+            status_code=503,
+            detail="Widget manager not initialized"
+        )
+
+    widgets = widget_manager.list_widgets()
+    widget = next((w for w in widgets if w.widget_id == widget_id), None)
+
+    if not widget:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Widget {widget_id} not found"
+        )
+
+    return widget
+
+
+@app.get("/api/bridges")
+async def list_bridges():
+    """
+    List available Linux bridges with traffic statistics
+
+    Returns:
+        List of BridgeInfo with stats and widget status
+    """
+    if not widget_manager:
+        raise HTTPException(
+            status_code=503,
+            detail="Widget manager not initialized"
+        )
+
+    bridges = widget_manager.list_bridges()
+
+    return {
+        "success": True,
+        "bridges": [b.model_dump() for b in bridges],
+        "count": len(bridges)
+    }
+
+
+@app.get("/api/topology/{project_id}", response_model=TopologyInfo)
+async def get_topology(project_id: str):
+    """
+    Get project topology for web UI
+
+    Returns nodes, links, and active widgets for rendering.
+
+    Returns:
+        TopologyInfo with nodes, links, and widgets
+    """
+    if not widget_manager:
+        raise HTTPException(
+            status_code=503,
+            detail="Widget manager not initialized"
+        )
+
+    try:
+        topology = await widget_manager.get_topology(project_id)
+        return topology
+    except Exception as e:
+        logger.error(f"[TOPOLOGY] Error getting topology: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get topology: {e}"
+        )
+
+
+@app.get("/api/projects")
+async def get_projects():
+    """
+    List GNS3 projects for web UI
+
+    Returns:
+        List of projects with id, name, status
+    """
+    if not widget_manager:
+        raise HTTPException(
+            status_code=503,
+            detail="Widget manager not initialized"
+        )
+
+    try:
+        projects = await widget_manager.get_projects()
+        return {
+            "success": True,
+            "projects": projects,
+            "count": len(projects)
+        }
+    except Exception as e:
+        logger.error(f"[PROJECTS] Error listing projects: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list projects: {e}"
         )
 
 
