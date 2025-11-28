@@ -396,10 +396,11 @@ class WidgetManager:
         # 3. Refresh ubridge cache if needed
         await self._refresh_ubridge_cache()
 
-        # 4. Search for matching bridge
-        for port, bridges in self._ubridge_cache.items():
-            for bridge_name in bridges:
-                for candidate in bridge_candidates:
+        # 4. Search for matching bridge - iterate candidates first to respect
+        # link node ordering (first node in link is preferred)
+        for candidate in bridge_candidates:
+            for port, bridges in self._ubridge_cache.items():
+                for bridge_name in bridges:
                     if candidate in bridge_name or bridge_name == candidate:
                         logger.debug(
                             f"Found bridge {bridge_name} on port {port} for link {link_id}"
