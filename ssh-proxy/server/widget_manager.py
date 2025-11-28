@@ -24,7 +24,7 @@ from typing import Any
 
 import httpx
 
-from models import (
+from .models import (
     BridgeInfo,
     TopologyInfo,
     TrafficDelta,
