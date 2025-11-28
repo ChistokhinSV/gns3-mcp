@@ -88,10 +88,11 @@ async def lifespan(app: FastAPI):
     session_manager = SSHSessionManager()
 
     # Initialize proxy discovery (requires Docker socket and GNS3 credentials)
-    gns3_host = os.getenv("GNS3_HOST", "localhost")
-    gns3_port = int(os.getenv("GNS3_PORT", "80"))
-    gns3_user = os.getenv("GNS3_USERNAME", "admin")
-    gns3_pass = os.getenv("GNS3_PASSWORD", "")
+    # Note: Use CONTROLLER_ prefix (GNS3 filters out GNS3_ variables)
+    gns3_host = os.getenv("CONTROLLER_HOST", "localhost")
+    gns3_port = int(os.getenv("CONTROLLER_PORT", "80"))
+    gns3_user = os.getenv("CONTROLLER_USER", "admin")
+    gns3_pass = os.getenv("CONTROLLER_PASS", "")
 
     proxy_discovery = DockerProxyDiscovery(
         gns3_host=gns3_host,
@@ -1074,7 +1075,7 @@ async def http_proxy_management(request: HTTPProxyRequest):
                 )
 
             # Get proxy host from environment or use localhost
-            proxy_host = os.getenv("GNS3_HOST", "localhost")
+            proxy_host = os.getenv("CONTROLLER_HOST", "localhost")
             proxy_url = f"http://{proxy_host}:8023/http-proxy/{request.device_ip}:{request.device_port}/"
 
             http_proxy_devices[request.device_name] = {
