@@ -496,7 +496,8 @@ class WidgetInfo(BaseModel):
     widget_id: str = Field(..., description="Unique widget identifier (UUID)")
     link_id: str = Field(..., description="GNS3 link ID this widget monitors")
     drawing_id: str = Field(..., description="GNS3 drawing ID for the widget")
-    bridge_name: str = Field(..., description="Linux bridge interface name")
+    bridge_name: str = Field(..., description="ubridge bridge name (e.g. QEMU-xxx-0)")
+    ubridge_port: int = Field(default=0, description="ubridge TCP hypervisor port")
     proxy_id: str = Field(..., description="Proxy instance ID for ownership")
     project_id: str = Field(..., description="GNS3 project ID")
     x: int = Field(..., description="Widget X position in topology")
@@ -570,8 +571,17 @@ class WidgetResponse(BaseModel):
 
 
 class BridgeInfo(BaseModel):
-    """Linux bridge interface information"""
-    name: str = Field(..., description="Bridge interface name")
+    """ubridge interface information"""
+    name: str = Field(..., description="Bridge name (e.g. QEMU-xxx-0)")
+    ubridge_port: int = Field(default=0, description="ubridge TCP hypervisor port")
+    node_id: Optional[str] = Field(
+        default=None,
+        description="GNS3 node ID extracted from bridge name"
+    )
+    adapter: Optional[int] = Field(
+        default=None,
+        description="Adapter number extracted from bridge name"
+    )
     link_id: Optional[str] = Field(
         default=None,
         description="Associated GNS3 link ID (if discoverable)"

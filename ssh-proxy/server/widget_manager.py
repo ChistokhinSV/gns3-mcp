@@ -5,11 +5,17 @@ Manages lifecycle of traffic monitoring widgets embedded in GNS3 topology.
 Widgets display real-time traffic statistics as mini bar charts via GNS3 Drawing API.
 
 Features:
-- Bridge discovery: Maps GNS3 link IDs to Linux bridge interfaces
-- Traffic monitoring: Reads /sys/class/net/*/statistics
+- Bridge discovery: Maps GNS3 link IDs to ubridge TCP hypervisor bridges
+- Traffic monitoring: Queries ubridge via TCP for IN/OUT packet/byte counters
 - SVG generation: Creates mini bar charts with RX/TX rates
 - State persistence: Saves widget state to JSON file
 - Graceful lifecycle: Cleans up widgets on shutdown
+
+v0.4.1: Fixed bridge discovery to use ubridge TCP hypervisor instead of Linux bridges.
+GNS3 uses ubridge for networking, not Linux bridges. Each node has its own ubridge
+instance running on a unique TCP port. Bridge names follow pattern:
+- QEMU-<node_id>-<adapter_number> for QEMU nodes
+- <node_id>-<adapter_number> for NAT/cloud nodes
 """
 
 import asyncio
@@ -19,7 +25,6 @@ import os
 import re
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -39,7 +44,7 @@ WIDGET_WIDTH = 100
 WIDGET_HEIGHT = 60
 UPDATE_INTERVAL = 15  # seconds
 STATE_FILE = "/opt/gns3-ssh-proxy/widgets.json"
-SYS_PATH = "/host_sys"  # Mounted from GNS3 VM's /sys
+UBRIDGE_DISCOVERY_CACHE_TTL = 60  # seconds - how often to refresh ubridge port discovery
 
 
 class WidgetManager:
@@ -65,6 +70,10 @@ class WidgetManager:
         self._update_task: asyncio.Task | None = None
         self._running = False
         self._http_client: httpx.AsyncClient | None = None
+
+        # ubridge discovery cache
+        self._ubridge_cache: dict[int, list[str]] = {}  # port -> list of bridge names
+        self._ubridge_cache_time: datetime | None = None
 
     # =========================================================================
     # Lifecycle Management
@@ -142,10 +151,11 @@ class WidgetManager:
             if widget.link_id == link_id:
                 raise ValueError(f"Widget already exists for link {link_id}")
 
-        # Discover bridge for this link
-        bridge_name = self._discover_bridge(link_id)
-        if not bridge_name:
+        # Discover bridge for this link (async, queries ubridge)
+        bridge_info = await self._discover_bridge(link_id, project_id)
+        if not bridge_info:
             raise ValueError(f"Could not find bridge for link {link_id}")
+        ubridge_port, bridge_name = bridge_info
 
         # Calculate position if not provided (link midpoint)
         if x is None or y is None:
@@ -153,8 +163,8 @@ class WidgetManager:
             x = link_pos.get("x", 0) if x is None else x
             y = link_pos.get("y", 0) if y is None else y
 
-        # Read initial stats
-        stats = self._read_bridge_stats(bridge_name)
+        # Read initial stats via ubridge TCP
+        stats = await self._ubridge_get_stats(ubridge_port, bridge_name)
 
         # Generate initial SVG
         svg = self._generate_svg(stats, None)
@@ -170,12 +180,13 @@ class WidgetManager:
         }
         drawing = await self._create_drawing(project_id, drawing_data)
 
-        # Create widget info
+        # Create widget info with ubridge connection details
         widget = WidgetInfo(
             widget_id=str(uuid.uuid4()),
             link_id=link_id,
             drawing_id=drawing["drawing_id"],
             bridge_name=bridge_name,
+            ubridge_port=ubridge_port,
             proxy_id=self.proxy_id,
             project_id=project_id,
             x=x,
@@ -187,7 +198,7 @@ class WidgetManager:
         self.widgets[widget.widget_id] = widget
         self._save_state()
 
-        logger.info(f"Created widget {widget.widget_id} for link {link_id}")
+        logger.info(f"Created widget {widget.widget_id} for link {link_id} (bridge: {bridge_name}, port: {ubridge_port})")
         return widget
 
     async def delete_widget(self, widget_id: str) -> WidgetInfo:
@@ -217,100 +228,242 @@ class WidgetManager:
         return count
 
     # =========================================================================
-    # Bridge Discovery
+    # ubridge Discovery and TCP Client
     # =========================================================================
 
-    def _discover_bridge(self, link_id: str) -> str | None:
-        """
-        Discover Linux bridge name for a GNS3 link.
+    async def _discover_ubridge_ports(self) -> list[int]:
+        """Discover ubridge TCP ports by scanning /proc on GNS3 host.
 
-        GNS3 creates bridges with naming pattern: br-<link_id[:8]>
+        Container runs with pid: host, so we can see host processes via /proc.
+        This is more reliable than 'ps aux' which doesn't work well in slim containers.
         """
-        # Try direct match with first 8 chars of link_id
-        short_id = link_id[:8] if len(link_id) >= 8 else link_id
-        expected_name = f"br-{short_id}"
+        ports = []
+        proc_path = "/proc"
+        try:
+            for entry in os.listdir(proc_path):
+                if not entry.isdigit():
+                    continue
+                cmdline_path = os.path.join(proc_path, entry, "cmdline")
+                try:
+                    with open(cmdline_path, "r") as f:
+                        cmdline = f.read()
+                    if "ubridge" in cmdline and "-H" in cmdline:
+                        # cmdline uses null separators, convert to space
+                        cmdline = cmdline.replace("\x00", " ")
+                        # Extract port from "-H 0.0.0.0:PORT" or "-H :PORT"
+                        match = re.search(r"-H\s+[\d.]*:?(\d+)", cmdline)
+                        if match:
+                            ports.append(int(match.group(1)))
+                except (OSError, IOError):
+                    # Process may have exited or we don't have permission
+                    continue
+            logger.debug(f"Discovered ubridge ports: {ports}")
+            return ports
+        except Exception as e:
+            logger.warning(f"Error discovering ubridge ports: {e}")
+            return []
 
-        net_path = Path(SYS_PATH) / "class" / "net"
-        if not net_path.exists():
-            logger.warning(f"Network sysfs not found at {net_path}")
+    async def _ubridge_list_bridges(self, port: int) -> list[str]:
+        """Get bridge list from ubridge via TCP."""
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection("127.0.0.1", port),
+                timeout=5.0
+            )
+            try:
+                writer.write(b"bridge list\n")
+                await writer.drain()
+                response = await asyncio.wait_for(reader.read(4096), timeout=5.0)
+                bridges = []
+                for line in response.decode().split("\n"):
+                    # Parse: "101 QEMU-xxx-0 (NIOs = 2)"
+                    match = re.match(r"101\s+(\S+)", line)
+                    if match:
+                        bridges.append(match.group(1))
+                return bridges
+            finally:
+                writer.close()
+                await writer.wait_closed()
+        except asyncio.TimeoutError:
+            logger.debug(f"Timeout connecting to ubridge port {port}")
+            return []
+        except ConnectionRefusedError:
+            logger.debug(f"Connection refused to ubridge port {port}")
+            return []
+        except Exception as e:
+            logger.debug(f"Error querying ubridge port {port}: {e}")
+            return []
+
+    async def _ubridge_get_stats(self, port: int, bridge_name: str) -> TrafficStats:
+        """Get traffic stats from ubridge via TCP."""
+        stats = TrafficStats(timestamp=datetime.utcnow())
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection("127.0.0.1", port),
+                timeout=5.0
+            )
+            try:
+                writer.write(f"bridge get_stats {bridge_name}\n".encode())
+                await writer.drain()
+                response = await asyncio.wait_for(reader.read(4096), timeout=5.0)
+
+                for line in response.decode().split("\n"):
+                    # Parse: "101 Source NIO: IN: 272 packets (41927 bytes) OUT: 2704 packets (235833 bytes)"
+                    match = re.match(
+                        r"101\s+(Source|Destination) NIO:\s+"
+                        r"IN:\s+(\d+) packets \((\d+) bytes\)\s+"
+                        r"OUT:\s+(\d+) packets \((\d+) bytes\)",
+                        line
+                    )
+                    if match:
+                        nio_type = match.group(1)
+                        in_pkts = int(match.group(2))
+                        in_bytes = int(match.group(3))
+                        out_pkts = int(match.group(4))
+                        out_bytes = int(match.group(5))
+
+                        if nio_type == "Source":
+                            # Source NIO OUT = traffic sent from this bridge
+                            stats.tx_packets = out_pkts
+                            stats.tx_bytes = out_bytes
+                        elif nio_type == "Destination":
+                            # Destination NIO IN = traffic received by this bridge
+                            stats.rx_packets = in_pkts
+                            stats.rx_bytes = in_bytes
+
+                return stats
+            finally:
+                writer.close()
+                await writer.wait_closed()
+        except Exception as e:
+            logger.warning(f"Error getting stats from ubridge port {port}: {e}")
+            return stats
+
+    async def _refresh_ubridge_cache(self) -> None:
+        """Refresh the ubridge port -> bridges cache."""
+        now = datetime.utcnow()
+        if (
+            self._ubridge_cache_time is not None
+            and (now - self._ubridge_cache_time).total_seconds() < UBRIDGE_DISCOVERY_CACHE_TTL
+        ):
+            return  # Cache is still valid
+
+        logger.debug("Refreshing ubridge cache...")
+        self._ubridge_cache = {}
+        ports = await self._discover_ubridge_ports()
+        for port in ports:
+            bridges = await self._ubridge_list_bridges(port)
+            if bridges:
+                self._ubridge_cache[port] = bridges
+        self._ubridge_cache_time = now
+        logger.debug(f"ubridge cache refreshed: {len(self._ubridge_cache)} ports")
+
+    async def _discover_bridge(
+        self, link_id: str, project_id: str
+    ) -> tuple[int, str] | None:
+        """
+        Discover ubridge port and bridge name for a GNS3 link.
+
+        Returns (ubridge_port, bridge_name) or None if not found.
+
+        GNS3 bridge naming:
+        - QEMU-<node_id>-<adapter_number> for QEMU nodes
+        - <node_id>-<adapter_number> for NAT/cloud nodes
+        """
+        # 1. Get link info from GNS3 API
+        try:
+            link = await self._get_link(project_id, link_id)
+        except Exception as e:
+            logger.warning(f"Failed to get link {link_id}: {e}")
             return None
 
-        # Check if expected bridge exists
-        if (net_path / expected_name).exists():
-            return expected_name
+        nodes = link.get("nodes", [])
+        if len(nodes) < 2:
+            logger.warning(f"Link {link_id} has fewer than 2 nodes")
+            return None
 
-        # Fallback: scan all bridges for pattern match
-        for iface in net_path.iterdir():
-            if iface.name.startswith("br-"):
-                # Check if this bridge might be for our link
-                if iface.name.endswith(short_id) or short_id in iface.name:
-                    return iface.name
+        # 2. Construct expected bridge names for both endpoints
+        # We try node_a first, then node_b if needed
+        bridge_candidates = []
+        for node_ref in nodes[:2]:
+            node_id = node_ref.get("node_id")
+            adapter = node_ref.get("adapter_number", 0)
+            bridge_candidates.extend([
+                f"QEMU-{node_id}-{adapter}",
+                f"{node_id}-{adapter}",
+            ])
+
+        # 3. Refresh ubridge cache if needed
+        await self._refresh_ubridge_cache()
+
+        # 4. Search for matching bridge
+        for port, bridges in self._ubridge_cache.items():
+            for bridge_name in bridges:
+                for candidate in bridge_candidates:
+                    if candidate in bridge_name or bridge_name == candidate:
+                        logger.debug(
+                            f"Found bridge {bridge_name} on port {port} for link {link_id}"
+                        )
+                        return (port, bridge_name)
 
         logger.warning(f"Could not find bridge for link {link_id}")
         return None
 
-    def list_bridges(self) -> list[BridgeInfo]:
-        """List all available Linux bridges with their stats"""
+    async def list_bridges(self) -> list[BridgeInfo]:
+        """List all available ubridge bridges with their stats."""
         bridges = []
-        net_path = Path(SYS_PATH) / "class" / "net"
 
-        if not net_path.exists():
-            logger.warning(f"Network sysfs not found at {net_path}")
-            return bridges
+        # Refresh cache
+        await self._refresh_ubridge_cache()
 
-        for iface in net_path.iterdir():
-            # Check if it's a bridge (has bridge subdirectory)
-            if (iface / "bridge").exists() or iface.name.startswith("br-"):
-                stats = self._read_bridge_stats(iface.name)
+        for port, bridge_names in self._ubridge_cache.items():
+            for bridge_name in bridge_names:
+                # Get stats for this bridge
+                stats = await self._ubridge_get_stats(port, bridge_name)
 
-                # Try to extract link_id from bridge name
-                link_id = None
-                if iface.name.startswith("br-"):
-                    link_id = iface.name[3:]  # Remove "br-" prefix
+                # Try to extract node_id and adapter from bridge name
+                node_id = None
+                adapter = None
+                # Pattern: "QEMU-<uuid>-<adapter>" or "<uuid>-<adapter>"
+                match = re.match(r"(?:QEMU-)?([a-f0-9-]+)-(\d+)$", bridge_name)
+                if match:
+                    node_id = match.group(1)
+                    adapter = int(match.group(2))
 
                 # Check if widget exists for this bridge
                 has_widget = any(
-                    w.bridge_name == iface.name for w in self.widgets.values()
+                    w.bridge_name == bridge_name for w in self.widgets.values()
                 )
 
                 bridges.append(BridgeInfo(
-                    name=iface.name,
-                    link_id=link_id,
+                    name=bridge_name,
+                    ubridge_port=port,
+                    node_id=node_id,
+                    adapter=adapter,
                     stats=stats,
                     has_widget=has_widget,
                 ))
 
         return bridges
 
+    async def _get_link(
+        self,
+        project_id: str,
+        link_id: str,
+    ) -> dict[str, Any]:
+        """Get link details from GNS3 API."""
+        url = f"http://{self.gns3_host}:{self.gns3_port}/v3/projects/{project_id}/links/{link_id}"
+        assert self._http_client is not None
+        response = await self._http_client.get(
+            url,
+            headers=self._get_headers(),
+        )
+        response.raise_for_status()
+        return response.json()
+
     # =========================================================================
     # Traffic Statistics
     # =========================================================================
-
-    def _read_bridge_stats(self, bridge_name: str) -> TrafficStats:
-        """Read traffic statistics from /sys/class/net/<bridge>/statistics"""
-        stats_path = Path(SYS_PATH) / "class" / "net" / bridge_name / "statistics"
-
-        stats = TrafficStats(timestamp=datetime.utcnow())
-
-        stat_files = {
-            "rx_bytes": "rx_bytes",
-            "tx_bytes": "tx_bytes",
-            "rx_packets": "rx_packets",
-            "tx_packets": "tx_packets",
-            "rx_errors": "rx_errors",
-            "tx_errors": "tx_errors",
-        }
-
-        for attr, filename in stat_files.items():
-            file_path = stats_path / filename
-            if file_path.exists():
-                try:
-                    value = int(file_path.read_text().strip())
-                    setattr(stats, attr, value)
-                except (ValueError, OSError) as e:
-                    logger.debug(f"Failed to read {file_path}: {e}")
-
-        return stats
 
     def _calculate_delta(
         self,
@@ -425,8 +578,10 @@ class WidgetManager:
         updated = 0
         for widget in list(self.widgets.values()):
             try:
-                # Read current stats
-                stats = self._read_bridge_stats(widget.bridge_name)
+                # Read current stats via ubridge TCP
+                stats = await self._ubridge_get_stats(
+                    widget.ubridge_port, widget.bridge_name
+                )
 
                 # Calculate delta from previous stats
                 delta = self._calculate_delta(stats, widget.last_stats)

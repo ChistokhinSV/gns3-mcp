@@ -91,8 +91,8 @@ async def lifespan(app: FastAPI):
     # Note: Use CONTROLLER_ prefix (GNS3 filters out GNS3_ variables)
     gns3_host = os.getenv("CONTROLLER_HOST", "localhost")
     gns3_port = int(os.getenv("CONTROLLER_PORT", "80"))
-    gns3_user = os.getenv("CONTROLLER_USER", "admin")
-    gns3_pass = os.getenv("CONTROLLER_PASS", "")
+    gns3_user = os.getenv("CONTROLLER_USERNAME", "admin")
+    gns3_pass = os.getenv("CONTROLLER_PASSWORD", "")
 
     proxy_discovery = DockerProxyDiscovery(
         gns3_host=gns3_host,
@@ -1347,7 +1347,7 @@ async def list_bridges():
             detail="Widget manager not initialized"
         )
 
-    bridges = widget_manager.list_bridges()
+    bridges = await widget_manager.list_bridges()
 
     return {
         "success": True,
