@@ -323,13 +323,14 @@ class WidgetManager:
                         out_bytes = int(match.group(5))
 
                         if nio_type == "Source":
-                            # Source NIO OUT = traffic sent from this bridge
-                            stats.tx_packets = out_pkts
-                            stats.tx_bytes = out_bytes
-                        elif nio_type == "Destination":
-                            # Destination NIO IN = traffic received by this bridge
+                            # Source NIO represents the node's perspective:
+                            # - IN = traffic received by this node
+                            # - OUT = traffic sent by this node
                             stats.rx_packets = in_pkts
                             stats.rx_bytes = in_bytes
+                            stats.tx_packets = out_pkts
+                            stats.tx_bytes = out_bytes
+                        # Ignore Destination NIO - it's the same traffic from other end
 
                 return stats
             finally:
