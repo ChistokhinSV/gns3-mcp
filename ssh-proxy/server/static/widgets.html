@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GNS3 Traffic Widgets</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 { color: #00aaff; margin-bottom: 20px; font-size: 1.5rem; }
+        h2 { color: #888; margin: 20px 0 10px; font-size: 1.1rem; }
+
+        .container { max-width: 900px; margin: 0 auto; padding-bottom: 50px; }
+
+        /* Project selector */
+        .project-selector {
+            background: #252542;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .project-selector select {
+            width: 100%;
+            padding: 10px;
+            background: #1a1a2e;
+            border: 1px solid #4a4a6a;
+            color: #e0e0e0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        /* Links table */
+        .links-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #252542;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .links-table th {
+            background: #1a1a2e;
+            padding: 12px;
+            text-align: left;
+            color: #888;
+            font-weight: 500;
+        }
+        .links-table td {
+            padding: 10px 12px;
+            border-top: 1px solid #3a3a5a;
+        }
+        .links-table tr:hover { background: #2a2a4a; }
+
+        /* Link info */
+        .link-nodes {
+            font-size: 13px;
+        }
+        .node-name {
+            color: #00ff88;
+            font-weight: 500;
+        }
+        .port-info {
+            color: #666;
+            font-size: 11px;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        /* Checkbox toggle for inverse */
+        .inverse-toggle {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #888;
+        }
+        .inverse-toggle input {
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+        }
+        .inverse-toggle:hover { color: #ff8800; }
+
+        /* Chart type select */
+        .chart-select {
+            padding: 4px 8px;
+            background: #1a1a2e;
+            border: 1px solid #4a4a6a;
+            color: #e0e0e0;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .chart-select:hover { border-color: #00aaff; }
+
+        /* Buttons */
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-create {
+            background: #00aaff;
+            color: #fff;
+        }
+        .btn-create:hover { background: #0088cc; }
+        .btn-create:disabled {
+            background: #4a4a6a;
+            cursor: not-allowed;
+        }
+        .btn-delete {
+            background: #ff4444;
+            color: #fff;
+            padding: 4px 8px;
+        }
+        .btn-delete:hover { background: #cc3333; }
+        .btn-update {
+            background: #ff8800;
+            color: #fff;
+            padding: 4px 8px;
+        }
+        .btn-update:hover { background: #cc6600; }
+
+        /* Widget indicator */
+        .has-widget {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        /* Existing widgets section */
+        .widgets-list {
+            background: #252542;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .widget-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #3a3a5a;
+        }
+        .widget-item:last-child { border-bottom: none; }
+        .widget-info {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .widget-link {
+            color: #00ff88;
+            font-weight: 500;
+        }
+        .widget-type {
+            color: #00aaff;
+            font-size: 12px;
+        }
+        .widget-inverse {
+            color: #ff8800;
+            font-size: 12px;
+        }
+
+        /* Status message */
+        .status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 13px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 100;
+        }
+        .status.show { opacity: 1; }
+        .status.success { background: #00aa44; color: #fff; }
+        .status.error { background: #ff4444; color: #fff; }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        /* Empty state */
+        .empty {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            font-style: italic;
+        }
+
+        /* Footer */
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #151528;
+            padding: 8px 20px;
+            font-size: 11px;
+            color: #555;
+            border-top: 1px solid #2a2a4a;
+        }
+        .footer-version { color: #00aaff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Traffic Widget Manager</h1>
+
+        <!-- Project Selector -->
+        <div class="project-selector">
+            <select id="projectSelect" onchange="loadTopology()">
+                <option value="">Select a project...</option>
+            </select>
+        </div>
+
+        <!-- Links Table -->
+        <h2>Available Links</h2>
+        <div id="linksContainer">
+            <div class="empty">Select a project to view links</div>
+        </div>
+
+        <!-- Existing Widgets -->
+        <h2>Active Widgets</h2>
+        <div id="widgetsContainer" class="widgets-list">
+            <div class="empty">No active widgets</div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">GNS3 SSH Proxy <span id="version" class="footer-version">...</span></div>
+
+    <!-- Status Message -->
+    <div id="status" class="status"></div>
+
+    <script>
+        const API_BASE = '';  // Same origin
+        let currentProject = null;
+        let topology = null;
+        let widgets = [];
+
+        // Load projects on page load
+        async function loadProjects() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/projects`);
+                const data = await resp.json();
+
+                const select = document.getElementById('projectSelect');
+                select.innerHTML = '<option value="">Select a project...</option>';
+
+                // Sort: opened first, then by name
+                data.projects.sort((a, b) => {
+                    if (a.status === 'opened' && b.status !== 'opened') return -1;
+                    if (b.status === 'opened' && a.status !== 'opened') return 1;
+                    return a.name.localeCompare(b.name);
+                });
+
+                data.projects.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.project_id;
+                    opt.textContent = p.name + (p.status === 'opened' ? ' (open)' : '');
+                    select.appendChild(opt);
+                });
+
+                // Auto-select opened project
+                const opened = data.projects.find(p => p.status === 'opened');
+                if (opened) {
+                    select.value = opened.project_id;
+                    loadTopology();
+                }
+            } catch (err) {
+                showStatus('Failed to load projects: ' + err.message, 'error');
+            }
+        }
+
+        // Load topology for selected project
+        async function loadTopology() {
+            const projectId = document.getElementById('projectSelect').value;
+            if (!projectId) {
+                document.getElementById('linksContainer').innerHTML =
+                    '<div class="empty">Select a project to view links</div>';
+                return;
+            }
+
+            currentProject = projectId;
+            document.getElementById('linksContainer').innerHTML =
+                '<div class="loading">Loading...</div>';
+
+            try {
+                const [topoResp, widgetsResp] = await Promise.all([
+                    fetch(`${API_BASE}/api/topology/${projectId}`),
+                    fetch(`${API_BASE}/api/widgets`)
+                ]);
+
+                topology = await topoResp.json();
+                const widgetsData = await widgetsResp.json();
+                widgets = widgetsData.widgets || [];
+
+                renderLinks();
+                renderWidgets();
+            } catch (err) {
+                showStatus('Failed to load topology: ' + err.message, 'error');
+            }
+        }
+
+        // Get node name by ID
+        function getNodeName(nodeId) {
+            const node = topology.nodes.find(n => n.node_id === nodeId);
+            return node ? node.name : 'Unknown';
+        }
+
+        // Check if link has widget
+        function getLinkWidget(linkId) {
+            return widgets.find(w => w.link_id === linkId);
+        }
+
+        // Render links table
+        function renderLinks() {
+            const container = document.getElementById('linksContainer');
+
+            if (!topology.links || topology.links.length === 0) {
+                container.innerHTML = '<div class="empty">No links in this project</div>';
+                return;
+            }
+
+            let html = `
+                <table class="links-table">
+                    <thead>
+                        <tr>
+                            <th>Link</th>
+                            <th>Inverse</th>
+                            <th>Type</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            topology.links.forEach(link => {
+                const widget = getLinkWidget(link.link_id);
+                const hasWidget = !!widget;
+
+                const nodeA = link.nodes[0];
+                const nodeB = link.nodes[1];
+                const nameA = getNodeName(nodeA.node_id);
+                const nameB = getNodeName(nodeB.node_id);
+
+                html += `
+                    <tr data-link-id="${link.link_id}">
+                        <td class="link-nodes">
+                            ${hasWidget ? '<span class="has-widget"></span>' : ''}
+                            <span class="node-name">${nameA}</span>
+                            <span class="port-info">(${nodeA.adapter_number}/${nodeA.port_number})</span>
+                            &rarr;
+                            <span class="node-name">${nameB}</span>
+                            <span class="port-info">(${nodeB.adapter_number}/${nodeB.port_number})</span>
+                        </td>
+                        <td>
+                            <label class="inverse-toggle" title="Show from ${nameB}'s perspective">
+                                <input type="checkbox"
+                                       id="inv-${link.link_id}"
+                                       ${widget?.inverse ? 'checked' : ''}>
+                                <span>${nameB}</span>
+                            </label>
+                        </td>
+                        <td>
+                            <select class="chart-select" id="type-${link.link_id}">
+                                <option value="bar" ${widget?.chart_type !== 'timeseries' ? 'selected' : ''}>Bar</option>
+                                <option value="timeseries" ${widget?.chart_type === 'timeseries' ? 'selected' : ''}>Graph</option>
+                            </select>
+                        </td>
+                        <td>
+                            ${hasWidget ? `
+                                <button class="btn btn-update" onclick="updateWidget('${widget.widget_id}', '${link.link_id}')">Update</button>
+                                <button class="btn btn-delete" onclick="deleteWidget('${widget.widget_id}')">Delete</button>
+                            ` : `
+                                <button class="btn btn-create" onclick="createWidget('${link.link_id}')">Create</button>
+                            `}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // Render widgets list
+        function renderWidgets() {
+            const container = document.getElementById('widgetsContainer');
+
+            // Filter widgets for current project
+            const projectWidgets = widgets.filter(w => w.project_id === currentProject);
+
+            if (projectWidgets.length === 0) {
+                container.innerHTML = '<div class="empty">No active widgets in this project</div>';
+                return;
+            }
+
+            let html = '';
+            projectWidgets.forEach(w => {
+                const link = topology.links.find(l => l.link_id === w.link_id);
+                let linkDesc = w.link_id.substring(0, 8) + '...';
+                if (link) {
+                    const nameA = getNodeName(link.nodes[0].node_id);
+                    const nameB = getNodeName(link.nodes[1].node_id);
+                    linkDesc = `${nameA} - ${nameB}`;
+                }
+
+                html += `
+                    <div class="widget-item">
+                        <div class="widget-info">
+                            <span class="widget-link">${linkDesc}</span>
+                            <span class="widget-type">${w.chart_type}</span>
+                            ${w.inverse ? '<span class="widget-inverse">inverse</span>' : ''}
+                        </div>
+                        <div>
+                            <button class="btn btn-delete" onclick="deleteWidget('${w.widget_id}')">Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Create widget
+        async function createWidget(linkId) {
+            const inverse = document.getElementById(`inv-${linkId}`).checked;
+            const chartType = document.getElementById(`type-${linkId}`).value;
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/widgets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'create',
+                        link_id: linkId,
+                        project_id: currentProject,
+                        inverse: inverse,
+                        chart_type: chartType
+                    })
+                });
+
+                const data = await resp.json();
+                if (data.success) {
+                    showStatus('Widget created', 'success');
+                    loadTopology();  // Refresh
+                } else {
+                    showStatus('Failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showStatus('Error: ' + err.message, 'error');
+            }
+        }
+
+        // Update widget
+        async function updateWidget(widgetId, linkId) {
+            const inverse = document.getElementById(`inv-${linkId}`).checked;
+            const chartType = document.getElementById(`type-${linkId}`).value;
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/widgets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'update',
+                        widget_id: widgetId,
+                        inverse: inverse,
+                        chart_type: chartType
+                    })
+                });
+
+                const data = await resp.json();
+                if (data.success) {
+                    showStatus('Widget updated', 'success');
+                    loadTopology();  // Refresh
+                } else {
+                    showStatus('Failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showStatus('Error: ' + err.message, 'error');
+            }
+        }
+
+        // Delete widget
+        async function deleteWidget(widgetId) {
+            if (!confirm('Delete this widget?')) return;
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/widgets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'delete',
+                        widget_id: widgetId
+                    })
+                });
+
+                const data = await resp.json();
+                if (data.success) {
+                    showStatus('Widget deleted', 'success');
+                    loadTopology();  // Refresh
+                } else {
+                    showStatus('Failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showStatus('Error: ' + err.message, 'error');
+            }
+        }
+
+        // Show status message
+        function showStatus(message, type) {
+            const el = document.getElementById('status');
+            el.textContent = message;
+            el.className = `status ${type} show`;
+            setTimeout(() => el.classList.remove('show'), 3000);
+        }
+
+        // Load version from API
+        async function loadVersion() {
+            try {
+                const resp = await fetch(`${API_BASE}/version`);
+                const data = await resp.json();
+                document.getElementById('version').textContent = 'v' + data.version;
+            } catch (err) {
+                document.getElementById('version').textContent = '?';
+            }
+        }
+
+        // Initialize
+        loadVersion();
+        loadProjects();
+    </script>
+</body>
+</html>

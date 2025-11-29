@@ -18,6 +18,7 @@ const state = {
     widgets: [],
     bridges: [],
     selectedLink: null,
+    selectedNodes: null,  // {node1, node2} for the selected link
     autoRefreshTimer: null,
 };
 
@@ -65,7 +66,7 @@ async function getBridges() {
     return data.bridges || [];
 }
 
-async function createWidget(linkId, projectId, x, y) {
+async function createWidget(linkId, projectId, x, y, inverse = false, chartType = 'bar') {
     return await apiCall('/widgets', {
         method: 'POST',
         body: JSON.stringify({
@@ -74,6 +75,8 @@ async function createWidget(linkId, projectId, x, y) {
             project_id: projectId,
             x: x,
             y: y,
+            inverse: inverse,
+            chart_type: chartType,
         }),
     });
 }
@@ -224,6 +227,35 @@ function renderTopology(topology) {
     // Set viewBox for auto-scaling
     svg.attr('viewBox', `${minX} ${minY} ${maxX - minX} ${maxY - minY}`);
 
+    // Define arrow markers
+    const defs = svg.append('defs');
+
+    // Forward arrow (at end of line)
+    defs.append('marker')
+        .attr('id', 'arrow')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 8)
+        .attr('refY', 0)
+        .attr('markerWidth', 6)
+        .attr('markerHeight', 6)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', '#00aaff');
+
+    // Reverse arrow (at start of line)
+    defs.append('marker')
+        .attr('id', 'arrow-reverse')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 2)
+        .attr('refY', 0)
+        .attr('markerWidth', 6)
+        .attr('markerHeight', 6)
+        .attr('orient', 'auto-start-reverse')
+        .append('path')
+        .attr('d', 'M10,-5L0,0L10,5')
+        .attr('fill', '#00aaff');
+
     // Create a group for zoom/pan
     const g = svg.append('g');
 
@@ -233,10 +265,11 @@ function renderTopology(topology) {
         nodeMap[node.node_id] = node;
     });
 
-    // Check which links have widgets
-    const linksWithWidgets = new Set(
-        topology.widgets.map(w => w.link_id)
-    );
+    // Build widget lookup by link_id
+    const widgetByLink = {};
+    topology.widgets.forEach(w => {
+        widgetByLink[w.link_id] = w;
+    });
 
     // Render links first (below nodes)
     const links = g.selectAll('.link')
@@ -257,21 +290,54 @@ function renderTopology(topology) {
         if (!node1 || !node2) return;
 
         // Node centers (assuming 58x58 icons)
-        const x1 = node1.x + 29;
-        const y1 = node1.y + 29;
-        const x2 = node2.x + 29;
-        const y2 = node2.y + 29;
+        const cx1 = node1.x + 29;
+        const cy1 = node1.y + 29;
+        const cx2 = node2.x + 29;
+        const cy2 = node2.y + 29;
 
-        // Draw link line
+        // Check if widget exists and has inverse
+        const widget = widgetByLink[link.link_id];
+        const inverse = widget?.inverse || false;
+
+        // Calculate line endpoints at node edge (radius 28 to account for stroke)
+        const nodeRadius = 28;
+        const dx = cx2 - cx1;
+        const dy = cy2 - cy1;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        // Calculate endpoints based on inverse state
+        let x1, y1, x2, y2;
+        if (inverse) {
+            // Swap direction: line goes from node2 to node1
+            x1 = cx2 - nx * nodeRadius;
+            y1 = cy2 - ny * nodeRadius;
+            x2 = cx1 + nx * nodeRadius;
+            y2 = cy1 + ny * nodeRadius;
+        } else {
+            // Normal: line goes from node1 to node2
+            x1 = cx1 + nx * nodeRadius;
+            y1 = cy1 + ny * nodeRadius;
+            x2 = cx2 - nx * nodeRadius;
+            y2 = cy2 - ny * nodeRadius;
+        }
+
+        // Draw link line with arrow at destination
         const line = group.append('line')
             .attr('class', 'link-line')
             .attr('x1', x1)
             .attr('y1', y1)
             .attr('x2', x2)
             .attr('y2', y2)
-            .attr('data-link-id', link.link_id);
+            .attr('data-link-id', link.link_id)
+            .attr('data-cx1', cx1)
+            .attr('data-cy1', cy1)
+            .attr('data-cx2', cx2)
+            .attr('data-cy2', cy2)
+            .attr('marker-end', 'url(#arrow)');
 
-        if (linksWithWidgets.has(link.link_id)) {
+        if (widget) {
             line.classed('has-widget', true);
         }
 
@@ -281,13 +347,8 @@ function renderTopology(topology) {
             selectLink(link, node1, node2);
         });
 
-        // Port indicators
-        const indicatorOffset = 15;
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const len = Math.sqrt(dx * dx + dy * dy);
-        const nx = dx / len;
-        const ny = dy / len;
+        // Port indicators (small dots near line endpoints)
+        const indicatorOffset = 12;
 
         // Indicator at node1 end
         group.append('circle')
@@ -355,6 +416,7 @@ function renderTopology(topology) {
 
 function selectLink(link, node1, node2) {
     state.selectedLink = link;
+    state.selectedNodes = { node1, node2 };
 
     // Update SVG
     d3.selectAll('.link-line').classed('selected', false);
@@ -364,27 +426,97 @@ function selectLink(link, node1, node2) {
     const panel = document.getElementById('selected-link-panel');
     panel.style.display = 'block';
 
+    // Check if widget exists for this link
+    const widget = state.widgets.find(w => w.link_id === link.link_id);
+    const hasWidget = !!widget;
+
+    // Set inverse checkbox and chart type from widget state (or defaults)
+    const inverse = widget?.inverse || false;
+    const chartType = widget?.chart_type || 'bar';
+    document.getElementById('inverse-checkbox').checked = inverse;
+    document.getElementById('chart-type-select').value = chartType;
+
     document.getElementById('selected-link-id').textContent = link.link_id.substring(0, 8) + '...';
-    document.getElementById('selected-endpoints').textContent = `${node1.name} <-> ${node2.name}`;
+    // Show endpoints based on inverse state
+    if (inverse) {
+        document.getElementById('selected-endpoints').textContent = `${node2.name} → ${node1.name}`;
+    } else {
+        document.getElementById('selected-endpoints').textContent = `${node1.name} → ${node2.name}`;
+    }
     document.getElementById('selected-status').textContent = link.suspend ? 'Suspended' : 'Active';
 
-    // Check if widget exists for this link
-    const hasWidget = state.widgets.some(w => w.link_id === link.link_id);
+    // Update arrow direction on SVG based on widget inverse state
+    updateLinkArrow(link.link_id, inverse);
+
+    // Show appropriate button
     document.getElementById('create-widget-btn').style.display = hasWidget ? 'none' : 'block';
     document.getElementById('delete-widget-btn').style.display = hasWidget ? 'block' : 'none';
 
     // Store widget ID if exists
     if (hasWidget) {
-        const widget = state.widgets.find(w => w.link_id === link.link_id);
         document.getElementById('delete-widget-btn').dataset.widgetId = widget.widget_id;
+    } else {
+        document.getElementById('delete-widget-btn').dataset.widgetId = '';
     }
 }
 
 function deselectLink() {
     state.selectedLink = null;
+    state.selectedNodes = null;
 
     d3.selectAll('.link-line').classed('selected', false);
     document.getElementById('selected-link-panel').style.display = 'none';
+}
+
+function updateLinkArrow(linkId, inverse) {
+    const line = d3.select(`[data-link-id="${linkId}"]`);
+    if (line.empty()) return;
+
+    // Get stored center coordinates
+    const cx1 = parseFloat(line.attr('data-cx1'));
+    const cy1 = parseFloat(line.attr('data-cy1'));
+    const cx2 = parseFloat(line.attr('data-cx2'));
+    const cy2 = parseFloat(line.attr('data-cy2'));
+
+    const nodeRadius = 28;
+    const dx = cx2 - cx1;
+    const dy = cy2 - cy1;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const nx = dx / dist;
+    const ny = dy / dist;
+
+    if (inverse) {
+        // Swap direction: line goes from node2 to node1
+        const x1 = cx2 - nx * nodeRadius;
+        const y1 = cy2 - ny * nodeRadius;
+        const x2 = cx1 + nx * nodeRadius;
+        const y2 = cy1 + ny * nodeRadius;
+        line.attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2);
+    } else {
+        // Normal: line goes from node1 to node2
+        const x1 = cx1 + nx * nodeRadius;
+        const y1 = cy1 + ny * nodeRadius;
+        const x2 = cx2 - nx * nodeRadius;
+        const y2 = cy2 - ny * nodeRadius;
+        line.attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2);
+    }
+}
+
+function handleInverseChange() {
+    if (!state.selectedLink || !state.selectedNodes) return;
+
+    const inverse = document.getElementById('inverse-checkbox').checked;
+    const { node1, node2 } = state.selectedNodes;
+
+    // Update endpoints text
+    if (inverse) {
+        document.getElementById('selected-endpoints').textContent = `${node2.name} → ${node1.name}`;
+    } else {
+        document.getElementById('selected-endpoints').textContent = `${node1.name} → ${node2.name}`;
+    }
+
+    // Update arrow on topology
+    updateLinkArrow(state.selectedLink.link_id, inverse);
 }
 
 // ============================================================================
@@ -397,10 +529,17 @@ async function handleCreateWidget() {
         return;
     }
 
+    const inverse = document.getElementById('inverse-checkbox').checked;
+    const chartType = document.getElementById('chart-type-select').value;
+
     try {
         const result = await createWidget(
             state.selectedLink.link_id,
-            state.currentProject
+            state.currentProject,
+            null,
+            null,
+            inverse,
+            chartType
         );
 
         if (result.success) {
@@ -428,6 +567,11 @@ async function handleDeleteWidget() {
         if (result.success) {
             showModal('Success', result.message);
             await refreshAll();
+
+            // Update selected panel if link is still selected
+            if (state.selectedLink && state.selectedNodes) {
+                selectLink(state.selectedLink, state.selectedNodes.node1, state.selectedNodes.node2);
+            }
         } else {
             showModal('Error', result.error || 'Failed to delete widget', true);
         }
@@ -549,6 +693,11 @@ function setupEventHandlers() {
         handleDeleteWidget();
     });
 
+    // Inverse checkbox
+    document.getElementById('inverse-checkbox').addEventListener('change', () => {
+        handleInverseChange();
+    });
+
     // Modal close
     document.getElementById('modal-close').addEventListener('click', () => {
         hideModal();
@@ -577,10 +726,123 @@ function setupEventHandlers() {
 // Initialization
 // ============================================================================
 
+async function loadVersion() {
+    try {
+        const response = await fetch('/version');
+        const data = await response.json();
+        document.getElementById('version').textContent = `v${data.version}`;
+    } catch (error) {
+        document.getElementById('version').textContent = 'v?';
+    }
+}
+
+// ============================================================================
+// Proxy Mode Detection & Redirect
+// ============================================================================
+
+function showRedirectPage(mainProxyUrl) {
+    const overlay = document.getElementById('proxy-overlay');
+    overlay.innerHTML = `
+        <div class="overlay-content">
+            <h2>Redirecting to Main Proxy</h2>
+            <p>This is an internal proxy running inside GNS3.</p>
+            <p>Traffic monitoring requires the main proxy.</p>
+            <p class="redirect-url">Redirecting to: <a href="${mainProxyUrl}">${mainProxyUrl}</a></p>
+            <div class="loader"></div>
+        </div>
+    `;
+    overlay.style.display = 'flex';
+
+    // Auto-redirect after 1.5 seconds
+    setTimeout(() => {
+        window.location.href = mainProxyUrl;
+    }, 1500);
+}
+
+function showInstructionsPage(mainProxyUrl) {
+    const overlay = document.getElementById('proxy-overlay');
+    overlay.innerHTML = `
+        <div class="overlay-content instructions">
+            <h2>Internal Proxy - Limited Functionality</h2>
+            <p>This proxy is running inside a GNS3 container and cannot monitor traffic.</p>
+            <p>Traffic widgets require the <strong>main proxy</strong> with host access.</p>
+
+            <h3>Option 1: Access Main Proxy Directly</h3>
+            <p>If the main proxy is running, access it at:</p>
+            <p class="code-block"><a href="${mainProxyUrl}">${mainProxyUrl}</a></p>
+
+            <h3>Option 2: Deploy Main Proxy</h3>
+            <p>Run this command on your GNS3 host:</p>
+            <pre class="code-block">docker run -d --name gns3-ssh-proxy \\
+  --network host --pid host \\
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \\
+  -e CONTROLLER_PASSWORD=your_password \\
+  chistokhinsv/gns3-ssh-proxy:latest</pre>
+
+            <p class="note">The main proxy needs <code>--pid host</code> to access ubridge traffic stats.</p>
+        </div>
+    `;
+    overlay.style.display = 'flex';
+}
+
+async function checkProxyMode() {
+    try {
+        const resp = await fetch('/api/proxy-mode');
+        const data = await resp.json();
+
+        if (data.mode === 'internal') {
+            // Construct main proxy URL
+            // Use browser's hostname (same host user used to access GNS3) because:
+            // - Backend's CONTROLLER_HOST may be Docker internal IP (172.17.0.1)
+            // - User's browser can only reach the external GNS3 host IP
+            // GNS3's HTTP console proxy modifies port numbers in responses,
+            // so backend sends port as array of digits to avoid modification
+            const host = window.location.hostname;
+            const port = data.main_proxy_port_digits ? data.main_proxy_port_digits.join('') : '8022';
+            const mainProxyUrl = `http://${host}:${port}`;
+
+            // Try to reach main proxy from browser
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+                const mainResp = await fetch(`${mainProxyUrl}/version`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                if (mainResp.ok) {
+                    // Main proxy available - redirect
+                    showRedirectPage(mainProxyUrl);
+                    return false;
+                }
+            } catch (e) {
+                // Main proxy not reachable (timeout, network error, CORS)
+                console.log('Main proxy not reachable:', e.message);
+            }
+
+            // Show instructions
+            showInstructionsPage(mainProxyUrl);
+            return false;
+        }
+        return true; // Main proxy - continue normal init
+    } catch (e) {
+        console.log('Proxy mode check failed, assuming main proxy:', e.message);
+        return true; // Assume main proxy on error
+    }
+}
+
 async function init() {
     console.log('GNS3 Traffic Monitor initializing...');
 
+    // Check if we're an internal proxy - if so, redirect or show instructions
+    const shouldContinue = await checkProxyMode();
+    if (!shouldContinue) {
+        return; // Stop init - overlay is shown
+    }
+
     setupEventHandlers();
+    await loadVersion();
     await loadProjects();
     await refreshAll();
     startAutoRefresh();

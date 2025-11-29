@@ -9,6 +9,9 @@
     <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
+    <!-- Proxy mode overlay (shown for internal proxies) -->
+    <div id="proxy-overlay" class="proxy-overlay" style="display: none;"></div>
+
     <div class="container">
         <!-- Header -->
         <header class="header">
@@ -72,6 +75,16 @@
                         <p><strong>Link ID:</strong> <span id="selected-link-id"></span></p>
                         <p><strong>Endpoints:</strong> <span id="selected-endpoints"></span></p>
                         <p><strong>Status:</strong> <span id="selected-status"></span></p>
+                        <div class="widget-options">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="inverse-checkbox">
+                                <span>Inverse direction</span>
+                            </label>
+                            <select id="chart-type-select" class="select-small">
+                                <option value="bar">Bar chart</option>
+                                <option value="timeseries">Time series</option>
+                            </select>
+                        </div>
                         <div class="selected-actions">
                             <button id="create-widget-btn" class="btn btn-primary">Create Widget</button>
                             <button id="delete-widget-btn" class="btn btn-danger" style="display: none;">Delete Widget</button>
@@ -86,6 +99,7 @@
             <span id="connection-status" class="status-indicator connected">Connected</span>
             <span id="last-update">Last update: --</span>
             <span id="auto-refresh-status">Auto-refresh: 15s</span>
+            <span id="version" class="version">v...</span>
         </footer>
     </div>
 

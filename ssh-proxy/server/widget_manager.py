@@ -1,5 +1,5 @@
 """
-Widget Manager for Traffic Graph Widgets (v0.4.0)
+Widget Manager for Traffic Graph Widgets (v0.4.2)
 
 Manages lifecycle of traffic monitoring widgets embedded in GNS3 topology.
 Widgets display real-time traffic statistics as mini bar charts via GNS3 Drawing API.
@@ -16,6 +16,18 @@ GNS3 uses ubridge for networking, not Linux bridges. Each node has its own ubrid
 instance running on a unique TCP port. Bridge names follow pattern:
 - QEMU-<node_id>-<adapter_number> for QEMU nodes
 - <node_id>-<adapter_number> for NAT/cloud nodes
+
+v0.4.2: Widget visualization enhancements:
+- inverse flag: Swap TX/RX direction to show traffic from second node's perspective
+- chart_type: Support for "bar" (default) and "timeseries" charts
+- Direction arrow: Visual indicator showing traffic flow direction
+- History buffer: Circular buffer (30 data points) for time-series charts
+- Time-series SVG: Area chart with TX above line (blue), RX below (green)
+
+v0.4.3: Widget update support & improved visibility:
+- update_widget(): Modify inverse, chart_type, position without recreation
+- Arrows now larger (15x12px) and bright orange (#ff8800) for visibility
+- Arrow has stroke outline for better contrast
 """
 
 import asyncio
@@ -144,6 +156,8 @@ class WidgetManager:
         project_id: str,
         x: int | None = None,
         y: int | None = None,
+        inverse: bool = False,
+        chart_type: str = "bar",
     ) -> WidgetInfo:
         """Create a traffic widget for a link"""
         # Check if widget already exists for this link
@@ -166,8 +180,12 @@ class WidgetManager:
         # Read initial stats via ubridge TCP
         stats = await self._ubridge_get_stats(ubridge_port, bridge_name)
 
-        # Generate initial SVG
-        svg = self._generate_svg(stats, None)
+        # Apply inverse flag (swap TX/RX if requested)
+        if inverse:
+            stats = self._swap_stats(stats)
+
+        # Generate initial SVG (based on chart_type)
+        svg = self._generate_svg(stats, None, inverse=inverse, chart_type=chart_type)
 
         # Create drawing in GNS3
         drawing_data = {
@@ -191,6 +209,8 @@ class WidgetManager:
             project_id=project_id,
             x=x,
             y=y,
+            inverse=inverse,
+            chart_type=chart_type,
             last_stats=stats,
         )
 
@@ -221,6 +241,77 @@ class WidgetManager:
     def list_widgets(self) -> list[WidgetInfo]:
         """List all widgets"""
         return list(self.widgets.values())
+
+    async def update_widget(
+        self,
+        widget_id: str,
+        inverse: bool | None = None,
+        chart_type: str | None = None,
+        x: int | None = None,
+        y: int | None = None,
+    ) -> WidgetInfo:
+        """Update widget parameters (inverse, chart_type, position)
+
+        Changes take effect on next update cycle (15 seconds).
+        Position changes are applied immediately.
+        """
+        if widget_id not in self.widgets:
+            raise ValueError(f"Widget {widget_id} not found")
+
+        widget = self.widgets[widget_id]
+        changed = False
+
+        # Update parameters if provided
+        if inverse is not None and inverse != widget.inverse:
+            widget.inverse = inverse
+            # Clear history when changing direction (data would be confusing)
+            widget.history = []
+            changed = True
+
+        if chart_type is not None and chart_type != widget.chart_type:
+            if chart_type not in ("bar", "timeseries"):
+                raise ValueError(f"Invalid chart_type: {chart_type}. Must be 'bar' or 'timeseries'")
+            widget.chart_type = chart_type
+            changed = True
+
+        # Update position if provided
+        position_changed = False
+        if x is not None and x != widget.x:
+            widget.x = x
+            position_changed = True
+        if y is not None and y != widget.y:
+            widget.y = y
+            position_changed = True
+
+        # Apply position change to GNS3 drawing immediately
+        if position_changed:
+            await self._update_drawing(
+                widget.project_id,
+                widget.drawing_id,
+                {"x": widget.x, "y": widget.y}
+            )
+            changed = True
+
+        # Regenerate SVG if chart settings changed (applies new arrow direction)
+        if inverse is not None or chart_type is not None:
+            svg = self._generate_svg(
+                widget.last_stats,
+                widget.last_delta,
+                inverse=widget.inverse,
+                chart_type=widget.chart_type,
+                history=widget.history,
+            )
+            await self._update_drawing(
+                widget.project_id,
+                widget.drawing_id,
+                {"svg": svg}
+            )
+
+        if changed:
+            self._save_state()
+            logger.info(f"Updated widget {widget_id}")
+
+        return widget
 
     async def refresh_widgets(self) -> int:
         """Force immediate refresh of all widgets"""
@@ -467,6 +558,28 @@ class WidgetManager:
     # Traffic Statistics
     # =========================================================================
 
+    def _swap_stats(self, stats: TrafficStats) -> TrafficStats:
+        """Swap TX/RX values for inverse mode (second node's perspective)"""
+        return TrafficStats(
+            rx_bytes=stats.tx_bytes,
+            tx_bytes=stats.rx_bytes,
+            rx_packets=stats.tx_packets,
+            tx_packets=stats.rx_packets,
+            rx_errors=stats.tx_errors,
+            tx_errors=stats.rx_errors,
+            timestamp=stats.timestamp,
+        )
+
+    def _swap_delta(self, delta: TrafficDelta) -> TrafficDelta:
+        """Swap TX/RX values in delta for inverse mode"""
+        return TrafficDelta(
+            rx_bps=delta.tx_bps,
+            tx_bps=delta.rx_bps,
+            rx_pps=delta.tx_pps,
+            tx_pps=delta.rx_pps,
+            interval_seconds=delta.interval_seconds,
+        )
+
     def _calculate_delta(
         self,
         current: TrafficStats,
@@ -507,8 +620,22 @@ class WidgetManager:
         self,
         stats: TrafficStats,
         delta: TrafficDelta | None,
+        inverse: bool = False,
+        chart_type: str = "bar",
+        history: list[TrafficDelta] | None = None,
     ) -> str:
-        """Generate mini bar chart SVG widget"""
+        """Generate SVG widget based on chart_type"""
+        if chart_type == "timeseries" and history:
+            return self._generate_timeseries_svg(history, inverse)
+        else:
+            return self._generate_bar_svg(delta, inverse)
+
+    def _generate_bar_svg(
+        self,
+        delta: TrafficDelta | None,
+        inverse: bool = False,
+    ) -> str:
+        """Generate mini bar chart SVG widget with direction arrow"""
         rx_rate = delta.rx_bps if delta else 0
         tx_rate = delta.tx_bps if delta else 0
 
@@ -529,10 +656,24 @@ class WidgetManager:
         rx_label = self._format_rate(rx_rate)
         tx_label = self._format_rate(tx_rate)
 
+        # Direction arrow: points right by default, left if inverse
+        # Made larger (15x12px) and brighter (#ff8800 orange) for visibility
+        if inverse:
+            # Left-pointing arrow (traffic direction from second node)
+            # Arrow at left side: tip at x=2, base at x=12
+            arrow = '<polygon points="2,30 12,24 12,36" fill="#ff8800" stroke="#cc6600" stroke-width="1"/>'
+        else:
+            # Right-pointing arrow (traffic direction from first node)
+            # Arrow at right side: tip at x=98, base at x=88
+            arrow = '<polygon points="98,30 88,24 88,36" fill="#ff8800" stroke="#cc6600" stroke-width="1"/>'
+
         svg = f'''<svg width="{WIDGET_WIDTH}" height="{WIDGET_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <!-- Background -->
   <rect x="0" y="0" width="{WIDGET_WIDTH}" height="{WIDGET_HEIGHT}"
         fill="#1a1a2e" stroke="#4a4a6a" stroke-width="1" rx="3"/>
+
+  <!-- Direction Arrow -->
+  {arrow}
 
   <!-- RX Bar (green) -->
   <rect x="15" y="{rx_y}" width="30" height="{rx_height}"
@@ -559,17 +700,130 @@ class WidgetManager:
 </svg>'''
         return svg
 
+    def _generate_timeseries_svg(
+        self,
+        history: list[TrafficDelta],
+        inverse: bool = False,
+    ) -> str:
+        """Generate time-series area chart SVG widget.
+
+        Layout: TX (blue) above center line, RX (green) below.
+        Time flows left-to-right (oldest on left, newest on right).
+        """
+        width, height = WIDGET_WIDTH, WIDGET_HEIGHT  # Same as bar widget (100x60)
+        mid_y = height // 2  # Zero line at center (30)
+        margin_x = 5
+        margin_y = 5
+        graph_width = width - 2 * margin_x  # 90
+        graph_height = mid_y - margin_y  # 25 pixels for each direction
+
+        # Need at least 2 points for a graph
+        if len(history) < 2:
+            # Return empty placeholder
+            return f'''<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="#1a1a2e" stroke="#4a4a6a" stroke-width="1" rx="3"/>
+  <line x1="{margin_x}" y1="{mid_y}" x2="{width-margin_x}" y2="{mid_y}" stroke="#444" stroke-width="1"/>
+  <text x="{width//2}" y="{mid_y + 3}" font-family="monospace" font-size="8" fill="#666" text-anchor="middle">...</text>
+  <desc>gns3-traffic-widget:proxy={self.proxy_id}</desc>
+</svg>'''
+
+        # Find max rate for scaling (use same scale for TX and RX for comparison)
+        max_rate = max(
+            max((d.tx_bps for d in history), default=1),
+            max((d.rx_bps for d in history), default=1),
+            1  # Minimum to avoid division by zero
+        )
+
+        # Build paths for TX (above) and RX (below)
+        num_points = len(history)
+        x_step = graph_width / (num_points - 1) if num_points > 1 else graph_width
+
+        # TX path (above zero line - grows upward)
+        tx_points = []
+        for i, delta in enumerate(history):
+            x = margin_x + i * x_step
+            # Scale to graph_height, subtract from mid_y to grow upward
+            y = mid_y - (delta.tx_bps / max_rate) * graph_height
+            tx_points.append(f"{x:.1f},{y:.1f}")
+
+        # Close TX path as area (down to zero line, back to start)
+        tx_path = (
+            f"M {margin_x},{mid_y} "
+            f"L {' L '.join(tx_points)} "
+            f"L {margin_x + (num_points - 1) * x_step},{mid_y} Z"
+        )
+
+        # RX path (below zero line - grows downward)
+        rx_points = []
+        for i, delta in enumerate(history):
+            x = margin_x + i * x_step
+            # Scale to graph_height, add to mid_y to grow downward
+            y = mid_y + (delta.rx_bps / max_rate) * graph_height
+            rx_points.append(f"{x:.1f},{y:.1f}")
+
+        # Close RX path as area (up to zero line, back to start)
+        rx_path = (
+            f"M {margin_x},{mid_y} "
+            f"L {' L '.join(rx_points)} "
+            f"L {margin_x + (num_points - 1) * x_step},{mid_y} Z"
+        )
+
+        # Current values (latest point)
+        latest = history[-1]
+        tx_label = self._format_rate(latest.tx_bps)
+        rx_label = self._format_rate(latest.rx_bps)
+
+        # Direction arrow: larger (15x12px), bright orange for visibility
+        # Same positions as bar widget (right tip at 98, left tip at 2)
+        if inverse:
+            # Left-pointing arrow: tip at x=2, base at x=12
+            arrow = '<polygon points="2,30 12,24 12,36" fill="#ff8800" stroke="#cc6600" stroke-width="1"/>'
+        else:
+            # Right-pointing arrow: tip at x=98, base at x=88
+            arrow = '<polygon points="98,30 88,24 88,36" fill="#ff8800" stroke="#cc6600" stroke-width="1"/>'
+
+        svg = f'''<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="#1a1a2e" stroke="#4a4a6a" stroke-width="1" rx="3"/>
+
+  <!-- Zero line -->
+  <line x1="{margin_x}" y1="{mid_y}" x2="{width - margin_x}" y2="{mid_y}" stroke="#444" stroke-width="1"/>
+
+  <!-- TX area (blue, above line) -->
+  <path d="{tx_path}" fill="#00aaff" opacity="0.6"/>
+
+  <!-- RX area (green, below line) -->
+  <path d="{rx_path}" fill="#00ff88" opacity="0.6"/>
+
+  <!-- Current value labels -->
+  <text x="{width - 3}" y="10" font-family="monospace" font-size="7" fill="#00aaff" text-anchor="end">{tx_label}</text>
+  <text x="{width - 3}" y="{height - 3}" font-family="monospace" font-size="7" fill="#00ff88" text-anchor="end">{rx_label}</text>
+
+  <!-- Direction arrow -->
+  {arrow}
+
+  <!-- Widget metadata (hidden) -->
+  <desc>gns3-traffic-widget:proxy={self.proxy_id}:timeseries</desc>
+</svg>'''
+        return svg
+
     # =========================================================================
     # Update Loop
     # =========================================================================
 
     async def _update_loop(self) -> None:
         """Background task to update all widgets every UPDATE_INTERVAL seconds"""
+        verify_counter = 0
         while self._running:
             try:
                 await asyncio.sleep(UPDATE_INTERVAL)
                 if self._running:
                     await self._update_all_widgets()
+                    # Verify widgets every 6 cycles (~30s) to clean up orphans
+                    verify_counter += 1
+                    if verify_counter >= 6:
+                        verify_counter = 0
+                        await self._verify_widgets()
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -585,18 +839,44 @@ class WidgetManager:
                     widget.ubridge_port, widget.bridge_name
                 )
 
+                # Apply inverse flag (swap TX/RX if requested)
+                if widget.inverse:
+                    stats = self._swap_stats(stats)
+
                 # Calculate delta from previous stats
                 delta = self._calculate_delta(stats, widget.last_stats)
 
-                # Generate new SVG
-                svg = self._generate_svg(stats, delta)
+                # Add delta to history (circular buffer for time-series chart)
+                if delta:
+                    widget.history.append(delta)
+                    # Trim to max_history
+                    if len(widget.history) > widget.max_history:
+                        widget.history = widget.history[-widget.max_history:]
+
+                # Generate new SVG (based on chart_type)
+                svg = self._generate_svg(
+                    stats, delta,
+                    inverse=widget.inverse,
+                    chart_type=widget.chart_type,
+                    history=widget.history,
+                )
 
                 # Update drawing in GNS3
-                await self._update_drawing(
-                    widget.project_id,
-                    widget.drawing_id,
-                    {"svg": svg}
-                )
+                try:
+                    await self._update_drawing(
+                        widget.project_id,
+                        widget.drawing_id,
+                        {"svg": svg}
+                    )
+                except Exception as update_err:
+                    # Drawing might have been deleted - try to recreate
+                    logger.warning(f"Update failed for widget {widget.widget_id}, recreating: {update_err}")
+                    new_drawing_id = await self._recreate_widget_drawing(widget)
+                    if new_drawing_id:
+                        widget.drawing_id = new_drawing_id
+                        logger.info(f"Recreated drawing for widget {widget.widget_id}")
+                    else:
+                        raise update_err
 
                 # Update widget state
                 widget.last_stats = stats
@@ -674,21 +954,83 @@ class WidgetManager:
             logger.warning(f"Failed to save state: {e}")
 
     async def _verify_widgets(self) -> None:
-        """Verify widgets exist in GNS3, remove stale entries"""
+        """Verify widgets: remove orphans (deleted links), recreate missing drawings"""
+        recreated = 0
         to_remove = []
+
         for widget_id, widget in self.widgets.items():
+            # First check if the link still exists
             try:
-                # Check if drawing still exists
+                await self._get_link(widget.project_id, widget.link_id)
+            except Exception:
+                # Link was deleted - remove the widget
+                logger.warning(f"Widget {widget_id} link {widget.link_id} no longer exists, removing widget")
+                to_remove.append(widget_id)
+                # Also delete the drawing if it exists
+                try:
+                    await self._delete_drawing(widget.project_id, widget.drawing_id)
+                except Exception:
+                    pass  # Drawing may already be gone
+                continue
+
+            # Link exists - check if drawing still exists
+            try:
                 await self._get_drawing(widget.project_id, widget.drawing_id)
             except Exception:
-                logger.warning(f"Widget {widget_id} drawing not found, removing")
-                to_remove.append(widget_id)
+                # Drawing not found - try to recreate it
+                logger.warning(f"Widget {widget_id} drawing not found, recreating...")
+                try:
+                    new_drawing_id = await self._recreate_widget_drawing(widget)
+                    if new_drawing_id:
+                        widget.drawing_id = new_drawing_id
+                        recreated += 1
+                        logger.info(f"Recreated drawing for widget {widget_id}")
+                    else:
+                        to_remove.append(widget_id)
+                except Exception as e:
+                    logger.warning(f"Failed to recreate widget {widget_id}: {e}")
+                    to_remove.append(widget_id)
 
         for widget_id in to_remove:
-            del self.widgets[widget_id]
+            if widget_id in self.widgets:
+                del self.widgets[widget_id]
+                logger.warning(f"Removed stale widget {widget_id}")
 
-        if to_remove:
+        if recreated > 0 or to_remove:
             self._save_state()
+
+    async def _recreate_widget_drawing(self, widget: WidgetInfo) -> str | None:
+        """Recreate a missing drawing for a widget. Returns new drawing_id or None."""
+        try:
+            # Get current stats to generate SVG
+            stats = await self._ubridge_get_stats(widget.ubridge_port, widget.bridge_name)
+
+            if widget.inverse:
+                stats = self._swap_stats(stats)
+
+            # Generate SVG with current state
+            svg = self._generate_svg(
+                stats, None,
+                inverse=widget.inverse,
+                chart_type=widget.chart_type,
+                history=widget.history,
+            )
+
+            # Create new drawing in GNS3
+            drawing_data = {
+                "x": widget.x,
+                "y": widget.y,
+                "z": 100,
+                "svg": svg,
+                "rotation": 0,
+                "locked": False,
+            }
+            drawing = await self._create_drawing(widget.project_id, drawing_data)
+            return drawing["drawing_id"]
+
+        except Exception as e:
+            logger.warning(f"Failed to recreate drawing: {e}")
+            return None
 
     # =========================================================================
     # GNS3 API Integration

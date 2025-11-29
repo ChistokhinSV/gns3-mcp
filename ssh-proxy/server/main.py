@@ -8,7 +8,7 @@ Provides REST API for SSH automation using Netmiko with dual storage:
 Port: 8022 (SSH-like mnemonic)
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.5"
 
 import base64
 import logging
@@ -22,7 +22,8 @@ from typing import Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, HTMLResponse
 
 from .models import (
     BridgeInfo,
@@ -148,6 +149,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Add CORS middleware to allow internal proxies to check main proxy availability
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (internal proxies on various ports)
+    allow_credentials=True,
+    allow_methods=["GET"],  # Only need GET for /version check
+    allow_headers=["*"],
+)
+
 
 # ============================================================================
 # Endpoints
@@ -183,6 +193,37 @@ async def get_version():
         "service": "gns3-ssh-proxy",
         "features": ["ssh_automation", "proxy_discovery"]
     }
+
+
+@app.get("/api/proxy-mode")
+async def get_proxy_mode():
+    """
+    Get proxy mode (main or internal)
+
+    Detects if running inside a GNS3-managed container (internal proxy)
+    or as standalone main proxy. GNS3 mounts /gns3/init.sh for containers
+    it manages.
+
+    For internal proxies, also returns the main proxy URL constructed from
+    CONTROLLER_HOST environment variable.
+
+    Returns:
+        mode: "main" or "internal"
+        main_proxy_url: URL to main proxy (only for internal mode)
+    """
+    # GNS3 mounts /gns3/init.sh for containers it manages
+    is_gns3_container = os.path.exists("/gns3/init.sh")
+
+    result = {"mode": "internal" if is_gns3_container else "main"}
+
+    if is_gns3_container:
+        # Return main proxy port as array of digits
+        # GNS3's HTTP console proxy modifies port numbers in responses (e.g., "8022" -> "5016")
+        # Encoding as [8, 0, 2, 2] bypasses this modification
+        # Frontend uses browser's window.location.hostname (same host user accessed)
+        result["main_proxy_port_digits"] = [8, 0, 2, 2]
+
+    return result
 
 
 @app.post("/ssh/configure", response_model=ConfigureSSHResponse)
@@ -1170,6 +1211,7 @@ async def manage_widgets(request: WidgetRequest):
 
     Actions:
         - create: Create widget for a link (requires link_id, project_id)
+        - update: Update widget parameters (requires widget_id, supports inverse, chart_type, x, y)
         - delete: Delete widget by ID (requires widget_id)
         - list: List all widgets managed by this proxy
         - refresh: Force immediate update of all widgets
@@ -1186,6 +1228,14 @@ async def manage_widgets(request: WidgetRequest):
             "action": "create",
             "link_id": "abc-123",
             "project_id": "def-456"
+        }
+
+        # Update widget (change chart type or direction)
+        POST /api/widgets {
+            "action": "update",
+            "widget_id": "widget-uuid",
+            "inverse": true,
+            "chart_type": "timeseries"
         }
 
         # List widgets
@@ -1215,7 +1265,9 @@ async def manage_widgets(request: WidgetRequest):
                 link_id=request.link_id,
                 project_id=request.project_id,
                 x=request.x,
-                y=request.y
+                y=request.y,
+                inverse=request.inverse if request.inverse is not None else False,
+                chart_type=request.chart_type if request.chart_type else "bar",
             )
 
             return WidgetResponse(
@@ -1223,6 +1275,28 @@ async def manage_widgets(request: WidgetRequest):
                 action="create",
                 widget=widget,
                 message=f"Created widget for link {request.link_id}"
+            )
+
+        elif request.action == "update":
+            if not request.widget_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="widget_id required for update"
+                )
+
+            widget = await widget_manager.update_widget(
+                widget_id=request.widget_id,
+                inverse=request.inverse,  # None means "don't change"
+                chart_type=request.chart_type,  # None means "don't change"
+                x=request.x,
+                y=request.y,
+            )
+
+            return WidgetResponse(
+                success=True,
+                action="update",
+                widget=widget,
+                message=f"Updated widget {request.widget_id}"
             )
 
         elif request.action == "delete":
@@ -1410,6 +1484,394 @@ async def get_projects():
             status_code=500,
             detail=f"Failed to list projects: {e}"
         )
+
+
+# ============================================================================
+# Web UI
+# ============================================================================
+
+# Embedded widgets UI HTML (avoids file path issues in container)
+WIDGETS_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GNS3 Traffic Widgets</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 { color: #00aaff; margin-bottom: 20px; font-size: 1.5rem; }
+        h2 { color: #888; margin: 20px 0 10px; font-size: 1.1rem; }
+        .container { max-width: 900px; margin: 0 auto; padding-bottom: 50px; }
+        .project-selector {
+            background: #252542;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .project-selector select {
+            width: 100%;
+            padding: 10px;
+            background: #1a1a2e;
+            border: 1px solid #4a4a6a;
+            color: #e0e0e0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .links-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #252542;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .links-table th {
+            background: #1a1a2e;
+            padding: 12px;
+            text-align: left;
+            color: #888;
+            font-weight: 500;
+        }
+        .links-table td {
+            padding: 10px 12px;
+            border-top: 1px solid #3a3a5a;
+        }
+        .links-table tr:hover { background: #2a2a4a; }
+        .link-nodes { font-size: 13px; }
+        .node-name { color: #00ff88; font-weight: 500; }
+        .port-info { color: #666; font-size: 11px; }
+        .controls { display: flex; gap: 8px; align-items: center; }
+        .inverse-toggle {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #888;
+        }
+        .inverse-toggle input { width: 14px; height: 14px; cursor: pointer; }
+        .inverse-toggle:hover { color: #ff8800; }
+        .chart-select {
+            padding: 4px 8px;
+            background: #1a1a2e;
+            border: 1px solid #4a4a6a;
+            color: #e0e0e0;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .chart-select:hover { border-color: #00aaff; }
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-create { background: #00aaff; color: #fff; }
+        .btn-create:hover { background: #0088cc; }
+        .btn-create:disabled { background: #4a4a6a; cursor: not-allowed; }
+        .btn-delete { background: #ff4444; color: #fff; padding: 4px 8px; }
+        .btn-delete:hover { background: #cc3333; }
+        .btn-update { background: #ff8800; color: #fff; padding: 4px 8px; }
+        .btn-update:hover { background: #cc6600; }
+        .has-widget {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .widgets-list {
+            background: #252542;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .widget-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #3a3a5a;
+        }
+        .widget-item:last-child { border-bottom: none; }
+        .widget-info { display: flex; gap: 15px; align-items: center; }
+        .widget-link { color: #00ff88; font-weight: 500; }
+        .widget-type { color: #00aaff; font-size: 12px; }
+        .widget-inverse { color: #ff8800; font-size: 12px; }
+        .status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 13px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 100;
+        }
+        .status.show { opacity: 1; }
+        .status.success { background: #00aa44; color: #fff; }
+        .status.error { background: #ff4444; color: #fff; }
+        .loading { text-align: center; padding: 40px; color: #666; }
+        .empty { text-align: center; padding: 30px; color: #666; font-style: italic; }
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #151528;
+            padding: 8px 20px;
+            font-size: 11px;
+            color: #555;
+            border-top: 1px solid #2a2a4a;
+        }
+        .footer-version { color: #00aaff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Traffic Widget Manager</h1>
+        <div class="project-selector">
+            <select id="projectSelect" onchange="loadTopology()">
+                <option value="">Select a project...</option>
+            </select>
+        </div>
+        <h2>Available Links</h2>
+        <div id="linksContainer"><div class="empty">Select a project to view links</div></div>
+        <h2>Active Widgets</h2>
+        <div id="widgetsContainer" class="widgets-list"><div class="empty">No active widgets</div></div>
+    </div>
+    <div id="status" class="status"></div>
+    <div class="footer">GNS3 SSH Proxy <span id="version" class="footer-version">...</span></div>
+    <script>
+        const API_BASE = '';
+        let currentProject = null;
+        let topology = null;
+        let widgets = [];
+
+        async function loadProjects() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/projects`);
+                const data = await resp.json();
+                const select = document.getElementById('projectSelect');
+                select.innerHTML = '<option value="">Select a project...</option>';
+                data.projects.sort((a, b) => {
+                    if (a.status === 'opened' && b.status !== 'opened') return -1;
+                    if (b.status === 'opened' && a.status !== 'opened') return 1;
+                    return a.name.localeCompare(b.name);
+                });
+                data.projects.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.project_id;
+                    opt.textContent = p.name + (p.status === 'opened' ? ' (open)' : '');
+                    select.appendChild(opt);
+                });
+                const opened = data.projects.find(p => p.status === 'opened');
+                if (opened) {
+                    select.value = opened.project_id;
+                    loadTopology();
+                }
+            } catch (err) {
+                showStatus('Failed to load projects: ' + err.message, 'error');
+            }
+        }
+
+        async function loadTopology() {
+            const projectId = document.getElementById('projectSelect').value;
+            if (!projectId) {
+                document.getElementById('linksContainer').innerHTML = '<div class="empty">Select a project to view links</div>';
+                return;
+            }
+            currentProject = projectId;
+            document.getElementById('linksContainer').innerHTML = '<div class="loading">Loading...</div>';
+            try {
+                const [topoResp, widgetsResp] = await Promise.all([
+                    fetch(`${API_BASE}/api/topology/${projectId}`),
+                    fetch(`${API_BASE}/api/widgets`)
+                ]);
+                topology = await topoResp.json();
+                const widgetsData = await widgetsResp.json();
+                widgets = widgetsData.widgets || [];
+                renderLinks();
+                renderWidgets();
+            } catch (err) {
+                showStatus('Failed to load topology: ' + err.message, 'error');
+            }
+        }
+
+        function getNodeName(nodeId) {
+            const node = topology.nodes.find(n => n.node_id === nodeId);
+            return node ? node.name : 'Unknown';
+        }
+
+        function getLinkWidget(linkId) {
+            return widgets.find(w => w.link_id === linkId);
+        }
+
+        function renderLinks() {
+            const container = document.getElementById('linksContainer');
+            if (!topology.links || topology.links.length === 0) {
+                container.innerHTML = '<div class="empty">No links in this project</div>';
+                return;
+            }
+            let html = '<table class="links-table"><thead><tr><th>Link</th><th>Inverse</th><th>Type</th><th>Action</th></tr></thead><tbody>';
+            topology.links.forEach(link => {
+                const widget = getLinkWidget(link.link_id);
+                const hasWidget = !!widget;
+                const nodeA = link.nodes[0];
+                const nodeB = link.nodes[1];
+                const nameA = getNodeName(nodeA.node_id);
+                const nameB = getNodeName(nodeB.node_id);
+                html += `<tr data-link-id="${link.link_id}">
+                    <td class="link-nodes">
+                        ${hasWidget ? '<span class="has-widget"></span>' : ''}
+                        <span class="node-name">${nameA}</span>
+                        <span class="port-info">(${nodeA.adapter_number}/${nodeA.port_number})</span>
+                        &rarr;
+                        <span class="node-name">${nameB}</span>
+                        <span class="port-info">(${nodeB.adapter_number}/${nodeB.port_number})</span>
+                    </td>
+                    <td>
+                        <label class="inverse-toggle" title="Show from ${nameB}'s perspective">
+                            <input type="checkbox" id="inv-${link.link_id}" ${widget?.inverse ? 'checked' : ''}>
+                            <span>${nameB}</span>
+                        </label>
+                    </td>
+                    <td>
+                        <select class="chart-select" id="type-${link.link_id}">
+                            <option value="bar" ${widget?.chart_type !== 'timeseries' ? 'selected' : ''}>Bar</option>
+                            <option value="timeseries" ${widget?.chart_type === 'timeseries' ? 'selected' : ''}>Graph</option>
+                        </select>
+                    </td>
+                    <td>
+                        ${hasWidget ? `
+                            <button class="btn btn-update" onclick="updateWidget('${widget.widget_id}', '${link.link_id}')">Update</button>
+                            <button class="btn btn-delete" onclick="deleteWidget('${widget.widget_id}')">Delete</button>
+                        ` : `
+                            <button class="btn btn-create" onclick="createWidget('${link.link_id}')">Create</button>
+                        `}
+                    </td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function renderWidgets() {
+            const container = document.getElementById('widgetsContainer');
+            const projectWidgets = widgets.filter(w => w.project_id === currentProject);
+            if (projectWidgets.length === 0) {
+                container.innerHTML = '<div class="empty">No active widgets in this project</div>';
+                return;
+            }
+            let html = '';
+            projectWidgets.forEach(w => {
+                const link = topology.links.find(l => l.link_id === w.link_id);
+                let linkDesc = w.link_id.substring(0, 8) + '...';
+                if (link) {
+                    const nameA = getNodeName(link.nodes[0].node_id);
+                    const nameB = getNodeName(link.nodes[1].node_id);
+                    linkDesc = `${nameA} - ${nameB}`;
+                }
+                html += `<div class="widget-item">
+                    <div class="widget-info">
+                        <span class="widget-link">${linkDesc}</span>
+                        <span class="widget-type">${w.chart_type}</span>
+                        ${w.inverse ? '<span class="widget-inverse">inverse</span>' : ''}
+                    </div>
+                    <div><button class="btn btn-delete" onclick="deleteWidget('${w.widget_id}')">Delete</button></div>
+                </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        async function createWidget(linkId) {
+            const inverse = document.getElementById(`inv-${linkId}`).checked;
+            const chartType = document.getElementById(`type-${linkId}`).value;
+            try {
+                const resp = await fetch(`${API_BASE}/api/widgets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'create', link_id: linkId, project_id: currentProject, inverse: inverse, chart_type: chartType })
+                });
+                const data = await resp.json();
+                if (data.success) { showStatus('Widget created', 'success'); loadTopology(); }
+                else { showStatus('Failed: ' + (data.error || 'Unknown error'), 'error'); }
+            } catch (err) { showStatus('Error: ' + err.message, 'error'); }
+        }
+
+        async function updateWidget(widgetId, linkId) {
+            const inverse = document.getElementById(`inv-${linkId}`).checked;
+            const chartType = document.getElementById(`type-${linkId}`).value;
+            try {
+                const resp = await fetch(`${API_BASE}/api/widgets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'update', widget_id: widgetId, inverse: inverse, chart_type: chartType })
+                });
+                const data = await resp.json();
+                if (data.success) { showStatus('Widget updated', 'success'); loadTopology(); }
+                else { showStatus('Failed: ' + (data.error || 'Unknown error'), 'error'); }
+            } catch (err) { showStatus('Error: ' + err.message, 'error'); }
+        }
+
+        async function deleteWidget(widgetId) {
+            if (!confirm('Delete this widget?')) return;
+            try {
+                const resp = await fetch(`${API_BASE}/api/widgets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', widget_id: widgetId })
+                });
+                const data = await resp.json();
+                if (data.success) { showStatus('Widget deleted', 'success'); loadTopology(); }
+                else { showStatus('Failed: ' + (data.error || 'Unknown error'), 'error'); }
+            } catch (err) { showStatus('Error: ' + err.message, 'error'); }
+        }
+
+        function showStatus(message, type) {
+            const el = document.getElementById('status');
+            el.textContent = message;
+            el.className = `status ${type} show`;
+            setTimeout(() => el.classList.remove('show'), 3000);
+        }
+
+        async function loadVersion() {
+            try {
+                const resp = await fetch(`${API_BASE}/version`);
+                const data = await resp.json();
+                document.getElementById('version').textContent = 'v' + data.version;
+            } catch (err) {
+                document.getElementById('version').textContent = '?';
+            }
+        }
+
+        loadVersion();
+        loadProjects();
+    </script>
+</body>
+</html>"""
+
+
+@app.get("/widgets", response_class=HTMLResponse)
+async def widgets_ui():
+    """
+    Traffic Widget Manager Web UI
+
+    Access at: http://host:8022/widgets
+    """
+    return WIDGETS_HTML
 
 
 # ============================================================================

@@ -502,6 +502,23 @@ class WidgetInfo(BaseModel):
     project_id: str = Field(..., description="GNS3 project ID")
     x: int = Field(..., description="Widget X position in topology")
     y: int = Field(..., description="Widget Y position in topology")
+    # v0.4.2: New visualization parameters
+    inverse: bool = Field(
+        default=False,
+        description="Swap TX/RX direction (show traffic from second node's perspective)"
+    )
+    chart_type: str = Field(
+        default="bar",
+        description="Chart type: 'bar' (vertical bars) or 'timeseries' (area graph)"
+    )
+    history: List[TrafficDelta] = Field(
+        default=[],
+        description="Historical traffic deltas for time-series chart (circular buffer)"
+    )
+    max_history: int = Field(
+        default=30,
+        description="Max history points (30 × 15s = 7.5 min)"
+    )
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
         description="When widget was created (UTC)"
@@ -522,9 +539,9 @@ class WidgetInfo(BaseModel):
 
 class WidgetRequest(BaseModel):
     """Request to create/manage traffic widgets"""
-    action: Literal["create", "delete", "list", "refresh"] = Field(
+    action: Literal["create", "update", "delete", "list", "refresh"] = Field(
         ...,
-        description="Action: create, delete, list, or refresh"
+        description="Action: create, update, delete, list, or refresh"
     )
     link_id: Optional[str] = Field(
         default=None,
@@ -536,15 +553,24 @@ class WidgetRequest(BaseModel):
     )
     widget_id: Optional[str] = Field(
         default=None,
-        description="Widget ID (required for delete)"
+        description="Widget ID (required for update/delete)"
     )
     x: Optional[int] = Field(
         default=None,
-        description="Override X position (optional for create)"
+        description="Override X position (optional for create/update)"
     )
     y: Optional[int] = Field(
         default=None,
-        description="Override Y position (optional for create)"
+        description="Override Y position (optional for create/update)"
+    )
+    # v0.4.2: New visualization parameters (Optional for update action, defaults for create)
+    inverse: Optional[bool] = Field(
+        default=None,
+        description="Swap TX/RX direction (show traffic from second node's perspective). Default: False for create"
+    )
+    chart_type: Optional[str] = Field(
+        default=None,
+        description="Chart type: 'bar' (vertical bars) or 'timeseries' (area graph). Default: 'bar' for create"
     )
 
 
