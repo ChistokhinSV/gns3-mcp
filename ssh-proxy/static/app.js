@@ -2,7 +2,14 @@
  * GNS3 Traffic Monitor - Web UI
  *
  * Vanilla JS + D3.js topology viewer for traffic widget management.
- * v0.4.0
+ * v0.5.3
+ *
+ * v0.5.3: Fixed selected link panel (use topology.widgets instead of removed state.widgets)
+ * v0.5.2: Fixed bridges list - show both nodes with actual interface names
+ *         (searches by node_id+adapter since link_id not populated on bridges)
+ * v0.5.1: Simplified UI - removed Traffic Widgets panel, added Widgets button,
+ *         enhanced Bridges list to show node names
+ * v0.5.0: Dynamic icon sizes - nodes use icon_size from backend (PNG=78, SVG=58)
  */
 
 // Configuration
@@ -15,7 +22,6 @@ const CONFIG = {
 const state = {
     currentProject: null,
     topology: null,
-    widgets: [],
     bridges: [],
     selectedLink: null,
     selectedNodes: null,  // {node1, node2} for the selected link
@@ -54,11 +60,6 @@ async function getProjects() {
 
 async function getTopology(projectId) {
     return await apiCall(`/topology/${projectId}`);
-}
-
-async function getWidgets() {
-    const data = await apiCall('/widgets');
-    return data.widgets || [];
 }
 
 async function getBridges() {
@@ -211,10 +212,11 @@ function renderTopology(topology) {
     let minY = Infinity, maxY = -Infinity;
 
     topology.nodes.forEach(node => {
+        const iconSize = node.icon_size || 58;
         minX = Math.min(minX, node.x);
-        maxX = Math.max(maxX, node.x);
+        maxX = Math.max(maxX, node.x + iconSize);
         minY = Math.min(minY, node.y);
-        maxY = Math.max(maxY, node.y);
+        maxY = Math.max(maxY, node.y + iconSize);
     });
 
     // Add padding
@@ -289,18 +291,21 @@ function renderTopology(topology) {
 
         if (!node1 || !node2) return;
 
-        // Node centers (assuming 58x58 icons)
-        const cx1 = node1.x + 29;
-        const cy1 = node1.y + 29;
-        const cx2 = node2.x + 29;
-        const cy2 = node2.y + 29;
+        // Calculate node centers based on icon size
+        const iconSize1 = node1.icon_size || 58;
+        const iconSize2 = node2.icon_size || 58;
+        const cx1 = node1.x + iconSize1 / 2;
+        const cy1 = node1.y + iconSize1 / 2;
+        const cx2 = node2.x + iconSize2 / 2;
+        const cy2 = node2.y + iconSize2 / 2;
 
         // Check if widget exists and has inverse
         const widget = widgetByLink[link.link_id];
         const inverse = widget?.inverse || false;
 
-        // Calculate line endpoints at node edge (radius 28 to account for stroke)
-        const nodeRadius = 28;
+        // Calculate line endpoints at node edge
+        const nodeRadius1 = iconSize1 / 2 - 1;
+        const nodeRadius2 = iconSize2 / 2 - 1;
         const dx = cx2 - cx1;
         const dy = cy2 - cy1;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -311,16 +316,16 @@ function renderTopology(topology) {
         let x1, y1, x2, y2;
         if (inverse) {
             // Swap direction: line goes from node2 to node1
-            x1 = cx2 - nx * nodeRadius;
-            y1 = cy2 - ny * nodeRadius;
-            x2 = cx1 + nx * nodeRadius;
-            y2 = cy1 + ny * nodeRadius;
+            x1 = cx2 - nx * nodeRadius2;
+            y1 = cy2 - ny * nodeRadius2;
+            x2 = cx1 + nx * nodeRadius1;
+            y2 = cy1 + ny * nodeRadius1;
         } else {
             // Normal: line goes from node1 to node2
-            x1 = cx1 + nx * nodeRadius;
-            y1 = cy1 + ny * nodeRadius;
-            x2 = cx2 - nx * nodeRadius;
-            y2 = cy2 - ny * nodeRadius;
+            x1 = cx1 + nx * nodeRadius1;
+            y1 = cy1 + ny * nodeRadius1;
+            x2 = cx2 - nx * nodeRadius2;
+            y2 = cy2 - ny * nodeRadius2;
         }
 
         // Draw link line with arrow at destination
@@ -335,6 +340,8 @@ function renderTopology(topology) {
             .attr('data-cy1', cy1)
             .attr('data-cx2', cx2)
             .attr('data-cy2', cy2)
+            .attr('data-radius1', nodeRadius1)
+            .attr('data-radius2', nodeRadius2)
             .attr('marker-end', 'url(#arrow)');
 
         if (widget) {
@@ -375,20 +382,20 @@ function renderTopology(topology) {
         .attr('class', 'node-group')
         .attr('transform', d => `translate(${d.x}, ${d.y})`);
 
-    // Node circles
+    // Node circles - use dynamic icon size
     nodeGroups.append('circle')
         .attr('class', 'node-circle')
         .classed('started', d => d.status === 'started')
         .classed('stopped', d => d.status === 'stopped')
-        .attr('cx', 29)
-        .attr('cy', 29)
-        .attr('r', 25);
+        .attr('cx', d => (d.icon_size || 58) / 2)
+        .attr('cy', d => (d.icon_size || 58) / 2)
+        .attr('r', d => (d.icon_size || 58) / 2 - 4);
 
-    // Node labels
+    // Node labels - position below node based on icon size
     nodeGroups.append('text')
         .attr('class', 'node-label')
-        .attr('x', 29)
-        .attr('y', 70)
+        .attr('x', d => (d.icon_size || 58) / 2)
+        .attr('y', d => (d.icon_size || 58) + 12)
         .text(d => d.name);
 
     // Update counts
@@ -426,8 +433,8 @@ function selectLink(link, node1, node2) {
     const panel = document.getElementById('selected-link-panel');
     panel.style.display = 'block';
 
-    // Check if widget exists for this link
-    const widget = state.widgets.find(w => w.link_id === link.link_id);
+    // Check if widget exists for this link (widgets are in topology response)
+    const widget = (state.topology?.widgets || []).find(w => w.link_id === link.link_id);
     const hasWidget = !!widget;
 
     // Set inverse checkbox and chart type from widget state (or defaults)
@@ -472,13 +479,14 @@ function updateLinkArrow(linkId, inverse) {
     const line = d3.select(`[data-link-id="${linkId}"]`);
     if (line.empty()) return;
 
-    // Get stored center coordinates
+    // Get stored center coordinates and radii
     const cx1 = parseFloat(line.attr('data-cx1'));
     const cy1 = parseFloat(line.attr('data-cy1'));
     const cx2 = parseFloat(line.attr('data-cx2'));
     const cy2 = parseFloat(line.attr('data-cy2'));
+    const nodeRadius1 = parseFloat(line.attr('data-radius1')) || 28;
+    const nodeRadius2 = parseFloat(line.attr('data-radius2')) || 28;
 
-    const nodeRadius = 28;
     const dx = cx2 - cx1;
     const dy = cy2 - cy1;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -487,17 +495,17 @@ function updateLinkArrow(linkId, inverse) {
 
     if (inverse) {
         // Swap direction: line goes from node2 to node1
-        const x1 = cx2 - nx * nodeRadius;
-        const y1 = cy2 - ny * nodeRadius;
-        const x2 = cx1 + nx * nodeRadius;
-        const y2 = cy1 + ny * nodeRadius;
+        const x1 = cx2 - nx * nodeRadius2;
+        const y1 = cy2 - ny * nodeRadius2;
+        const x2 = cx1 + nx * nodeRadius1;
+        const y2 = cy1 + ny * nodeRadius1;
         line.attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2);
     } else {
         // Normal: line goes from node1 to node2
-        const x1 = cx1 + nx * nodeRadius;
-        const y1 = cy1 + ny * nodeRadius;
-        const x2 = cx2 - nx * nodeRadius;
-        const y2 = cy2 - ny * nodeRadius;
+        const x1 = cx1 + nx * nodeRadius1;
+        const y1 = cy1 + ny * nodeRadius1;
+        const x2 = cx2 - nx * nodeRadius2;
+        const y2 = cy2 - ny * nodeRadius2;
         line.attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2);
     }
 }
@@ -580,29 +588,6 @@ async function handleDeleteWidget() {
     }
 }
 
-function renderWidgetsList(widgets) {
-    const container = document.getElementById('widgets-list');
-    document.getElementById('widget-count').textContent = widgets.length;
-
-    if (widgets.length === 0) {
-        container.innerHTML = '<p class="empty-message">No widgets active</p>';
-        return;
-    }
-
-    container.innerHTML = widgets.map(widget => `
-        <div class="list-item" data-widget-id="${widget.widget_id}">
-            <div class="list-item-title">Link: ${widget.link_id.substring(0, 8)}...</div>
-            <div class="list-item-subtitle">Bridge: ${widget.bridge_name}</div>
-            ${widget.last_delta ? `
-                <div class="list-item-stats">
-                    <span class="stat-rx">RX: ${formatRate(widget.last_delta.rx_bps)}/s</span>
-                    <span class="stat-tx">TX: ${formatRate(widget.last_delta.tx_bps)}/s</span>
-                </div>
-            ` : ''}
-        </div>
-    `).join('');
-}
-
 function renderBridgesList(bridges) {
     const container = document.getElementById('bridges-list');
     document.getElementById('bridge-count').textContent = bridges.length;
@@ -612,15 +597,58 @@ function renderBridgesList(bridges) {
         return;
     }
 
-    container.innerHTML = bridges.map(bridge => `
-        <div class="list-item ${bridge.has_widget ? 'active' : ''}">
-            <div class="list-item-title">${bridge.name}</div>
-            <div class="list-item-stats">
-                <span class="stat-rx">RX: ${formatRate(bridge.stats.rx_bytes)}</span>
-                <span class="stat-tx">TX: ${formatRate(bridge.stats.tx_bytes)}</span>
+    // Helper to find link and node names from topology by matching node_id + adapter
+    function getLinkInfo(bridge) {
+        if (!state.topology || !bridge.node_id) return null;
+
+        // Find the bridge's node
+        const bridgeNode = state.topology.nodes.find(n => n.node_id === bridge.node_id);
+        if (!bridgeNode) return null;
+
+        // Search for link by matching node_id + adapter_number
+        // Note: bridge.link_id is NOT populated, so we must search by node+adapter
+        const bridgeAdapter = bridge.adapter || 0;
+        for (const link of state.topology.links) {
+            if (!link.nodes || link.nodes.length < 2) continue;
+
+            // Check if this link contains our bridge's node_id + adapter
+            const linkNodeIdx = link.nodes.findIndex(
+                n => n.node_id === bridge.node_id && n.adapter_number === bridgeAdapter
+            );
+
+            if (linkNodeIdx !== -1) {
+                // Found the link - get both endpoints
+                const otherIdx = linkNodeIdx === 0 ? 1 : 0;
+                const linkNode = link.nodes[linkNodeIdx];
+                const otherLinkNode = link.nodes[otherIdx];
+
+                const otherNode = state.topology.nodes.find(n => n.node_id === otherLinkNode.node_id);
+                if (!otherNode) continue;
+
+                // Get interface labels (use label.text if available, fallback to ethN)
+                const thisIntf = linkNode.label?.text || `eth${bridgeAdapter}`;
+                const otherIntf = otherLinkNode.label?.text || `eth${otherLinkNode.adapter_number || 0}`;
+
+                return `${bridgeNode.name} (${thisIntf}) ↔ ${otherNode.name} (${otherIntf})`;
+            }
+        }
+
+        // Fallback: show single node name + adapter (link not found in topology)
+        return `${bridgeNode.name} (eth${bridgeAdapter})`;
+    }
+
+    container.innerHTML = bridges.map(bridge => {
+        const linkInfo = getLinkInfo(bridge);
+        return `
+            <div class="list-item ${bridge.has_widget ? 'active' : ''}">
+                <div class="list-item-title">${linkInfo || bridge.name}</div>
+                <div class="list-item-stats">
+                    <span class="stat-rx">RX: ${formatRate(bridge.stats.rx_bytes)}</span>
+                    <span class="stat-tx">TX: ${formatRate(bridge.stats.tx_bytes)}</span>
+                </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // ============================================================================
@@ -633,16 +661,12 @@ async function refreshAll() {
         if (state.currentProject) {
             state.topology = await getTopology(state.currentProject);
             renderTopology(state.topology);
-            state.widgets = state.topology.widgets || [];
-        } else {
-            state.widgets = await getWidgets();
         }
 
         // Load bridges
         state.bridges = await getBridges();
 
-        // Update lists
-        renderWidgetsList(state.widgets);
+        // Update bridges list
         renderBridgesList(state.bridges);
 
         updateLastUpdate();

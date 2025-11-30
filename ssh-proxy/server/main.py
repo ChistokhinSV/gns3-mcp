@@ -8,7 +8,7 @@ Provides REST API for SSH automation using Netmiko with dual storage:
 Port: 8022 (SSH-like mnemonic)
 """
 
-__version__ = "0.5.5"
+__version__ = "0.5.12"
 
 import base64
 import logging

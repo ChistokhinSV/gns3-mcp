@@ -502,6 +502,11 @@ class WidgetInfo(BaseModel):
     project_id: str = Field(..., description="GNS3 project ID")
     x: int = Field(..., description="Widget X position in topology")
     y: int = Field(..., description="Widget Y position in topology")
+    # v0.5.10: Direction angle for arrow rotation
+    angle: float = Field(
+        default=0.0,
+        description="Direction angle in degrees (0=right, 90=down) from node1 to node2"
+    )
     # v0.4.2: New visualization parameters
     inverse: bool = Field(
         default=False,

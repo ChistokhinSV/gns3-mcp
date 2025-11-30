@@ -1,5 +1,5 @@
 """
-Widget Manager for Traffic Graph Widgets (v0.4.2)
+Widget Manager for Traffic Graph Widgets (v0.5.0)
 
 Manages lifecycle of traffic monitoring widgets embedded in GNS3 topology.
 Widgets display real-time traffic statistics as mini bar charts via GNS3 Drawing API.
@@ -28,11 +28,17 @@ v0.4.3: Widget update support & improved visibility:
 - update_widget(): Modify inverse, chart_type, position without recreation
 - Arrows now larger (15x12px) and bright orange (#ff8800) for visibility
 - Arrow has stroke outline for better contrast
+
+v0.5.0: Dynamic icon sizes for accurate topology rendering:
+- Node centers calculated based on icon type (PNG=78px, SVG=58px)
+- Widget midpoints use icon-aware center calculation
+- Frontend receives icon_size per node for correct link positioning
 """
 
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import uuid
@@ -57,6 +63,18 @@ WIDGET_HEIGHT = 60
 UPDATE_INTERVAL = 15  # seconds
 STATE_FILE = "/opt/gns3-ssh-proxy/widgets.json"
 UBRIDGE_DISCOVERY_CACHE_TTL = 60  # seconds - how often to refresh ubridge port discovery
+
+
+def _get_icon_size(symbol: str | None) -> int:
+    """Determine icon size based on symbol type.
+
+    GNS3 uses different icon sizes:
+    - PNG symbols (custom icons): 78×78 pixels
+    - SVG symbols (builtin icons): 58×58 pixels
+    """
+    if symbol and symbol.lower().endswith(".png"):
+        return 78
+    return 58
 
 
 class WidgetManager:
@@ -171,11 +189,14 @@ class WidgetManager:
             raise ValueError(f"Could not find bridge for link {link_id}")
         ubridge_port, bridge_name = bridge_info
 
-        # Calculate position if not provided (link midpoint)
-        if x is None or y is None:
-            link_pos = await self._get_link_midpoint(project_id, link_id)
-            x = link_pos.get("x", 0) if x is None else x
-            y = link_pos.get("y", 0) if y is None else y
+        # Calculate position and angle (always need angle for arrow direction)
+        link_pos = await self._get_link_midpoint(project_id, link_id)
+        angle = link_pos.get("angle", 0.0)
+        # Offset by half widget size to center it (GNS3 uses top-left corner)
+        if x is None:
+            x = link_pos.get("x", 0) - WIDGET_WIDTH // 2
+        if y is None:
+            y = link_pos.get("y", 0) - WIDGET_HEIGHT // 2
 
         # Read initial stats via ubridge TCP
         stats = await self._ubridge_get_stats(ubridge_port, bridge_name)
@@ -184,8 +205,8 @@ class WidgetManager:
         if inverse:
             stats = self._swap_stats(stats)
 
-        # Generate initial SVG (based on chart_type)
-        svg = self._generate_svg(stats, None, inverse=inverse, chart_type=chart_type)
+        # Generate initial SVG (based on chart_type, with rotated arrow)
+        svg = self._generate_svg(stats, None, inverse=inverse, chart_type=chart_type, angle=angle)
 
         # Create drawing in GNS3
         drawing_data = {
@@ -209,6 +230,7 @@ class WidgetManager:
             project_id=project_id,
             x=x,
             y=y,
+            angle=angle,  # Direction angle for arrow rotation
             inverse=inverse,
             chart_type=chart_type,
             last_stats=stats,
@@ -300,6 +322,7 @@ class WidgetManager:
                 inverse=widget.inverse,
                 chart_type=widget.chart_type,
                 history=widget.history,
+                angle=widget.angle,
             )
             await self._update_drawing(
                 widget.project_id,
@@ -623,17 +646,19 @@ class WidgetManager:
         inverse: bool = False,
         chart_type: str = "bar",
         history: list[TrafficDelta] | None = None,
+        angle: float = 0.0,
     ) -> str:
         """Generate SVG widget based on chart_type"""
         if chart_type == "timeseries" and history:
-            return self._generate_timeseries_svg(history, inverse)
+            return self._generate_timeseries_svg(history, inverse, angle)
         else:
-            return self._generate_bar_svg(delta, inverse)
+            return self._generate_bar_svg(delta, inverse, angle)
 
     def _generate_bar_svg(
         self,
         delta: TrafficDelta | None,
         inverse: bool = False,
+        angle: float = 0.0,
     ) -> str:
         """Generate mini bar chart SVG widget with direction arrow"""
         rx_rate = delta.rx_bps if delta else 0
@@ -656,16 +681,16 @@ class WidgetManager:
         rx_label = self._format_rate(rx_rate)
         tx_label = self._format_rate(tx_rate)
 
-        # Direction arrow: points right by default, left if inverse
-        # Made larger (15x12px) and brighter (#ff8800 orange) for visibility
-        if inverse:
-            # Left-pointing arrow (traffic direction from second node)
-            # Arrow at left side: tip at x=2, base at x=12
-            arrow = '<polygon points="2,30 12,24 12,36" fill="#ff8800" stroke="#cc6600" stroke-width="1"/>'
-        else:
-            # Right-pointing arrow (traffic direction from first node)
-            # Arrow at right side: tip at x=98, base at x=88
-            arrow = '<polygon points="98,30 88,24 88,36" fill="#ff8800" stroke="#cc6600" stroke-width="1"/>'
+        # Direction arrow: rotated based on actual node positions
+        # If inverse, reverse direction (+180°)
+        arrow_angle = angle + 180 if inverse else angle
+        # Arrow at top center (50, 6) to avoid overlapping bars
+        # Smaller arrow: 6px long, 8px tall - fits between rate labels
+        # Base edge has bright orange-red to indicate direction
+        arrow = f'''<g transform="rotate({arrow_angle:.1f}, 50, 6)">
+    <polygon points="56,6 50,2 50,10" fill="#ff8800" stroke="#cc6600" stroke-width="1"/>
+    <line x1="50" y1="2" x2="50" y2="10" stroke="#ff4400" stroke-width="2"/>
+  </g>'''
 
         svg = f'''<svg width="{WIDGET_WIDTH}" height="{WIDGET_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <!-- Background -->
@@ -704,6 +729,7 @@ class WidgetManager:
         self,
         history: list[TrafficDelta],
         inverse: bool = False,
+        angle: float = 0.0,
     ) -> str:
         """Generate time-series area chart SVG widget.
 
@@ -773,14 +799,15 @@ class WidgetManager:
         tx_label = self._format_rate(latest.tx_bps)
         rx_label = self._format_rate(latest.rx_bps)
 
-        # Direction arrow: larger (15x12px), bright orange for visibility
-        # Same positions as bar widget (right tip at 98, left tip at 2)
-        if inverse:
-            # Left-pointing arrow: tip at x=2, base at x=12
-            arrow = '<polygon points="2,30 12,24 12,36" fill="#ff8800" stroke="#cc6600" stroke-width="1"/>'
-        else:
-            # Right-pointing arrow: tip at x=98, base at x=88
-            arrow = '<polygon points="98,30 88,24 88,36" fill="#ff8800" stroke="#cc6600" stroke-width="1"/>'
+        # Direction arrow: rotated based on actual node positions
+        # If inverse, reverse direction (+180°)
+        arrow_angle = angle + 180 if inverse else angle
+        # Arrow centered at widget center (50, 30), pointing right at 0°
+        # Base edge has bright orange-red to indicate direction
+        arrow = f'''<g transform="rotate({arrow_angle:.1f}, 50, 30)">
+    <polygon points="60,30 50,24 50,36" fill="#ff8800" stroke="#cc6600" stroke-width="1"/>
+    <line x1="50" y1="24" x2="50" y2="36" stroke="#ff4400" stroke-width="2"/>
+  </g>'''
 
         svg = f'''<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">
   <!-- Background -->
@@ -859,6 +886,7 @@ class WidgetManager:
                     inverse=widget.inverse,
                     chart_type=widget.chart_type,
                     history=widget.history,
+                    angle=widget.angle,
                 )
 
                 # Update drawing in GNS3
@@ -1014,6 +1042,7 @@ class WidgetManager:
                 inverse=widget.inverse,
                 chart_type=widget.chart_type,
                 history=widget.history,
+                angle=widget.angle,
             )
 
             # Create new drawing in GNS3
@@ -1141,7 +1170,7 @@ class WidgetManager:
         if len(nodes) < 2:
             return {"x": 0, "y": 0}
 
-        positions = []
+        centers = []
         for node_ref in nodes[:2]:
             node_id = node_ref.get("node_id")
             node_url = f"http://{self.gns3_host}:{self.gns3_port}/v3/projects/{project_id}/nodes/{node_id}"
@@ -1151,13 +1180,22 @@ class WidgetManager:
             )
             node_response.raise_for_status()
             node = node_response.json()
-            positions.append((node.get("x", 0), node.get("y", 0)))
+            # Calculate node center based on icon size
+            icon_size = _get_icon_size(node.get("symbol"))
+            center_x = node.get("x", 0) + icon_size // 2
+            center_y = node.get("y", 0) + icon_size // 2
+            centers.append((center_x, center_y))
 
-        # Calculate midpoint
-        mid_x = int((positions[0][0] + positions[1][0]) / 2)
-        mid_y = int((positions[0][1] + positions[1][1]) / 2)
+        # Calculate midpoint between node centers
+        mid_x = int((centers[0][0] + centers[1][0]) / 2)
+        mid_y = int((centers[0][1] + centers[1][1]) / 2)
 
-        return {"x": mid_x, "y": mid_y}
+        # Calculate angle from node1 to node2 (degrees, 0° = right)
+        dx = centers[1][0] - centers[0][0]
+        dy = centers[1][1] - centers[0][1]
+        angle = math.degrees(math.atan2(dy, dx))
+
+        return {"x": mid_x, "y": mid_y, "angle": angle}
 
     async def get_topology(self, project_id: str) -> TopologyInfo:
         """Get project topology for web UI"""
@@ -1180,6 +1218,10 @@ class WidgetManager:
         )
         nodes_response.raise_for_status()
         nodes = nodes_response.json()
+
+        # Add icon_size to each node for frontend rendering
+        for node in nodes:
+            node["icon_size"] = _get_icon_size(node.get("symbol"))
 
         # Get links
         links_url = f"http://{self.gns3_host}:{self.gns3_port}/v3/projects/{project_id}/links"
