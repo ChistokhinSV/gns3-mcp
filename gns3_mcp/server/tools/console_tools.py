@@ -26,17 +26,16 @@ if TYPE_CHECKING:
 async def _auto_connect_console(app: "IAppContext", node_name: str) -> str | None:
     """Auto-connect to console if not already connected
 
+    Validates node_id to detect stale sessions when nodes are deleted and
+    recreated with the same name (GM-84).
+
     Returns:
         JSON error message if connection fails, None if successful
     """
-    # Check if already connected
-    if app.console.has_session(node_name):
-        return None
-
     if not app.current_project_id:
         return project_not_found_error()
 
-    # Find node
+    # Always resolve the current node to get its node_id for stale session detection
     nodes = await app.gns3.get_nodes(app.current_project_id)
     node = next((n for n in nodes if n["name"] == node_name), None)
 
@@ -45,6 +44,22 @@ async def _auto_connect_console(app: "IAppContext", node_name: str) -> str | Non
         return node_not_found_error(
             node_name=node_name, project_id=app.current_project_id, available_nodes=available_nodes
         )
+
+    node_id = node.get("node_id", "")
+
+    # Check if already connected (connect() handles stale session detection via node_id)
+    if app.console.has_session(node_name):
+        # Verify session is not stale by checking node_id
+        session_id = app.console.get_session_id(node_name)
+        if session_id:
+            existing_session = app.console.sessions.get(session_id)
+            if existing_session and (
+                not node_id
+                or not existing_session.node_id
+                or node_id == existing_session.node_id
+            ):
+                return None
+            # node_id mismatch - fall through to reconnect via connect()
 
     # Check console type
     console_type = node["console_type"]
@@ -63,9 +78,9 @@ async def _auto_connect_console(app: "IAppContext", node_name: str) -> str | Non
     host = app.gns3.base_url.split("//")[1].split(":")[0]
     port = node["console"]
 
-    # Connect
+    # Connect (handles stale session cleanup internally when node_id mismatches)
     try:
-        await app.console.connect(host, port, node_name)
+        await app.console.connect(host, port, node_name, node_id=node_id)
         return None
     except Exception as e:
         return console_connection_failed_error(

@@ -462,3 +462,181 @@ class SessionInfo(BaseModel):
     sequence_counter: int = 0
 
     model_config = {"arbitrary_types_allowed": True}
+
+
+# ============================================================================
+# Traffic Widget Models (v0.4.0)
+# ============================================================================
+
+class TrafficStats(BaseModel):
+    """Traffic statistics for a bridge interface"""
+    rx_bytes: int = Field(default=0, description="Total bytes received")
+    tx_bytes: int = Field(default=0, description="Total bytes transmitted")
+    rx_packets: int = Field(default=0, description="Total packets received")
+    tx_packets: int = Field(default=0, description="Total packets transmitted")
+    rx_errors: int = Field(default=0, description="Receive errors")
+    tx_errors: int = Field(default=0, description="Transmit errors")
+    timestamp: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="When stats were collected (UTC)"
+    )
+
+
+class TrafficDelta(BaseModel):
+    """Traffic rate calculated from delta between two measurements"""
+    rx_bps: float = Field(default=0.0, description="Receive rate (bytes/sec)")
+    tx_bps: float = Field(default=0.0, description="Transmit rate (bytes/sec)")
+    rx_pps: float = Field(default=0.0, description="Receive rate (packets/sec)")
+    tx_pps: float = Field(default=0.0, description="Transmit rate (packets/sec)")
+    interval_seconds: float = Field(default=15.0, description="Measurement interval")
+
+
+class WidgetInfo(BaseModel):
+    """Traffic widget state and metadata"""
+    widget_id: str = Field(..., description="Unique widget identifier (UUID)")
+    link_id: str = Field(..., description="GNS3 link ID this widget monitors")
+    drawing_id: str = Field(..., description="GNS3 drawing ID for the widget")
+    bridge_name: str = Field(..., description="ubridge bridge name (e.g. QEMU-xxx-0)")
+    ubridge_port: int = Field(default=0, description="ubridge TCP hypervisor port")
+    proxy_id: str = Field(..., description="Proxy instance ID for ownership")
+    project_id: str = Field(..., description="GNS3 project ID")
+    x: int = Field(..., description="Widget X position in topology")
+    y: int = Field(..., description="Widget Y position in topology")
+    # v0.5.10: Direction angle for arrow rotation
+    angle: float = Field(
+        default=0.0,
+        description="Direction angle in degrees (0=right, 90=down) from node1 to node2"
+    )
+    # v0.4.2: New visualization parameters
+    inverse: bool = Field(
+        default=False,
+        description="Swap TX/RX direction (show traffic from second node's perspective)"
+    )
+    chart_type: str = Field(
+        default="bar",
+        description="Chart type: 'bar' (vertical bars) or 'timeseries' (area graph)"
+    )
+    history: List[TrafficDelta] = Field(
+        default=[],
+        description="Historical traffic deltas for time-series chart (circular buffer)"
+    )
+    max_history: int = Field(
+        default=30,
+        description="Max history points (30 × 15s = 7.5 min)"
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="When widget was created (UTC)"
+    )
+    last_update: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="Last successful SVG update (UTC)"
+    )
+    last_stats: Optional[TrafficStats] = Field(
+        default=None,
+        description="Last collected traffic statistics"
+    )
+    last_delta: Optional[TrafficDelta] = Field(
+        default=None,
+        description="Last calculated traffic rate"
+    )
+
+
+class WidgetRequest(BaseModel):
+    """Request to create/manage traffic widgets"""
+    action: Literal["create", "update", "delete", "list", "refresh"] = Field(
+        ...,
+        description="Action: create, update, delete, list, or refresh"
+    )
+    link_id: Optional[str] = Field(
+        default=None,
+        description="GNS3 link ID (required for create)"
+    )
+    project_id: Optional[str] = Field(
+        default=None,
+        description="GNS3 project ID (required for create)"
+    )
+    widget_id: Optional[str] = Field(
+        default=None,
+        description="Widget ID (required for update/delete)"
+    )
+    x: Optional[int] = Field(
+        default=None,
+        description="Override X position (optional for create/update)"
+    )
+    y: Optional[int] = Field(
+        default=None,
+        description="Override Y position (optional for create/update)"
+    )
+    # v0.4.2: New visualization parameters (Optional for update action, defaults for create)
+    inverse: Optional[bool] = Field(
+        default=None,
+        description="Swap TX/RX direction (show traffic from second node's perspective). Default: False for create"
+    )
+    chart_type: Optional[str] = Field(
+        default=None,
+        description="Chart type: 'bar' (vertical bars) or 'timeseries' (area graph). Default: 'bar' for create"
+    )
+
+
+class WidgetResponse(BaseModel):
+    """Response from widget operations"""
+    success: bool = Field(..., description="Whether operation succeeded")
+    action: str = Field(..., description="Action that was performed")
+    widget: Optional[WidgetInfo] = Field(
+        default=None,
+        description="Widget info (for create/delete single)"
+    )
+    widgets: Optional[List[WidgetInfo]] = Field(
+        default=None,
+        description="List of widgets (for list action)"
+    )
+    message: Optional[str] = Field(
+        default=None,
+        description="Human-readable result message"
+    )
+    error: Optional[str] = Field(
+        default=None,
+        description="Error message if failed"
+    )
+
+
+class BridgeInfo(BaseModel):
+    """ubridge interface information"""
+    name: str = Field(..., description="Bridge name (e.g. QEMU-xxx-0)")
+    ubridge_port: int = Field(default=0, description="ubridge TCP hypervisor port")
+    node_id: Optional[str] = Field(
+        default=None,
+        description="GNS3 node ID extracted from bridge name"
+    )
+    adapter: Optional[int] = Field(
+        default=None,
+        description="Adapter number extracted from bridge name"
+    )
+    link_id: Optional[str] = Field(
+        default=None,
+        description="Associated GNS3 link ID (if discoverable)"
+    )
+    stats: TrafficStats = Field(..., description="Current traffic statistics")
+    has_widget: bool = Field(
+        default=False,
+        description="Whether a widget exists for this bridge"
+    )
+
+
+class TopologyInfo(BaseModel):
+    """Project topology for web UI"""
+    project_id: str = Field(..., description="GNS3 project ID")
+    project_name: str = Field(..., description="GNS3 project name")
+    nodes: List[Dict[str, Any]] = Field(
+        default=[],
+        description="List of nodes with positions"
+    )
+    links: List[Dict[str, Any]] = Field(
+        default=[],
+        description="List of links with endpoints"
+    )
+    widgets: List[WidgetInfo] = Field(
+        default=[],
+        description="Active traffic widgets"
+    )

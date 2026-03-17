@@ -4,6 +4,11 @@ FastAPI service for SSH automation using Netmiko with TFTP server, HTTP reverse 
 
 ## Features
 
+- **Traffic Widgets** (v0.4.0+):
+  - Real-time traffic monitoring widgets embedded in GNS3 topology
+  - Mini bar charts showing RX/TX rates via GNS3 Drawing API
+  - ubridge TCP hypervisor integration for traffic statistics (v0.4.1)
+  - Auto-discovery of ubridge ports via `/proc` scanning (requires `pid: host`)
 - **TFTP Server** (v0.3.0+):
   - Read-write TFTP server on port 69/udp
   - Root directory: `/opt/gns3-ssh-proxy/tftp`
@@ -73,7 +78,7 @@ Ports:
 
 ```bash
 cd ssh-proxy
-docker build -t chistokhinsv/gns3-ssh-proxy:v0.3.0 .
+docker build -t chistokhinsv/gns3-ssh-proxy:0.4.1 .
 ```
 
 ### 2. Deploy with Docker Compose (Recommended)
@@ -97,7 +102,7 @@ docker run -d \
   --network host \
   --restart unless-stopped \
   -v /opt/gns3-ssh-proxy:/opt/gns3-ssh-proxy \
-  chistokhinsv/gns3-ssh-proxy:v0.3.0
+  chistokhinsv/gns3-ssh-proxy:0.4.1
 ```
 
 **Main Proxy (On GNS3 Host, with Discovery + TFTP + HTTP Proxy):**
@@ -112,7 +117,7 @@ docker run -d \
   -e GNS3_PORT=80 \
   -e GNS3_USERNAME=admin \
   -e GNS3_PASSWORD=yourpassword \
-  chistokhinsv/gns3-ssh-proxy:v0.3.0
+  chistokhinsv/gns3-ssh-proxy:0.4.1
 
 # Exposed ports:
 #   8022/tcp - FastAPI REST API

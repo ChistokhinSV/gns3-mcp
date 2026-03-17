@@ -5,6 +5,71 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.8] - 2026-03-17 - Stale Console Session Detection (GM-84)
+
+### Fixed
+- **Console stale session detection**: When GNS3 nodes are deleted and recreated with the same name but different UUID, the console manager now detects the node_id mismatch and automatically disconnects the stale session before creating a new one (GM-84)
+- Added `node_id` field to `ConsoleSession` to track GNS3 node UUID
+- `_auto_connect_console()` now always resolves the current node_id from GNS3 and validates against cached session
+
+## [Unreleased] - SSH Proxy v0.4.0 - Traffic Graph Widgets
+
+### Added - SSH Proxy Traffic Monitoring
+- **Traffic Graph Widgets**
+  - Real-time traffic monitoring widgets embedded in GNS3 topology via Drawing API
+  - Mini bar charts (100x60 pixels) showing RX/TX traffic rates
+  - Auto-refresh every 15 seconds
+  - Dark theme styling with green (RX) and blue (TX) bars
+  - Rate formatting: bytes, K, M, G
+  - Widget lifecycle management: create, delete, list, refresh
+  - State persistence in `/opt/gns3-mcp/widgets.json`
+  - Graceful shutdown: deletes all widgets from GNS3
+  - Recovery on restart: verifies and adopts orphaned widgets
+
+- **Web Topology Viewer**
+  - Vanilla JS + D3.js interactive topology viewer
+  - Served at root path (`/`) via nginx
+  - Project selection dropdown
+  - Click links to create/delete widgets
+  - Real-time widget and bridge lists
+  - Auto-refresh every 15 seconds
+  - Dark theme matching SSH proxy branding
+
+- **Bridge Monitoring**
+  - Linux bridge traffic statistics from `/sys/class/net/*/statistics`
+  - Mount `/sys` from GNS3 VM as `/host_sys` (read-only)
+  - Bridge discovery: maps GNS3 link_id to `br-<short_id>` interface names
+  - API endpoint `/api/bridges` for listing bridges with stats
+
+### Added - SSH Proxy API Endpoints (v0.4.0)
+- `POST /api/widgets` - CRUD operations: create, delete, list, refresh
+- `GET /api/widgets` - List all widgets
+- `GET /api/widgets/{widget_id}` - Get widget details
+- `GET /api/bridges` - List bridges with traffic stats
+- `GET /api/topology/{project_id}` - Get topology for web UI
+- `GET /api/projects` - List GNS3 projects
+
+### Changed - SSH Proxy
+- **nginx.conf**: Reorganized routing
+  - Root path (`/`) serves static files with SPA fallback
+  - `/api/*` routes to FastAPI widget management
+  - Preserved existing routes: `/http-proxy/*`, `/ssh/*`, `/tftp`, etc.
+- **docker-compose.yml**: Added `/sys:/host_sys:ro` mount for bridge statistics
+- **Dockerfile**: Added `COPY static/ ./static/` for web UI
+- **main.py**: Version bumped to 0.4.0, added WidgetManager integration
+
+### Added - SSH Proxy Files
+- `server/widget_manager.py` - Core widget management logic (~550 lines)
+- `static/index.html` - Web UI structure
+- `static/app.js` - D3.js topology viewer (~400 lines)
+- `static/style.css` - Dark theme styling (~350 lines)
+
+### Changed - SSH Proxy Models
+- Added `TrafficStats`, `TrafficDelta` - Traffic measurement models
+- Added `WidgetInfo`, `WidgetRequest`, `WidgetResponse` - Widget CRUD models
+- Added `BridgeInfo` - Bridge interface model
+- Added `TopologyInfo` - Project topology for web UI
+
 ## [0.53.7] - 2025-11-27
 
 ### Added
