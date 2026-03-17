@@ -4,7 +4,7 @@
   "display_name": "GNS3 Lab Controller",
   "version": "0.54.1",
   "description": "GNS3 lab automation with AI agent",
-  "long_description": "GNS3 v3 lab automation MCP server with 13 CRUD-style tools. v0.54.1: Fix IOU node properties (adapters/ram), reconnect action with session cleanup, GM-84 stale session hardening.",
+  "long_description": "GNS3 v3 lab automation MCP server with 13 CRUD-style tools. Create/modify nodes, configure via console/SSH, topology management, real-time notifications.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
