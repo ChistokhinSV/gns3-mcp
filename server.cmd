@@ -361,16 +361,18 @@ if not exist "%SCRIPT_DIR%\.venv\Scripts\python.exe" (
     )
     echo [OK] Venv created
     echo.
-    echo Installing dependencies from requirements.txt...
-    "%SCRIPT_DIR%\.venv\Scripts\pip.exe" install -r "%SCRIPT_DIR%\requirements.txt"
-    if %errorlevel% neq 0 (
-        echo ERROR: Failed to install dependencies
-        echo Check requirements.txt and network connection
-        exit /b 1
-    )
-    echo [OK] Dependencies installed
-    echo.
 )
+
+REM Always sync dependencies to catch newly added packages
+echo Syncing dependencies from requirements.txt...
+"%SCRIPT_DIR%\.venv\Scripts\pip.exe" install -q -r "%SCRIPT_DIR%\requirements.txt"
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to install dependencies
+    echo Check requirements.txt and network connection
+    exit /b 1
+)
+echo [OK] Dependencies synced
+echo.
 
 REM Load environment variables from .env if exists
 if exist "%SCRIPT_DIR%\.env" (
@@ -419,16 +421,18 @@ if not exist "%SCRIPT_DIR%\.venv\Scripts\python.exe" (
     )
     echo [OK] Venv created
     echo.
-    echo Installing dependencies from requirements.txt...
-    "%SCRIPT_DIR%\.venv\Scripts\pip.exe" install -r "%SCRIPT_DIR%\requirements.txt"
-    if %errorlevel% neq 0 (
-        echo ERROR: Failed to install dependencies
-        echo Check requirements.txt and network connection
-        exit /b 1
-    )
-    echo [OK] Dependencies installed
-    echo.
 )
+
+REM Always sync dependencies to catch newly added packages
+echo Syncing dependencies from requirements.txt...
+"%SCRIPT_DIR%\.venv\Scripts\pip.exe" install -q -r "%SCRIPT_DIR%\requirements.txt"
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to install dependencies
+    echo Check requirements.txt and network connection
+    exit /b 1
+)
+echo [OK] Dependencies synced
+echo.
 
 REM Load environment variables from .env before creating config
 if exist "%SCRIPT_DIR%\.env" (
