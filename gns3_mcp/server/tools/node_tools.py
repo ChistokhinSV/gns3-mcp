@@ -357,6 +357,9 @@ async def _set_single_node_impl(
     if name is not None:
         update_payload["name"] = name
 
+    # Node types that use nested 'properties' object in the GNS3 API
+    PROPERTIES_NESTED_TYPES = {"qemu", "iou", "docker", "dynamips"}
+
     # Hardware properties
     if ram is not None:
         hardware_props["ram"] = ram
@@ -365,7 +368,11 @@ async def _set_single_node_impl(
     if hdd_disk_image is not None:
         hardware_props["hdd_disk_image"] = hdd_disk_image
     if adapters is not None:
-        hardware_props["adapters"] = adapters
+        # IOU uses ethernet_adapters/serial_adapters instead of generic adapters
+        if node_type == "iou":
+            hardware_props["ethernet_adapters"] = adapters
+        else:
+            hardware_props["adapters"] = adapters
     if console_type is not None:
         hardware_props["console_type"] = console_type
 
@@ -380,8 +387,8 @@ async def _set_single_node_impl(
         else:
             results.append("Warning: Port configuration only supported for ethernet switches")
 
-    # Wrap hardware properties in 'properties' object for QEMU nodes
-    if hardware_props and node["node_type"] == "qemu":
+    # Wrap hardware properties in 'properties' for node types that use nested structure
+    if hardware_props and node_type in PROPERTIES_NESTED_TYPES:
         update_payload["properties"] = hardware_props
     elif hardware_props:
         update_payload.update(hardware_props)
@@ -522,7 +529,8 @@ async def set_node_impl(
     - name parameter requires node to be stopped (except for stateless devices)
     - Stateless devices can be renamed while running: ethernet_switch, ethernet_hub,
       atm_switch, frame_relay_switch, cloud, nat
-    - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU nodes only
+    - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU/IOU/Docker/Dynamips nodes
+    - For IOU nodes, 'adapters' maps to 'ethernet_adapters' automatically
     - ports parameter applies to ethernet_switch nodes only
     - action values: start, stop, suspend, reload, restart
     - restart action: stops node (with retry logic), waits for confirmed stop, then starts
@@ -536,10 +544,10 @@ async def set_node_impl(
         locked: Lock node position (prevents accidental moves in GUI)
         ports: Number of ports (ethernet_switch nodes only)
         name: New name for the node (requires stop for QEMU/Docker)
-        ram: RAM in MB (QEMU nodes only)
-        cpus: Number of CPUs (QEMU nodes only)
-        hdd_disk_image: Path to HDD disk image (QEMU nodes only)
-        adapters: Number of network adapters (QEMU nodes only)
+        ram: RAM in MB (QEMU/IOU nodes)
+        cpus: Number of CPUs (QEMU nodes)
+        hdd_disk_image: Path to HDD disk image (QEMU nodes)
+        adapters: Network adapters count (QEMU: adapters, IOU: ethernet_adapters)
         console_type: Console type - telnet, vnc, spice, etc.
         parallel: Execute operations concurrently (default: True for start/stop actions)
 

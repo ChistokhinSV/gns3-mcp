@@ -668,7 +668,9 @@ async def node_setup(
 async def gns3_connection(
     ctx: Context,
     action: Annotated[
-        Literal["check", "retry"], "Action: 'check' (check status) or 'retry' (force reconnect)"
+        Literal["check", "retry", "reconnect"],
+        "Action: 'check' (status), 'retry' (re-auth only), "
+        "'reconnect' (re-auth + clear all console/SSH/notification sessions)",
     ],
 ) -> str:
     """Manage GNS3 server connection
@@ -677,7 +679,9 @@ async def gns3_connection(
 
     Actions:
         - check: Check connection status (connection state, error details, last attempt time)
-        - retry: Force immediate reconnection (bypasses exponential backoff)
+        - retry: Force immediate re-authentication (bypasses exponential backoff)
+        - reconnect: Full reconnect - re-authenticate AND clear all console/SSH/notification sessions.
+          Use after GNS3 server restart, project switch, or when sessions are stale.
 
     Args:
         action: Connection action to perform
@@ -691,16 +695,19 @@ async def gns3_connection(
         {"connected": false, "server": "http://192.168.1.20:80",
          "error": "Connection timeout", "last_attempt": "08:15:42 30.10.2025"}
 
-        # Force reconnection
+        # Force re-authentication only
         >>> gns3_connection(action="retry")
-        {"success": true, "message": "Successfully reconnected to GNS3 server",
-         "server": "http://192.168.1.20:80", "error": null}
+
+        # Full reconnect (clears all sessions)
+        >>> gns3_connection(action="reconnect")
+        {"success": true, "sessions_cleared": {"console": 3, "notification": true}}
     """
-    app: IAppContext = ctx.request_context.lifespan_context
+    app: AppContext = ctx.request_context.lifespan_context
     gns3 = app.gns3
 
     if action == "check":
         # Check connection status
+        console_count = len(app.console.list_sessions())
         status = {
             "connected": gns3.is_connected,
             "server": gns3.base_url,
@@ -710,18 +717,20 @@ async def gns3_connection(
                 if gns3.last_auth_attempt
                 else None
             ),
+            "active_sessions": {
+                "console": console_count,
+                "notification": app.notification_manager.is_subscribed,
+            },
         }
         return json.dumps(status, indent=2)
 
     elif action == "retry":
-        # Force immediate reconnection
+        # Force immediate reconnection (auth only, no session cleanup)
         logger.info("Manual reconnection attempt triggered")
 
-        # Attempt authentication with 5-second timeout
         success = await gns3.authenticate(retry=False, retry_interval=5, max_retries=1)
 
         if success:
-            # Try to detect opened project
             try:
                 projects = await gns3.get_projects()
                 opened = [p for p in projects if p.get("status") == "opened"]
@@ -744,6 +753,53 @@ async def gns3_connection(
                 "server": gns3.base_url,
                 "error": gns3.connection_error,
             }
+
+        return json.dumps(result, indent=2)
+
+    elif action == "reconnect":
+        # Full reconnect: re-auth + clear ALL sessions
+        logger.info("Full reconnect triggered - clearing all sessions")
+
+        # 1. Clear console sessions
+        console_sessions = app.console.list_sessions()
+        console_count = len(console_sessions)
+        await app.console.close_all()
+        logger.info(f"Cleared {console_count} console sessions")
+
+        # 2. Clear notification subscription
+        notif_was_active = app.notification_manager.is_subscribed
+        if notif_was_active:
+            await app.notification_manager.unsubscribe()
+            logger.info("Cleared notification subscription")
+
+        # 3. Re-authenticate
+        success = await gns3.authenticate(retry=False, retry_interval=5, max_retries=1)
+
+        project_name = None
+        if success:
+            try:
+                projects = await gns3.get_projects()
+                opened = [p for p in projects if p.get("status") == "opened"]
+                if opened:
+                    app.current_project_id = opened[0]["project_id"]
+                    project_name = opened[0]["name"]
+                    logger.info(f"Auto-detected opened project: {project_name}")
+                else:
+                    app.current_project_id = None
+            except Exception as e:
+                logger.warning(f"Failed to detect opened project: {e}")
+
+        result = {
+            "success": success,
+            "message": "Full reconnect complete" if success else "Reconnect failed",
+            "server": gns3.base_url,
+            "error": gns3.connection_error,
+            "sessions_cleared": {
+                "console": console_count,
+                "notification": notif_was_active,
+            },
+            "current_project": project_name,
+        }
 
         return json.dumps(result, indent=2)
 
@@ -960,7 +1016,9 @@ async def node(
     ram: Annotated[int | None, "RAM in MB (QEMU nodes only)"] = None,
     cpus: Annotated[int | None, "Number of CPUs (QEMU nodes only)"] = None,
     hdd_disk_image: Annotated[str | None, "HDD disk image path (QEMU nodes only)"] = None,
-    adapters: Annotated[int | None, "Network adapters count (QEMU nodes only)"] = None,
+    adapters: Annotated[
+        int | None, "Network adapters (QEMU: adapters, IOU: ethernet_adapters)"
+    ] = None,
     console_type: Annotated[str | None, "Console type: telnet/vnc/spice"] = None,
     format: Annotated[
         str, "Output format: 'table' (default) or 'json' (for 'list' action)"
@@ -994,7 +1052,8 @@ async def node(
 
     Validation Rules:
         - name parameter requires node to be stopped
-        - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU nodes only
+        - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU/IOU/Docker/Dynamips
+        - For IOU nodes, 'adapters' maps to 'ethernet_adapters' automatically
         - ports parameter applies to ethernet_switch nodes only
         - state_action values: start, stop, suspend, reload, restart
 
@@ -1901,8 +1960,8 @@ TOOL_REGISTRY = {
         "categories": ["connection", "management"],
         "capabilities": ["CRUD"],
         "resources": [],
-        "description": "Manage GNS3 server connection (check status, retry connection)",
-        "actions": ["check", "retry"],
+        "description": "Manage GNS3 server connection (check, retry, reconnect with session cleanup)",
+        "actions": ["check", "retry", "reconnect"],
     },
     "project": {
         "categories": ["project", "management"],

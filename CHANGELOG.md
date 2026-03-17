@@ -5,6 +5,27 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.1] - 2026-03-17 - IOU Node Properties Fix + Reconnect + GM-84 Hardening
+
+### Fixed
+- **IOU node properties silently ignored**: Hardware properties (adapters, ram) were sent at
+  top-level instead of nested under `properties` for IOU nodes. GNS3 API silently ignored them.
+  Now all node types with `properties` (qemu, iou, docker, dynamips) use correct nesting.
+- **IOU adapters mapping**: `adapters` parameter now maps to `ethernet_adapters` for IOU nodes
+- **GM-84 stale session regression**: Sessions created before GM-84 fix (no `node_id` tracked)
+  were never validated. Now backfills `node_id` on first access. Explicit disconnect + reconnect
+  on node_id mismatch instead of relying on connect() fallthrough.
+
+### Added
+- **`reconnect` action** for `gns3_connection` tool: Full reconnect that re-authenticates AND
+  clears all console sessions, notification subscriptions. Use after GNS3 server restart or
+  when sessions are stale.
+- **Session counts** in `gns3_connection(action="check")` response
+
+### Changed
+- `adapters` parameter description updated: works for QEMU and IOU (auto-mapped)
+- `gns3_connection` actions: check, retry, reconnect (was: check, retry)
+
 ## [0.54.0] - 2026-03-17 - GNS3 Notification Stream Support
 
 ### Added

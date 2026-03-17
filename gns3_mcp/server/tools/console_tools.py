@@ -5,6 +5,7 @@ Provides tools for interacting with node consoles via telnet.
 
 import asyncio
 import json
+import logging
 import re
 import time
 from typing import TYPE_CHECKING
@@ -21,6 +22,8 @@ from models import ConsoleStatus, ErrorCode
 
 if TYPE_CHECKING:
     from interfaces import IAppContext
+
+logger = logging.getLogger(__name__)
 
 
 async def _auto_connect_console(app: "IAppContext", node_name: str) -> str | None:
@@ -53,13 +56,24 @@ async def _auto_connect_console(app: "IAppContext", node_name: str) -> str | Non
         session_id = app.console.get_session_id(node_name)
         if session_id:
             existing_session = app.console.sessions.get(session_id)
-            if existing_session and (
-                not node_id
-                or not existing_session.node_id
-                or node_id == existing_session.node_id
-            ):
-                return None
-            # node_id mismatch - fall through to reconnect via connect()
+            if existing_session:
+                if not node_id:
+                    # No node_id from GNS3 — can't validate, reuse existing
+                    return None
+                if existing_session.node_id and node_id == existing_session.node_id:
+                    # node_id matches — session is valid
+                    return None
+                if not existing_session.node_id:
+                    # Session predates GM-84 fix — backfill node_id for future checks
+                    existing_session.node_id = node_id
+                    return None
+                # node_id mismatch — stale session, disconnect and reconnect
+                logger.warning(
+                    f"Stale session for {node_name}: "
+                    f"session node_id={existing_session.node_id}, "
+                    f"current node_id={node_id}"
+                )
+                await app.console.disconnect_by_node(node_name)
 
     # Check console type
     console_type = node["console_type"]
