@@ -47,6 +47,7 @@ class ConsoleSession:
     host: str
     port: int
     node_name: str
+    node_id: str = ""  # GNS3 node UUID - used to detect stale sessions after node recreation
     reader: asyncio.StreamReader | None = None
     writer: asyncio.StreamWriter | None = None
     buffer: str = ""
@@ -78,15 +79,17 @@ class ConsoleManager(IConsoleManager):
         self._node_sessions: Dict[str, str] = {}  # node_name → session_id
         self._lock = asyncio.Lock()  # Protect shared state from race conditions
 
-    async def connect(self, host: str, port: int, node_name: str) -> str:
+    async def connect(self, host: str, port: int, node_name: str, node_id: str = "") -> str:
         """Connect to a console and return session ID
 
         Thread-safe. If already connected to this node, returns existing session ID.
+        Detects stale sessions when node_id changes (node deleted and recreated with same name).
 
         Args:
             host: Console host (GNS3 server IP)
             port: Console port number
             node_name: Name of the node for logging
+            node_id: GNS3 node UUID - used to detect stale sessions after node recreation
 
         Returns:
             session_id: Unique session identifier
@@ -96,10 +99,29 @@ class ConsoleManager(IConsoleManager):
             if node_name in self._node_sessions:
                 existing_id = self._node_sessions[node_name]
                 if existing_id in self.sessions:
-                    logger.debug(f"Reusing existing session for {node_name}: {existing_id}")
-                    return existing_id
+                    existing_session = self.sessions[existing_id]
+                    # Detect stale session: node_id changed means node was recreated
+                    if node_id and existing_session.node_id and node_id != existing_session.node_id:
+                        logger.warning(
+                            f"Stale session detected for {node_name}: "
+                            f"cached node_id={existing_session.node_id}, "
+                            f"current node_id={node_id}. Reconnecting."
+                        )
+                        # Disconnect stale session (release lock first to avoid deadlock)
+                        stale_id = existing_id
+                    else:
+                        logger.debug(f"Reusing existing session for {node_name}: {existing_id}")
+                        return existing_id
+                else:
+                    stale_id = None
+            else:
+                stale_id = None
 
             session_id = str(uuid.uuid4())
+
+        # Disconnect stale session outside lock
+        if stale_id:
+            await self.disconnect(stale_id)
 
         try:
             # Connect via telnet (outside lock - network I/O)
@@ -110,6 +132,7 @@ class ConsoleManager(IConsoleManager):
                 host=host,
                 port=port,
                 node_name=node_name,
+                node_id=node_id,
                 reader=reader,
                 writer=writer,
             )

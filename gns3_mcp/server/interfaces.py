@@ -273,13 +273,14 @@ class IConsoleManager(ABC):
     """
 
     @abstractmethod
-    async def connect(self, host: str, port: int, node_name: str) -> str:
+    async def connect(self, host: str, port: int, node_name: str, node_id: str = "") -> str:
         """Connect to a console and return session ID
 
         Args:
             host: Console host (GNS3 server IP)
             port: Console port number
             node_name: Name of the node for logging
+            node_id: GNS3 node UUID - used to detect stale sessions after node recreation
 
         Returns:
             session_id: Unique session identifier
