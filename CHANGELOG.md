@@ -5,14 +5,12 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.53.8] - 2026-03-17 - Stale Console Session Detection (GM-84)
+## [0.53.8] - 2026-03-17 - Stale Console Session Detection (GM-84) + SSH Proxy v0.4.0
 
 ### Fixed
 - **Console stale session detection**: When GNS3 nodes are deleted and recreated with the same name but different UUID, the console manager now detects the node_id mismatch and automatically disconnects the stale session before creating a new one (GM-84)
 - Added `node_id` field to `ConsoleSession` to track GNS3 node UUID
 - `_auto_connect_console()` now always resolves the current node_id from GNS3 and validates against cached session
-
-## [Unreleased] - SSH Proxy v0.4.0 - Traffic Graph Widgets
 
 ### Added - SSH Proxy Traffic Monitoring
 - **Traffic Graph Widgets**
