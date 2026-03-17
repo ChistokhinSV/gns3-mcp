@@ -18,6 +18,7 @@ from di_container import Dependencies
 from fastmcp import FastMCP
 from gns3_client import GNS3Client
 from interfaces import IAppContext, IConsoleManager, IGns3Client, IResourceManager
+from notification_manager import NotificationManager
 from resources import ResourceManager
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,8 @@ class AppContext(IAppContext):
     auth_task: asyncio.Task | None = field(default=None)
     # v0.26.0: Multi-proxy SSH support - maps node_name to proxy_url for routing
     ssh_proxy_mapping: Dict[str, str] = field(default_factory=dict)
+    # v0.54.0: Notification stream manager
+    notification_manager: NotificationManager = field(default_factory=NotificationManager)
 
     @property
     def resource_manager(self) -> ResourceManager | None:
@@ -239,6 +242,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
             except asyncio.CancelledError:
                 pass
 
+        await context.notification_manager.close()
         await console.close_all()
         await gns3.close()
 

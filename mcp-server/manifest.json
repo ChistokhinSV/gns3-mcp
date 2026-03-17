@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.53.8",
+  "version": "0.54.0",
   "description": "GNS3 lab automation with AI agent",
-  "long_description": "GNS3 v3 lab automation MCP server with 12 CRUD-style tools. Create/modify nodes, configure via console/SSH, topology management. v0.53.8: Enhanced console tools - keystroke improvements (space key, repeat, pattern-based, sequences) + pagination handling (--More--) for commands with long output. Fixes GM-76.",
+  "long_description": "GNS3 v3 lab automation MCP server with 13 CRUD-style tools. Create/modify nodes, configure via console/SSH, topology management. v0.54.0: GNS3 notification stream support - subscribe to real-time server events (node/link/log changes) with buffered reading.",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
@@ -89,6 +89,10 @@
     {
       "name": "ssh",
       "description": "Batch SSH operations (configure, command, disconnect). Multi-proxy support, auto-recovery (30min TTL). Operations: configure, command, disconnect"
+    },
+    {
+      "name": "notification",
+      "description": "GNS3 event notifications (subscribe, read, unsubscribe, status). Real-time node/link/log events via streaming API. Actions: subscribe, read, unsubscribe, status"
     },
     {
       "name": "query_resource",

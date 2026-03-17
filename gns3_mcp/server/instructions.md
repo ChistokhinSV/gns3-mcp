@@ -118,6 +118,37 @@ send_console_data("R1", "show version\n")
 read_console_output("R1", mode="diff")  # Only shows command output
 ```
 
+## GNS3 Notifications (v0.54.0)
+
+Subscribe to real-time GNS3 server events for monitoring lab state changes.
+
+**Workflow**:
+```
+1. notification(action="subscribe")                    # Controller-level (all events)
+2. notification(action="subscribe", project_id="...")   # Project-level events only
+3. notification(action="read")                          # New events since last read
+4. notification(action="read", filter_action="node.")   # Only node events
+5. notification(action="read", filter_action="log.error") # Only error logs
+6. notification(action="status")                        # Check subscription stats
+7. notification(action="unsubscribe")                   # Stop and clear buffer
+```
+
+**Event Types**:
+- Controller: `compute.*`, `project.*`, `template.*`, `log.error`, `log.warning`, `log.info`, `ping`
+- Project: `node.created/updated/deleted`, `link.created/updated/deleted`, `drawing.*`, `snapshot.restored`, `ping`
+
+**Read Modes**:
+- `diff`: New events since last read (default, most efficient)
+- `all`: Entire buffer
+- `last`: Last N events (uses `limit` parameter)
+
+**Best Practices**:
+- Use `diff` mode to avoid re-processing old events
+- Filter by action prefix to reduce noise (e.g., `filter_action="node."`)
+- `ping` events include CPU/memory metrics - useful for monitoring server health
+- Only one subscription active at a time (unsubscribe before switching scope)
+- Buffer holds up to 5000 events, auto-trims to 3000 when full
+
 ## Connection Management (v0.38.0)
 
 Server implements non-blocking authentication with background reconnection.

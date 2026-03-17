@@ -10,12 +10,19 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.48.0 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.54.0 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.48.0 - List Action Integration (removes convenience wrappers)
+**Latest Release:** v0.54.0 - GNS3 Notification Stream Support
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.48.0)
+### Recent Changes (v0.26.0 - v0.54.0)
+
+**v0.54.0** - GNS3 notification stream support
+- **New `notification` tool**: Subscribe to `/v3/notifications` real-time event stream
+- Actions: subscribe (controller/project-level), read (diff/all/last + filter), unsubscribe, status
+- Event types: node/link/drawing CRUD, log.error/warning/info, compute.*, template.*, ping
+- Background stream reader with auto-reconnect, buffer management (5000 max)
+- **Tool count**: 13 tools (up from 12)
 
 **v0.48.0** - List action integration in CRUD tools
 - **Removed**: `list_projects()`, `list_nodes()`, `get_topology()` convenience wrappers (3 tools removed)
@@ -68,9 +75,9 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 **v0.26.0** - Multi-proxy support for isolated network access
 
 ### Current State
-- **14 Tools**: CRUD-style consolidation (v0.48.0: 20% reduction from v0.47.0, 63% from original 32 tools)
-  - 9 CRUD tools with integrated `list` action or CRUD operations:
-    - Core: gns3_connection, project, node, link, drawing, project_docs, node_file
+- **15 Tools**: CRUD-style consolidation (v0.54.0: added notification tool)
+  - 10 CRUD tools with integrated `list` action or CRUD operations:
+    - Core: gns3_connection, project, node, link, drawing, project_docs, node_file, notification
     - SSH Proxy (v0.3.0): tftp, http_client
   - Batch-only console/SSH operations
   - Tool discovery with `search_tools()`
@@ -745,3 +752,6 @@ git add . && git commit -m "feat: description"
 - keep version history in CLAUDE.md
 - Remember that you need to update the version and set the 'latest' tag to the container
 - just bump [major|minor|patch] command that automatically updates all version files from a single source. Remember to update versions according to their importance
+
+
+To restart MCP server (http mode) use .\server.cmd restart (or dev-reinstall if needed), then use /mcp reconnect gns3-mcp to restart in the claude code.

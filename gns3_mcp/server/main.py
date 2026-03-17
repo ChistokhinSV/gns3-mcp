@@ -37,6 +37,7 @@ from interfaces import IAppContext
 from models import (
     ErrorResponse,
 )
+from notification_manager import NotificationManager
 from prompts import (
     render_lab_setup_prompt,
     render_node_setup_prompt,
@@ -745,6 +746,103 @@ async def gns3_connection(
             }
 
         return json.dumps(result, indent=2)
+
+
+# ============================================================================
+# MCP Tools - GNS3 Notifications (v0.54.0)
+# ============================================================================
+
+
+@mcp.tool(
+    name="notification",
+    tags={"notification", "monitoring", "events"},
+)
+async def notification(
+    ctx: Context,
+    action: Annotated[
+        Literal["subscribe", "read", "unsubscribe", "status"],
+        "Action: 'subscribe' (start listening), 'read' (get events), "
+        "'unsubscribe' (stop), 'status' (check subscription)",
+    ],
+    project_id: Annotated[
+        str | None,
+        "Project ID for project-level notifications. Omit for controller-level (all events).",
+    ] = None,
+    mode: Annotated[
+        str,
+        "Read mode: 'diff' (new since last read, default), 'all' (entire buffer), "
+        "'last' (last N events)",
+    ] = "diff",
+    filter_action: Annotated[
+        str | None,
+        "Filter events by action prefix (e.g., 'node.updated', 'log.error', 'link.')",
+    ] = None,
+    limit: Annotated[int, "Max events to return (default: 100)"] = 100,
+) -> str:
+    """Subscribe to GNS3 server event notifications and read buffered events.
+
+    GNS3 streams real-time events: node state changes, link updates, log messages, etc.
+    This tool subscribes to the stream in background and buffers events for on-demand reading.
+
+    Actions:
+        - subscribe: Start listening to notification stream (controller or project-level)
+        - read: Read buffered events (supports diff/all/last modes with optional action filter)
+        - unsubscribe: Stop listening and clear buffer
+        - status: Check subscription status and buffer stats
+
+    Event types (action field):
+        Controller: compute.*, project.*, template.*, log.error, log.warning, log.info, ping
+        Project: node.created/updated/deleted, link.created/updated/deleted,
+                 drawing.created/updated/deleted, snapshot.restored, ping
+
+    Examples:
+        # Subscribe to all events
+        >>> notification(action="subscribe")
+
+        # Subscribe to specific project events
+        >>> notification(action="subscribe", project_id="abc-123")
+
+        # Read new events since last read
+        >>> notification(action="read")
+
+        # Read only node events
+        >>> notification(action="read", filter_action="node.")
+
+        # Read only log errors
+        >>> notification(action="read", filter_action="log.error")
+
+        # Check status
+        >>> notification(action="status")
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+    notif: NotificationManager = app.notification_manager
+
+    if action == "subscribe":
+        gns3 = app.gns3
+        if not gns3.is_connected or not gns3.token:
+            return json.dumps(
+                {"error": "GNS3 not connected. Use gns3_connection(action='retry') first."},
+                indent=2,
+            )
+        result = await notif.subscribe(
+            base_url=gns3.base_url,
+            token=gns3.token,
+            project_id=project_id,
+        )
+        return json.dumps({"result": result, **notif.status()}, indent=2)
+
+    elif action == "read":
+        data = notif.read(mode=mode, filter_action=filter_action, limit=limit)
+        return json.dumps(data, indent=2)
+
+    elif action == "unsubscribe":
+        result = await notif.unsubscribe()
+        return json.dumps({"result": result}, indent=2)
+
+    elif action == "status":
+        return json.dumps(notif.status(), indent=2)
+
+    return json.dumps({"error": f"Unknown action: {action}"}, indent=2)
 
 
 # ============================================================================
@@ -1875,6 +1973,13 @@ TOOL_REGISTRY = {
         "resources": [],
         "description": "HTTP/HTTPS client for device web interfaces (get, status). Reverse proxy available at http://proxy:8023/http-proxy/",
         "actions": ["get", "status"],
+    },
+    "notification": {
+        "categories": ["notification", "monitoring", "events"],
+        "capabilities": ["CRUD"],
+        "resources": [],
+        "description": "Subscribe to GNS3 event stream (node/link/log events), read buffered events",
+        "actions": ["subscribe", "read", "unsubscribe", "status"],
     },
     "query_resource": {
         "categories": ["resource", "query"],

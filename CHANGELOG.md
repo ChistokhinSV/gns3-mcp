@@ -5,6 +5,28 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.0] - 2026-03-17 - GNS3 Notification Stream Support
+
+### Added
+- **`notification` tool**: Subscribe to GNS3 v3 real-time event stream (`/v3/notifications`)
+  - `subscribe`: Start listening to controller-level or project-level notification stream
+  - `read`: Read buffered events with modes: `diff` (new since last read), `all`, `last`
+  - `unsubscribe`: Stop listening and clear buffer
+  - `status`: Check subscription status, buffer size, connection state
+  - Filter events by action prefix (e.g., `node.updated`, `log.error`, `link.`)
+  - Event types: node/link/drawing CRUD, log.error/warning/info, compute.*, template.*, ping
+  - Background stream reader with auto-reconnect and exponential backoff
+  - Buffer management: 5000 events max, auto-trim to 3000
+- **`NotificationManager`**: New module (`notification_manager.py`) mirroring ConsoleManager pattern
+  - Async stream reader consuming line-delimited JSON from GNS3
+  - Receive timestamps added to each event
+  - Clean shutdown on server stop
+
+### Changed
+- **Tool count**: 13 tools (up from 12 in v0.53.8)
+- AppContext now includes `notification_manager` field
+- TOOL_REGISTRY updated with notification tool metadata
+
 ## [0.53.8] - 2026-03-17 - Stale Console Session Detection (GM-84) + SSH Proxy v0.4.0
 
 ### Fixed
