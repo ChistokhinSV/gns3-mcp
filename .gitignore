@@ -59,11 +59,14 @@ mcp-server/gns3_mcp/
 data/*.pcapng
 
 gns3-gui/
+.coverage
 gns3-project/.coverage
 .claude/settings.local.json
 
 # winsw
 GNS3-MCP-HTTP.exe
+# Service config: tracked as template in git history; runtime copy may contain secrets
+GNS3-MCP-HTTP.xml
 .git.bfg-report/
 
 # Temp files and directories
