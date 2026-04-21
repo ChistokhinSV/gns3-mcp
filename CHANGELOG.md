@@ -5,6 +5,17 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.2] - 2026-04-21 - HTTP Transport Startup Fix
+
+### Fixed
+- **HTTP transport startup crash**: `server.cmd install` + start failed with
+  `AttributeError: 'StarletteWithLifespan' object has no attribute 'middleware'`.
+  FastMCP's `http_app()` returns a Starlette app, which does not support FastAPI's
+  `@app.middleware("http")` decorator. Switched the API key middleware to
+  `app.add_middleware(BaseHTTPMiddleware, dispatch=verify_api_key)` and replaced
+  `fastapi.Request` / `fastapi.responses.JSONResponse` imports with their
+  `starlette` equivalents.
+
 ## [0.54.1] - 2026-03-17 - IOU Node Properties Fix + Reconnect + GM-84 Hardening
 
 ### Fixed

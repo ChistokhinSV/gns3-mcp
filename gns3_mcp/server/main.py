@@ -30,9 +30,10 @@ from context import get_app, validate_current_project
 from export_tools import (
     export_topology_diagram,
 )
-from fastapi import Request
-from fastapi.responses import JSONResponse
 from fastmcp import Context, FastMCP
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from interfaces import IAppContext
 from models import (
     ErrorResponse,
@@ -2412,7 +2413,6 @@ if __name__ == "__main__":
             # Set it in environment for this session
             os.environ["MCP_API_KEY"] = api_key
 
-        @app.middleware("http")
         async def verify_api_key(request: Request, call_next):
             """Verify MCP_API_KEY header for all HTTP requests (except health/status)"""
             # Skip auth for health/status endpoints (if any)
@@ -2431,6 +2431,8 @@ if __name__ == "__main__":
                     },
                 )
             return await call_next(request)
+
+        app.add_middleware(BaseHTTPMiddleware, dispatch=verify_api_key)
 
         print("[INFO] API key authentication enabled (MCP_API_KEY required)")
 
