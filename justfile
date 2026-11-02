@@ -4,6 +4,9 @@
 set dotenv-load := true
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
+# MCPB CLI version (also pinned in .github/workflows/build-pypi-mcpb-windows.yml)
+MCPB_CLI := "2.1.2"
+
 # List all available recipes
 default:
     @just --list
@@ -56,35 +59,31 @@ type-check:
     -mypy gns3_mcp/
     @echo "[INFO] Mypy check complete (non-blocking in dev mode)"
 
-# Clean build artifacts and caches (keeps UV binary - permanent fixture)
+# Clean build artifacts and caches
 clean:
     powershell -Command "if (Test-Path mcp-server/lib) { Remove-Item -Path mcp-server/lib -Recurse -Force }"
     powershell -Command "if (Test-Path mcp-server/venv) { Remove-Item -Path mcp-server/venv -Recurse -Force }"
+    powershell -Command "if (Test-Path mcp-server/.venv) { Remove-Item -Path mcp-server/.venv -Recurse -Force }"
     powershell -Command "if (Test-Path mcp-server/gns3_mcp) { Remove-Item -Path mcp-server/gns3_mcp -Recurse -Force }"
-    powershell -Command "if (Test-Path mcp-server/requirements.txt) { Remove-Item -Path mcp-server/requirements.txt -Force }"
-    powershell -Command "if (Test-Path mcp-server/mcp-server.mcpb) { Remove-Item -Path mcp-server/mcp-server.mcpb -Force }"
+    powershell -Command "foreach ($f in 'mcp-server/pyproject.toml','mcp-server/uv.lock','mcp-server/mcp-server.mcpb') { if (Test-Path $f) { Remove-Item -Path $f -Force } }"
     powershell -Command "if (Test-Path dist) { Remove-Item -Path dist -Recurse -Force }"
     powershell -Command "Get-ChildItem -Path . -Include __pycache__,*.pyc,*.egg-info,.pytest_cache,.ruff_cache,.mypy_cache -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
-    @echo "Note: mcp-server/uv.exe (58 MB) is kept - it's bundled in .mcpb"
 
-# Build desktop extension (.mcpb) - using UV for fast runtime dependency installation
+# Build desktop extension (.mcpb, manifest 0.4 uv runtime - Claude Desktop installs dependencies)
 build:
-    @echo "Checking for UV package manager binary..."
-    powershell -Command "if (-not (Test-Path mcp-server/uv.exe)) { Write-Host 'ERROR: UV binary not found at mcp-server/uv.exe' -ForegroundColor Red; Write-Host 'Download from: https://github.com/astral-sh/uv/releases/latest' -ForegroundColor Yellow; exit 1 }"
-    @echo "Copying source code to mcp-server for packaging..."
-    powershell -Command "if (Test-Path mcp-server/gns3_mcp) { Remove-Item -Path mcp-server/gns3_mcp -Recurse -Force }"
-    powershell -Command "Copy-Item -Path gns3_mcp -Destination mcp-server/gns3_mcp -Recurse -Force"
-    @echo "Copying requirements.txt for runtime dependency installation..."
-    powershell -Command "Copy-Item -Path requirements.txt -Destination mcp-server/requirements.txt -Force"
-    @echo "Cleaning __pycache__ directories before packaging..."
-    powershell -Command "Get-ChildItem -Path mcp-server -Include __pycache__ -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
-    @echo "Building .mcpb package with UV binary (58 MB)..."
-    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb@1.1.2 pack"
+    python scripts/prepare_mcpb.py
+    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb@{{MCPB_CLI}} validate manifest.json"
+    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb@{{MCPB_CLI}} pack"
     @echo "Built: mcp-server/mcp-server.mcpb"
 
 # Validate manifest.json
 validate-manifest:
-    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb@1.1.2 validate manifest.json"
+    powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb@{{MCPB_CLI}} validate manifest.json"
+
+# Validate the Claude plugin and the repository marketplace
+validate-plugin:
+    claude plugin validate ./plugin
+    claude plugin validate .
 
 # Check version consistency across files
 version-check:

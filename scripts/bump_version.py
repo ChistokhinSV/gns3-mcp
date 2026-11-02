@@ -5,6 +5,7 @@ Increments semantic version (MAJOR.MINOR.PATCH) and updates:
 - gns3_mcp/__init__.py (source of truth)
 - pyproject.toml
 - mcp-server/manifest.json
+- plugin/.claude-plugin/plugin.json, plugin/.mcp.json (gns3-mcp@ pin)
 
 Usage:
     python scripts/bump_version.py patch  # 0.43.0 -> 0.43.1
@@ -117,22 +118,50 @@ def update_manifest_json(new_version: str) -> None:
     print(f"[OK] Updated mcp-server/manifest.json")
 
 
+def update_plugin(new_version: str) -> None:
+    """Update plugin.json version and the gns3-mcp@ pin in plugin/.mcp.json.
+
+    The plugin starts `uvx gns3-mcp@<version>`, so each plugin release runs the
+    server released with it.
+    """
+    plugin_file = Path("plugin/.claude-plugin/plugin.json")
+    plugin = json.loads(plugin_file.read_text(encoding="utf-8"))
+    plugin["version"] = new_version
+    plugin_file.write_text(json.dumps(plugin, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    mcp_file = Path("plugin/.mcp.json")
+    content = mcp_file.read_text(encoding="utf-8")
+    mcp_file.write_text(
+        re.sub(r'"gns3-mcp@[^"]+"', f'"gns3-mcp@{new_version}"', content), encoding="utf-8"
+    )
+    print(f"[OK] Updated plugin/.claude-plugin/plugin.json and plugin/.mcp.json")
+
+
 def verify_consistency() -> bool:
     """Verify all version files are consistent"""
-    from check_version import get_init_version, get_pyproject_version, get_manifest_version
+    from check_version import (
+        get_init_version,
+        get_manifest_version,
+        get_plugin_server_pin,
+        get_plugin_version,
+        get_pyproject_version,
+    )
 
-    init_ver = get_init_version()
-    pyproject_ver = get_pyproject_version()
-    manifest_ver = get_manifest_version()
+    versions = {
+        "gns3_mcp/__init__.py": get_init_version(),
+        "pyproject.toml": get_pyproject_version(),
+        "mcp-server/manifest.json": get_manifest_version(),
+        "plugin/.claude-plugin/plugin.json": get_plugin_version(),
+        "plugin/.mcp.json (gns3-mcp@)": get_plugin_server_pin(),
+    }
 
-    if init_ver == pyproject_ver == manifest_ver:
-        print(f"\n[OK] All versions consistent: {init_ver}")
+    if len(set(versions.values())) == 1:
+        print(f"\n[OK] All versions consistent: {versions['gns3_mcp/__init__.py']}")
         return True
     else:
         print(f"\n[ERROR] Version mismatch!")
-        print(f"  gns3_mcp/__init__.py: {init_ver}")
-        print(f"  pyproject.toml: {pyproject_ver}")
-        print(f"  mcp-server/manifest.json: {manifest_ver}")
+        for file, version in versions.items():
+            print(f"  {file}: {version}")
         return False
 
 
@@ -174,6 +203,7 @@ def main():
         print("  - gns3_mcp/__init__.py")
         print("  - pyproject.toml")
         print("  - mcp-server/manifest.json")
+        print("  - plugin/.claude-plugin/plugin.json, plugin/.mcp.json")
         print("\nRun without --dry-run to apply changes")
         return 0
 
@@ -183,6 +213,7 @@ def main():
         update_init_py(new_version_str)
         update_pyproject_toml(new_version_str)
         update_manifest_json(new_version_str)
+        update_plugin(new_version_str)
     except Exception as e:
         print(f"\n[ERROR] Failed to update files: {e}")
         return 1

@@ -34,7 +34,7 @@ Comprehensive architecture documentation including C4 Model diagrams, ADRs, and 
 - [MIGRATION_v0.3.md](../MIGRATION_v0.3.md) - Migration guide for breaking changes
 
 **Developer-Facing**:
-- [SKILL.md](../skill/SKILL.md) - Agent skill with GNS3 domain knowledge
+- [SKILL.md](../plugin/skills/gns3-lab-automation/SKILL.md) - Agent skill with GNS3 workflows (part of the Claude plugin)
 - [TEST_RESULTS.md](../tests/TEST_RESULTS.md) - Latest test coverage and results
 - [ARCHITECTURE_REVIEW.md](../ARCHITECTURE_REVIEW.md) - Architecture assessment and recommendations
 

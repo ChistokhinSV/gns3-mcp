@@ -22,42 +22,28 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12'  # prepare_mcpb.py needs tomllib (3.11+); the wheel is pure Python
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Download UV package manager
-        run: |
-          Write-Host "Downloading UV package manager for Windows..."
-          $uvUrl = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip"
-          $uvZip = "uv-windows.zip"
-          Invoke-WebRequest -Uri $uvUrl -OutFile $uvZip
-          Write-Host "Extracting UV binary..."
-          Expand-Archive -Path $uvZip -DestinationPath mcp-server -Force
-          Remove-Item $uvZip
-          Write-Host "UV binary downloaded successfully"
-          Get-Item mcp-server\uv.exe | Format-List
-
       - name: Install build tools for PyPI
         run: |
           pip install build twine
 
-      - name: Copy source code for packaging
+      # Manifest 0.4 "uv" server type: Claude Desktop installs the dependencies from
+      # the bundle's pyproject.toml, so the bundle carries source code only (no uv.exe)
+      - name: Prepare bundle (source + generated pyproject.toml)
         run: |
-          Write-Host "Copying gns3_mcp\ source code into mcp-server\ for .mcpb packaging..."
-          if (Test-Path mcp-server\gns3_mcp) {
-            Remove-Item -Path mcp-server\gns3_mcp -Recurse -Force
-          }
-          Copy-Item -Path gns3_mcp -Destination mcp-server\gns3_mcp -Recurse -Force
-          Write-Host "Source code copied successfully"
+          python scripts/prepare_mcpb.py
 
-      - name: Build MCP binary
+      - name: Validate manifest and build .mcpb
         run: |
           cd mcp-server
-          npx @anthropic-ai/mcpb@1.1.2 pack
+          npx @anthropic-ai/mcpb@2.1.2 validate manifest.json
+          npx @anthropic-ai/mcpb@2.1.2 pack
 
       - name: Verify build output
         run: |
@@ -65,23 +51,28 @@ jobs:
             Write-Host "Error: mcp-server.mcpb was not created"
             exit 1
           }
-          Write-Host "Build successful:"
           Get-Item mcp-server\mcp-server.mcpb | Format-List
 
-          # Verify UV binary is inside the archive. A size threshold broke when uv
-          # releases shrank (58 MB -> 30 MB), so look for the entry itself.
+          # The host runs gns3_mcp_server.py with deps from pyproject.toml - all must be inside
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path mcp-server\mcp-server.mcpb))
           try {
-            $uv = $zip.Entries | Where-Object { $_.FullName -eq "uv.exe" }
+            $names = $zip.Entries | ForEach-Object { $_.FullName.Replace('\', '/') }
           } finally {
             $zip.Dispose()
           }
-          if (-not $uv -or $uv.Length -lt 5MB) {
-            Write-Host "ERROR: uv.exe missing from .mcpb (or truncated)"
-            exit 1
+          foreach ($required in 'manifest.json', 'pyproject.toml', 'gns3_mcp_server.py', 'gns3_mcp/cli.py', 'gns3_mcp/server/main.py') {
+            if ($names -notcontains $required) {
+              Write-Host "ERROR: $required missing from .mcpb"
+              exit 1
+            }
           }
-          Write-Host ("uv.exe included: {0:N1} MB" -f ($uv.Length / 1MB))
+          Write-Host "Bundle contents OK ($($names.Count) files)"
+
+      - name: Smoke test bundle (run it the way Claude Desktop does)
+        run: |
+          pip install uv mcp
+          python scripts/smoke_test_mcpb.py mcp-server/mcp-server.mcpb
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -209,7 +200,9 @@ jobs:
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for details.
 
             ### Platform
-            - **Supported:** Windows for Desktop Extension (MCPB with UV binary), Linux and macOS for uv/pip and docker installations.
+            - **Desktop Extension (.mcpb):** Claude Desktop on Windows and macOS. Uses the MCPB uv runtime: Claude Desktop installs the dependencies on first start.
+            - **Claude Code / Cowork plugin:** `/plugin marketplace add ${{ github.repository }}`, then `/plugin install gns3-lab@gns3-mcp`. Needs uv on the machine.
+            - **uv/pip and Docker:** Windows, Linux and macOS.
             - **Python:** 3.10-3.13
             - Built on: windows-latest runner
           draft: false

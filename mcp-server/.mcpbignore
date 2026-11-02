@@ -1,0 +1,12 @@
+# Not needed at runtime - the host installs dependencies from pyproject.toml
+.gitignore
+.mcpbignore
+.venv/
+uv.lock
+__pycache__/
+*.pyc
+*.mcpb
+docs/
+start_mcp.py
+lib/
+venv/

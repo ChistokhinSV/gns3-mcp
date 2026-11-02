@@ -1,26 +1,37 @@
 {
-  "manifest_version": "0.2",
+  "manifest_version": "0.4",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.55.0",
+  "version": "0.56.0",
   "description": "GNS3 lab automation with AI agent",
-  "long_description": "GNS3 v3 lab automation MCP server with 13 CRUD-style tools. Create/modify nodes, configure via console/SSH, topology management, real-time notifications.",
+  "long_description": "GNS3 v3 lab automation MCP server with 15 CRUD-style tools. Create/modify nodes (RAM, CPUs, QEMU disks, CD-ROM, options), wire links, configure devices via console/SSH, topology management, real-time notifications. Dependencies are installed by Claude Desktop with uv on first start.",
+  "homepage": "https://github.com/ChistokhinSV/gns3-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChistokhinSV/gns3-mcp"
+  },
+  "license": "MIT",
   "author": {
     "name": "Sergei Chistokhin",
     "email": "Sergei@Chistokhin.com"
   },
   "server": {
-    "type": "python",
-    "entry_point": "bootstrap.py",
+    "type": "uv",
+    "entry_point": "gns3_mcp_server.py",
     "mcp_config": {
-      "command": "python",
+      "command": "uv",
       "args": [
-        "${__dirname}/bootstrap.py",
-        "--host=${user_config.gns3_host}",
-        "--port=${user_config.gns3_port}",
-        "--username=${user_config.username}",
-        "--password=${user_config.password}"
-      ]
+        "run",
+        "--directory",
+        "${__dirname}",
+        "gns3_mcp_server.py"
+      ],
+      "env": {
+        "GNS3_HOST": "${user_config.gns3_host}",
+        "GNS3_PORT": "${user_config.gns3_port}",
+        "GNS3_USER": "${user_config.username}",
+        "GNS3_PASSWORD": "${user_config.password}"
+      }
     }
   },
   "user_config": {
@@ -88,7 +99,15 @@
     },
     {
       "name": "ssh",
-      "description": "Batch SSH operations (configure, command, disconnect). Multi-proxy support, auto-recovery (30min TTL). Operations: configure, command, disconnect"
+      "description": "Batch SSH operations (configure, command, read, disconnect). Multi-proxy support, auto-recovery (30min TTL). Operations: configure, command, read, disconnect"
+    },
+    {
+      "name": "tftp",
+      "description": "TFTP server on the SSH proxy (list, upload, download, delete, status) for device config and firmware transfers"
+    },
+    {
+      "name": "http_client",
+      "description": "HTTP(S) GET requests and reachability checks to lab device APIs through the SSH proxy (get, status)"
     },
     {
       "name": "notification",
@@ -137,8 +156,7 @@
   "compatibility": {
     "platforms": [
       "darwin",
-      "win32",
-      "linux"
+      "win32"
     ],
     "runtimes": {
       "python": ">=3.10"

@@ -1,0 +1,48 @@
+{
+  "name": "gns3-lab",
+  "displayName": "GNS3 Lab",
+  "version": "0.56.0",
+  "description": "Build, wire, configure and troubleshoot GNS3 network labs: projects, nodes (RAM, CPUs, QEMU disks, CD-ROM, options), links, device consoles, SSH, drawings and topology export. Bundles the gns3-mcp server (runs locally with uvx) and a skill with the workflows.",
+  "author": {
+    "name": "Sergei Chistokhin",
+    "url": "https://github.com/ChistokhinSV"
+  },
+  "homepage": "https://github.com/ChistokhinSV/gns3-mcp",
+  "repository": "https://github.com/ChistokhinSV/gns3-mcp",
+  "license": "MIT",
+  "keywords": [
+    "gns3",
+    "network",
+    "lab",
+    "automation",
+    "mcp",
+    "netmiko"
+  ],
+  "userConfig": {
+    "gns3_host": {
+      "type": "string",
+      "title": "GNS3 server host",
+      "description": "Hostname or IP of the GNS3 server. Leave empty to use GNS3_HOST from the environment or ~/.gns3-mcp/.env (default localhost).",
+      "default": ""
+    },
+    "gns3_port": {
+      "type": "string",
+      "title": "GNS3 server port",
+      "description": "GNS3 API port. Leave empty for GNS3_PORT from the environment or ~/.gns3-mcp/.env (default 80).",
+      "default": ""
+    },
+    "gns3_user": {
+      "type": "string",
+      "title": "GNS3 username",
+      "description": "Leave empty for GNS3_USER from the environment or ~/.gns3-mcp/.env (default admin).",
+      "default": ""
+    },
+    "gns3_password": {
+      "type": "string",
+      "title": "GNS3 password",
+      "description": "Stored in the system credential store. Leave empty to use GNS3_PASSWORD from the environment or ~/.gns3-mcp/.env.",
+      "sensitive": true,
+      "default": ""
+    }
+  }
+}

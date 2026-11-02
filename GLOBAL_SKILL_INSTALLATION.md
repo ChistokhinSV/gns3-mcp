@@ -1,5 +1,7 @@
 # Installing GNS3 Skill Globally in Claude Code
 
+> **Since v0.56.0 the easier way is the Claude plugin**, which installs the skill and the MCP server together and keeps them updated: `/plugin marketplace add ChistokhinSV/gns3-mcp`, then `/plugin install gns3-lab@gns3-mcp` (see [plugin/README.md](plugin/README.md)). The manual copy below still works for the skill alone.
+
 This guide explains how to make the GNS3 skill available globally across all Claude Code projects.
 
 ## What Are Skills?
@@ -42,8 +44,8 @@ Run this PowerShell script to install the GNS3 skill globally:
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\skills\gns3"
 
 # Copy GNS3 skill
-Copy-Item "C:\HOME\1. Scripts\008. GNS3 MCP\skill\SKILL.md" `
-  -Destination "$env:USERPROFILE\.claude\skills\gns3\SKILL.md"
+Copy-Item "C:\HOME\1. Scripts\008. GNS3 MCP\plugin\skills\gns3-lab-automation\*" `
+  -Destination "$env:USERPROFILE\.claude\skills\gns3\" -Recurse -Force
 
 # Verify installation
 Get-ChildItem "$env:USERPROFILE\.claude\skills\gns3"
@@ -284,7 +286,7 @@ Follow progressive disclosure pattern:
 3. **Device-Specific Details** - Detailed references
 4. **Examples** - Real-world use cases
 
-See `skill/SKILL.md` for complete example.
+See `plugin/skills/gns3-lab-automation/SKILL.md` for a complete example.
 
 ## Resources
 

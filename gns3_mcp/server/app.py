@@ -153,7 +153,9 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     # Read connection settings from environment with fallback to args
     host = os.getenv("GNS3_HOST") or args.host
     port = int(os.getenv("GNS3_PORT", "0")) or args.port
-    username = os.getenv("USER") or os.getenv("GNS3_USER") or args.username
+    # GNS3_USER first: on macOS/Linux USER is the OS login name, which would win otherwise.
+    # USER stays as a fallback for older .env files and the Windows service config.
+    username = os.getenv("GNS3_USER") or os.getenv("USER") or args.username
 
     # Read password from environment with fallback (CWE-214 fix - no password in process args)
     password = args.password or os.getenv("PASSWORD") or os.getenv("GNS3_PASSWORD")

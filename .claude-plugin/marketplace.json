@@ -1,0 +1,17 @@
+{
+  "name": "gns3-mcp",
+  "owner": {
+    "name": "Sergei Chistokhin",
+    "url": "https://github.com/ChistokhinSV"
+  },
+  "metadata": {
+    "description": "GNS3 network lab automation for Claude Code and Cowork"
+  },
+  "plugins": [
+    {
+      "name": "gns3-lab",
+      "source": "./plugin",
+      "description": "GNS3 lab automation: the gns3-mcp server (local, via uvx) plus a skill with lab workflows"
+    }
+  ]
+}

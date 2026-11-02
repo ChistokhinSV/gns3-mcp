@@ -13,6 +13,45 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+# Settings that may come from the environment or .env files
+CONFIG_ENV_VARS = (
+    "GNS3_HOST",
+    "GNS3_PORT",
+    "GNS3_USER",
+    "GNS3_PASSWORD",
+    "GNS3_USE_HTTPS",
+    "GNS3_VERIFY_SSL",
+    "MCP_API_KEY",
+)
+
+
+def user_env_file() -> Path:
+    """User-level .env shared by every client (plugin, uvx, pip install)"""
+    return Path(os.getenv("GNS3_MCP_ENV_FILE") or Path.home() / ".gns3-mcp" / ".env")
+
+
+def load_config_env(env_file: Path | None = None) -> None:
+    """Load settings: process env > --env-file (or ./.env) > user-level .env.
+
+    Empty values count as unset. The Claude plugin passes "" for options nobody
+    filled in - Cowork never prompts for them - and the .env files must still
+    be able to supply those settings. load_dotenv never overrides a set variable.
+    """
+    for key in CONFIG_ENV_VARS:
+        if os.environ.get(key) == "":
+            del os.environ[key]
+
+    if env_file:
+        if not env_file.exists():
+            print(f"Error: .env file not found: {env_file}", file=sys.stderr)
+            sys.exit(1)
+        load_dotenv(env_file)
+    elif (Path.cwd() / ".env").exists():
+        load_dotenv(Path.cwd() / ".env")
+
+    if user_env_file().exists():
+        load_dotenv(user_env_file())
+
 
 def main():
     """Main entry point for gns3-mcp CLI
@@ -38,12 +77,13 @@ Examples:
   # Override .env settings
   gns3-mcp --host 10.0.0.1 --port 443 --username user --password pass
 
-Environment variables (.env file):
-  GNS3_HOST       GNS3 server hostname/IP (default: localhost)
-  GNS3_PORT       GNS3 server API port (default: 80)
-  GNS3_USER       GNS3 username (default: admin)
-  GNS3_PASSWORD   GNS3 password (required)
-  MCP_API_KEY     API key for HTTP mode authentication (auto-generated if missing)
+Environment variables (process env > --env-file or ./.env > ~/.gns3-mcp/.env):
+  GNS3_HOST          GNS3 server hostname/IP (default: localhost)
+  GNS3_PORT          GNS3 server API port (default: 80)
+  GNS3_USER          GNS3 username (default: admin)
+  GNS3_PASSWORD      GNS3 password (required)
+  MCP_API_KEY        API key for HTTP/SSE transport (required for http/sse)
+  GNS3_MCP_ENV_FILE  User-level .env path (default: ~/.gns3-mcp/.env)
         """,
     )
 
@@ -95,19 +135,7 @@ Environment variables (.env file):
 
     args = parser.parse_args()
 
-    # Load .env file
-    if args.env_file:
-        # Use specified .env file
-        if args.env_file.exists():
-            load_dotenv(args.env_file)
-        else:
-            print(f"Error: .env file not found: {args.env_file}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        # Try current directory
-        env_file = Path.cwd() / ".env"
-        if env_file.exists():
-            load_dotenv(env_file)
+    load_config_env(args.env_file)
 
     # Apply defaults from environment with fallback values
     if args.host is None:
@@ -122,7 +150,8 @@ Environment variables (.env file):
     # Validate required parameters
     if not args.password:
         print(
-            "Error: GNS3 password required (set GNS3_PASSWORD in .env or use --password)",
+            "Error: GNS3 password required - set GNS3_PASSWORD in the environment, "
+            f"./.env or {user_env_file()} (or use --password)",
             file=sys.stderr,
         )
         sys.exit(1)
