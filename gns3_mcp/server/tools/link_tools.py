@@ -57,7 +57,7 @@ async def get_links_impl(gns3: "IGns3Client", project_id: str) -> str:
             if len(link_nodes) < 2:
                 warnings.append(
                     f"Warning: Link {link_id} has only {len(link_nodes)} endpoint(s) - "
-                    f"possibly corrupted. Consider deleting with set_connection()"
+                    f"possibly corrupted. Consider deleting it with link(action='batch') disconnect"
                 )
                 continue
 
@@ -127,9 +127,9 @@ async def set_connection_impl(
     2. EXECUTE ALL operations (only if all valid - atomic)
 
     Workflow:
-        1. Call get_links() to see current topology
+        1. Call link(action="list") to see current topology
         2. Identify link IDs to disconnect (if needed)
-        3. Call set_connection() with disconnect + connect operations
+        3. Call link(action="batch") with disconnect + connect operations
 
     Args:
         connections: List of connection operations:
@@ -247,7 +247,7 @@ async def set_connection_impl(
                     error=f"Validation failed at operation {idx}",
                     error_code=error_code,
                     details=validation_error,
-                    suggested_action="Check get_links() to see current topology and verify node names, ports, and adapters",
+                    suggested_action='Check link(action="list") for the current topology and verify node names, ports, and adapters',
                     context={"operation_index": idx, "operation": op.model_dump()},
                 )
 

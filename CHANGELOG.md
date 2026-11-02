@@ -5,6 +5,34 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.56.2] - 2026-11-02 - Client Texts Use Current Tools
+
+### Fixed
+- **The `troubleshooting` prompt never rendered**: unescaped `{ }` in its f-string examples raised
+  `ValueError: Invalid format specifier` on every call, so clients got an error instead of the workflow.
+- **Server instructions, prompts and error hints named tools removed in v0.47** (GM-93), so
+  clients called tools that don't exist (`set_node_properties`, `send_console_data`,
+  `read_console_output`, `list_nodes`, `open_project`, `set_connection`, `ssh_configure`,
+  `create_snapshot`, `get_console_status`, ...).
+  - `instructions.md` (sent on initialize) rewritten: 128 lines instead of 327, aligned with the
+    plugin skill; corrects facts too (several projects can be open; `last_page` is 25 lines).
+  - Prompts `node_setup` and `troubleshooting` rewritten with `node(...)`, `link(action="batch")`,
+    `console(operations=[...])`, `ssh(operations=[...])`, `project_docs(...)`; fixes in `lab_setup`,
+    `topology_discovery`, `ssh_setup`; nonexistent resource URIs replaced.
+  - Error suggestions in `error_utils`, `context`, `exceptions`, `models`, `link_validator`,
+    console/link/project/export tools.
+- **Node Setup Workflow commands**: Linux and MikroTik got the dotted mask after a `/` (MikroTik had
+  `/24` hard-coded) - the prefix length is now computed; IOS sets `hostname` and `ip domain-name`
+  before `crypto key generate rsa`, which fails without them. Examples are built with `json.dumps`,
+  so passwords with quotes or braces render correctly.
+- Prompt names in instructions and the plugin skill now match the registered names
+  ("Troubleshooting Workflow", "Node Setup Workflow", ...).
+
+### Added
+- `tests/unit/test_client_texts.py`: renders every prompt branch and scans instructions, MCP
+  tool/resource descriptions and all server string literals for calls to removed tools; checks that
+  documented prompt names are registered.
+
 ## [0.56.1] - 2026-11-02 - Release Fixes for 0.56.0
 
 0.56.0 was tagged but never published: both release workflows failed. 0.56.1 ships all of

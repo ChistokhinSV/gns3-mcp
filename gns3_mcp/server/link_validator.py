@@ -143,7 +143,7 @@ class LinkValidator:
                 "",
                 f"Port '{identifier}' not found on {node_name} (case-sensitive). "
                 f"Available ports: {avail_str}. "
-                f"Tip: Use get_links() to see current connections",
+                f'Tip: Use link(action="list") to see current connections',
             )
 
         return (0, 0, "", f"Invalid adapter identifier type: {type(identifier)}")
@@ -235,8 +235,8 @@ class LinkValidator:
                     link_id = self._find_link_using_port(node_id, adapter, port)
                     return (
                         f"Port {node_name} adapter {adapter} port {port} is already connected "
-                        f"(link: {link_id}). Use get_links() to see current topology, then disconnect "
-                        f"with set_connection([{{'action': 'disconnect', 'link_id': '{link_id}'}}])"
+                        f"(link: {link_id}). Use link(action='list') to see current topology, then disconnect "
+                        f"with link(action='batch', connections=[{{'action': 'disconnect', 'link_id': '{link_id}'}}])"
                     )
 
         return None

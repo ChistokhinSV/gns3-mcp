@@ -119,7 +119,7 @@ async def send_console_impl(
     Auto-connect Behavior:
     - First send/read automatically connects to console (no manual connect needed)
     - Connection persists until disconnect_console() or 30-minute timeout
-    - Check connection state with get_console_status()
+    - Check connection state with query_resource("sessions://console/")
 
     Escape Sequence Processing:
     - By default, processes common escape sequences (\n, \r, \t, \x1b)
@@ -150,7 +150,7 @@ async def send_console_impl(
             error=f"Cannot send to console for node '{node_name}' - terminal not accessed yet",
             error_code=ErrorCode.OPERATION_FAILED.value,
             details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending commands",
-            suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
+            suggested_action="Check the terminal state with a console 'read' operation (mode 'last_page' or 'diff'), then retry sending",
             context={"node_name": node_name, "reason": "terminal_not_accessed"},
         )
 
@@ -178,7 +178,7 @@ async def send_console_impl(
             error=f"Failed to send data to console for node '{node_name}'",
             error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
             details="Console session may have been disconnected",
-            suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
+            suggested_action='Check the node is started (node(action="list")), then retry; gns3_connection(action="reconnect") clears stale console sessions',
             context={"node_name": node_name},
         )
 
@@ -594,7 +594,7 @@ async def send_and_wait_console_impl(
                 error=f"Cannot send to console for node '{node_name}' - terminal not accessed yet",
                 error_code=ErrorCode.OPERATION_FAILED.value,
                 details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending commands",
-                suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
+                suggested_action="Check the terminal state with a console 'read' operation (mode 'last_page' or 'diff'), then retry sending",
                 context={"node_name": node_name, "reason": "terminal_not_accessed"},
             )
 
@@ -621,7 +621,7 @@ async def send_and_wait_console_impl(
                 error=f"Failed to send command to console for node '{node_name}'",
                 error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
                 details="Console session may have been disconnected",
-                suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
+                suggested_action='Check the node is started (node(action="list")), then retry; gns3_connection(action="reconnect") clears stale console sessions',
                 context={
                     "node_name": node_name,
                     "command": command[:100],
@@ -814,7 +814,7 @@ async def send_keystroke_impl(
             error=f"Cannot send keystroke to console for node '{node_name}' - terminal not accessed yet",
             error_code=ErrorCode.OPERATION_FAILED.value,
             details="You must read the console first to understand the current terminal state (prompt, login screen, etc.) before sending keystrokes",
-            suggested_action="Use console_read() with mode='diff' or mode='last_page' to check the current terminal state, then retry sending",
+            suggested_action="Check the terminal state with a console 'read' operation (mode 'last_page' or 'diff'), then retry sending",
             context={"node_name": node_name, "reason": "terminal_not_accessed"},
         )
 
@@ -956,7 +956,7 @@ async def send_keystroke_impl(
                     error=f"Failed to send keystroke to console for node '{node_name}'",
                     error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
                     details="Console session may have been disconnected",
-                    suggested_action="Check console connection with get_console_status()",
+                    suggested_action='Check the node is started (node(action="list")); gns3_connection(action="reconnect") clears stale console sessions',
                     context={
                         "node_name": node_name,
                         "key": key,
@@ -1007,7 +1007,7 @@ async def send_keystroke_impl(
                     error=f"Failed to send keystroke to console for node '{node_name}'",
                     error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
                     details=f"Console session may have been disconnected after {keystrokes_sent} keystrokes",
-                    suggested_action="Check console connection with get_console_status()",
+                    suggested_action='Check the node is started (node(action="list")); gns3_connection(action="reconnect") clears stale console sessions',
                     context={
                         "node_name": node_name,
                         "key": key,
@@ -1034,7 +1034,7 @@ async def send_keystroke_impl(
             error=f"Failed to send keystroke to console for node '{node_name}'",
             error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
             details="Console session may have been disconnected",
-            suggested_action="Check console connection with get_console_status(), or use disconnect_console() and retry",
+            suggested_action='Check the node is started (node(action="list")), then retry; gns3_connection(action="reconnect") clears stale console sessions',
             context={"node_name": node_name, "key": key},
         )
 

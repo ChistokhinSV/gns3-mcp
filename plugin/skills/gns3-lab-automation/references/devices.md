@@ -34,4 +34,4 @@ Prompts are defaults on a fresh image; hostnames change them. Always confirm wit
 - **FortiOS**: `config system interface` -> `edit port1` -> `set allowaccess ping ssh https` -> `end`.
 - **Linux**: `apk add openssh` (Alpine) or `apt install openssh-server`, then enable the service.
 
-The server's `ssh_setup` prompt walks through these per device type.
+The server prompt "SSH Setup Workflow" walks through these per device type.

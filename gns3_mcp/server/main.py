@@ -378,7 +378,7 @@ async def resource_proxy_status() -> str:
     """Get SSH proxy service status (main proxy on GNS3 host)
 
     Returns health status and version of the main SSH proxy running on the GNS3 host.
-    This is the default proxy used when ssh_configure() is called without a proxy parameter.
+    This is the default proxy for an ssh `configure` operation without a `proxy` key.
     """
     return await get_app().resource_manager.get_proxy_status()
 
@@ -399,11 +399,11 @@ async def resource_proxy_registry() -> str:
 
     Example workflow:
     1. Check this resource to find available lab proxies
-    2. Use proxy_id in ssh_configure(proxy=proxy_id) for isolated network access
-    3. All subsequent ssh_command() calls will route through the selected proxy
+    2. Pass it as "proxy" in an ssh `configure` operation for isolated network access
+    3. Later `command` operations for that node route through the selected proxy
 
     Returns: {available, proxies[], count} where each proxy has:
-    - proxy_id: Use this with ssh_configure(proxy=...)
+    - proxy_id: Use this as "proxy" in an ssh `configure` operation
     - hostname: Node name in GNS3
     - project_id: Which project this proxy belongs to
     - url: Proxy API endpoint

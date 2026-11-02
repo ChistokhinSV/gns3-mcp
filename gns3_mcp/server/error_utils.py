@@ -70,7 +70,7 @@ def node_not_found_error(node_name: str, project_id: str, available_nodes: List[
         error=f"Node '{node_name}' not found in project",
         error_code=ErrorCode.NODE_NOT_FOUND.value,
         details=f"Available nodes: {', '.join(available_nodes) if available_nodes else 'none'}",
-        suggested_action="Use list_nodes() to see all available nodes in the project",
+        suggested_action='Use node(action="list", project_id=...) to see all nodes in the project',
         context={
             "project_id": project_id,
             "node_name": node_name,
@@ -92,12 +92,10 @@ def project_not_found_error(project_name: str | None = None) -> str:
 
     if project_name:
         error_msg = f"Project '{project_name}' not found"
-        suggested_action = (
-            "Use list_projects() to see available projects, or check the project name spelling"
-        )
+        suggested_action = 'Use project(action="list") to see available projects, or check the project name spelling'
     else:
         error_msg = "No project currently open"
-        suggested_action = "Use open_project() to open a project first"
+        suggested_action = 'Use project(action="open", name=...) to open a project first'
 
     return create_error_response(
         error=error_msg,
@@ -174,7 +172,7 @@ def template_not_found_error(template_name: str, available_templates: List[str])
         error=f"Template '{template_name}' not found",
         error_code=ErrorCode.TEMPLATE_NOT_FOUND.value,
         details=f"Available templates: {', '.join(available_templates[:10]) if available_templates else 'none'}",
-        suggested_action="Use list_templates() to see all available templates",
+        suggested_action='Use query_resource("templates://") to see all available templates',
         context={
             "template_name": template_name,
             "available_templates": available_templates[:20],  # Limit context size
@@ -285,7 +283,7 @@ def node_running_error(node_name: str, operation: str) -> str:
         error=f"Operation '{operation}' requires node '{node_name}' to be stopped",
         error_code=ErrorCode.NODE_RUNNING.value,
         details="Node is currently running",
-        suggested_action=f"Stop the node first with set_node('{node_name}', action='stop'), then retry",
+        suggested_action=f"Stop the node first with node(action='set', node_name='{node_name}', state_action='stop'), then retry",
         context={"node_name": node_name, "operation": operation},
     )
 
@@ -306,7 +304,7 @@ def node_stopped_error(node_name: str, operation: str) -> str:
         error=f"Operation '{operation}' requires node '{node_name}' to be running",
         error_code=ErrorCode.NODE_STOPPED.value,
         details="Node is currently stopped",
-        suggested_action=f"Start the node first with set_node('{node_name}', action='start'), then retry",
+        suggested_action=f"Start the node first with node(action='set', node_name='{node_name}', state_action='start'), then retry",
         context={"node_name": node_name, "operation": operation},
     )
 

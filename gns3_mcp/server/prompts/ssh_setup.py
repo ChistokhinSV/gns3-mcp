@@ -131,7 +131,7 @@ async def render_ssh_setup_prompt(
 **Generic SSH Setup (device_type: {device_type}):**
 
 Device-specific instructions not available. General steps:
-1. Use console_send() to access device configuration mode
+1. Use `console(operations=[...])` to access device configuration mode
 2. Create a user account with administrative privileges
 3. Enable SSH service
 4. Generate SSH keys if required

@@ -173,4 +173,4 @@ notification(action="read", mode="diff", filter_action="node.updated")   # or 'l
 | SSH `SSH_DISCONNECTED` | re-run `configure` with `force: True` |
 | Link "port in use" | `link list`, disconnect the old link in the same batch |
 
-Lab-wide troubleshooting by OSI layer is available as the server prompt `troubleshooting`; other prompts: `lab_setup`, `node_setup`, `ssh_setup`, `topology_discovery`.
+Lab-wide troubleshooting by OSI layer is available as the server prompt "Troubleshooting Workflow"; other prompts: "Lab Setup Workflow", "Node Setup Workflow", "SSH Setup Workflow", "Topology Discovery Workflow".

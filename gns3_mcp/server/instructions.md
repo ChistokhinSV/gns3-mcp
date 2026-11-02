@@ -1,327 +1,128 @@
-# GNS3 MCP Server Instructions
+# GNS3 MCP Server
 
-Network lab automation server with console access and SSH capabilities.
+Automation for GNS3 v3 network labs: projects, nodes, links, device consoles (telnet), SSH through a proxy, drawings, notifications and topology export.
 
-## Important: Use MCP Tools Only
+## Rules
 
-**CRITICAL**: The GNS3 server requires authentication (JWT tokens). **Do NOT attempt direct curl commands** or manual API calls.
+- **Use these tools only.** The GNS3 API needs JWT auth that the server handles; never call it with curl or httpx.
+- **Current project.** Node, link, console and drawing tools act on the server's current project. GNS3 can have several projects open; after a server restart the first opened one is picked. Call `project(action="open", name=...)` when in doubt.
+- **Read before you change.** `project_docs(action="get")` keeps the lab's IP plan and credentials; `query_resource("projects://<id>/topology_report")` shows nodes, links and status in one call.
+- **Nodes boot slowly.** `node(action="set", state_action="start")` waits up to ~60 s for `started`; the device OS needs more time before its console or SSH answers.
+- **Console first access.** The first `console` batch for a node never accessed may contain only `read` operations; other operations are skipped. Read once, then send.
+- **Trust what results say.** `unapplied_properties` (create) or `Warning: not applied by GNS3` (set) means GNS3 ignored those keys for that node type. Error `details` carry GNS3's reason (missing image, connected switch, node must be stopped).
+- **Record what you build** with `project_docs(action="update", content=...)`.
 
-- ✅ **Always use MCP tools** provided by this server (e.g., `list_nodes`, `set_node_properties`, `open_project`)
-- ❌ **Never use curl or httpx directly** - authentication is handled automatically by the server
-- ❌ **Never try to authenticate manually** - the server manages JWT tokens internally
-- 🔒 All API access is authenticated and managed by the MCP server
+## Tools
 
-**Why**: Direct API calls will fail without proper JWT authentication flow. MCP tools handle all authentication automatically.
+| Tool | Actions / operations |
+|---|---|
+| `project` | `list`, `open`, `create` (auto-opens), `close` |
+| `node` | `list`, `create` (from template), `delete`, `set` (properties; `state_action` start/stop/suspend/reload/restart) |
+| `link` | `list`, `batch` of `connect` / `disconnect` (all validated before any change) |
+| `console` | batch of `send`, `send_and_wait`, `read`, `keystroke` |
+| `ssh` | batch of `configure`, `command`, `read`, `disconnect` (Netmiko, via SSH proxy) |
+| `node_file` | Docker nodes: `read`, `write`, `configure_network` |
+| `project_docs` | `get`, `update` the project README |
+| `drawing` | `list`, `create`, `update`, `delete`, `batch` |
+| `export_topology_diagram` | SVG/PNG of the canvas |
+| `notification` | `subscribe`, `read`, `unsubscribe`, `status` |
+| `query_resource` | read any resource URI (list below) |
+| `gns3_connection` | `check`, `retry`, `reconnect` |
+| `tftp`, `http_client` | TFTP files and HTTP requests through the SSH proxy |
+| `search_tools` | find tools by category or capability |
 
-## Node Timing Requirements
+## Nodes
 
-**Critical**: Nodes require 30-60 seconds startup time after start command.
-
-- **ALWAYS** wait for node status "started" before attempting console connection
-- Use `set_node_properties()` with `action="start"` and wait for completion
-- Attempting console access too early will fail with connection refused errors
-- Progress notifications show startup progress (12 steps over 60 seconds) (v0.39.0)
-
-**Example workflow**:
-```
-1. set_node_properties("R1", action="start")  # Wait for "started" status
-2. Wait 5-10 additional seconds for console services to initialize
-3. send_console_data("R1", "\n")  # Wake console
-4. read_console_output("R1", mode="last_page")  # Check prompt
-```
-
-## Bulk Node Operations (v0.40.0)
-
-**Wildcard patterns** enable operations on multiple nodes simultaneously.
-
-**Supported Patterns**:
-- `"*"` - All nodes in project
-- `"Router*"` - Prefix match (Router1, Router2, RouterCore)
-- `"*-Core"` - Suffix match (Router-Core, Switch-Core)
-- `"R[123]"` - Character class (R1, R2, R3)
-- `'["R1", "R2"]'` - JSON array of specific nodes
-
-**Execution Modes**:
-- `parallel=True` (default): Concurrent execution for start/stop/suspend (fastest)
-- `parallel=False`: Sequential execution with progress notifications
-
-**Response Format**:
-- Single node: Returns status message (backward compatible)
-- Multiple nodes: Returns BatchOperationResult with per-node success/failure
-
-**Examples**:
-```
-# Start all nodes (parallel)
-set_node_properties("*", action="start")
-
-# Stop all routers (parallel)
-set_node_properties("Router*", action="stop")
-
-# Start specific nodes (sequential with progress)
-set_node_properties('["R1", "R2", "R3"]', action="start", parallel=False)
-
-# Position all switches
-set_node_properties("Switch*", x=100, y=200)
-
-# Lock all core devices
-set_node_properties("*-Core", locked=True)
+```python
+node(action="create", template_name="Cisco IOSv", node_name="R1", x=0, y=0)
+node(action="create", template_name="Ubuntu Cloud Guest", node_name="ops1", x=200, y=0,
+     ram=8192, cpus=4, adapters=2, hda_disk_image="ops1-60G.qcow2",
+     cdrom_image="seed.iso", options="-cpu host")
+node(action="set", node_name="ops1", properties={"adapter_type": "virtio-net-pci"})
+node(action="set", node_name="*", state_action="start")        # all nodes, in parallel
 ```
 
-**Batch Result Structure**:
-```json
-{
-  "operation": "set_node_properties (start)",
-  "status": "success",
-  "summary": {
-    "total_items": 5,
-    "succeeded": 4,
-    "failed": 1,
-    "elapsed_seconds": 12.3
-  },
-  "succeeded_items": [
-    {"item": "Router1", "details": {"changes": ["Started (ready after 15s)"]}},
-    {"item": "Router2", "details": {"changes": ["Started (ready after 20s)"]}}
-  ],
-  "failed_items": [
-    {"item": "Router3", "error": "Node not found", "suggestion": "Check node name"}
-  ]
-}
+- Hardware params apply on `create` and `set` (most need the node stopped). Disk slots: `hda` boot, `hdb` second, `hdc` via `properties`, `hdd` fourth.
+- Patterns for `set`/`delete`: `*`, `R*`, `*-Core`, `R[123]`, JSON array `'["R1","R2"]'`. Several nodes return a batch result with `succeeded_items` / `failed_items`.
+- Switch `ports` can change only while no links are attached.
+
+## Links
+
+```python
+link(action="batch", connections=[
+    {"action": "connect", "node_a": "R1", "adapter_a": "GigabitEthernet0/0", "port_a": 0,
+     "node_b": "SW1", "adapter_b": "Ethernet2", "port_b": 0},
+    {"action": "disconnect", "link_id": "<id from link list>"},
+])
 ```
 
-**Best Practices**:
-- Use wildcard patterns for lab-wide operations (start all, stop all)
-- Use parallel mode for faster execution when order doesn't matter
-- Use sequential mode when you need to see individual node progress
-- Check failed_items in batch results to identify and retry failures
-- For large labs (10+ nodes), expect 1-2 minutes for parallel starts
+A port name in `adapter_*` fixes adapter and port (`port_*` ignored); with numbers the link uses (`adapter_*`, `port_*`) - switches keep all ports on adapter 0. Names are case-sensitive.
 
-## Console Buffer Management
+## Console
 
-Console buffers accumulate **all output** since connection establishment.
-
-**Best Practices**:
-- Use `mode="diff"` in `read_console_output()` to get only new output since last read
-- Use `mode="last_page"` to see current prompt without re-reading command history
-- Use `mode="all"` sparingly - only when you need full command history
-- Prevents AI from re-processing old command outputs and reduces token usage
-
-**Buffer Modes**:
-- `diff`: New output since last read (most efficient)
-- `last_page`: Last 50 lines (good for checking prompts)
-- `num_pages=N`: Last N pages of 50 lines each
-- `all`: Entire buffer (expensive, use rarely)
-
-**Example**:
-```
-send_console_data("R1", "show version\n")
-# Wait 2 seconds
-read_console_output("R1", mode="diff")  # Only shows command output
+```python
+console(operations=[{"type": "read", "node_name": "R1", "mode": "last_page"}])        # first access
+console(operations=[
+    {"type": "send", "node_name": "R1", "data": "\n"},
+    {"type": "send_and_wait", "node_name": "R1", "command": "show ip route\n",
+     "wait_pattern": "R1#", "timeout": 30, "handle_pagination": True},
+])
+console(operations=[{"type": "send_and_wait", "node_name": "R1",
+                     "wait_pattern": "login:", "timeout": 180}])   # no command = wait only
 ```
 
-## GNS3 Notifications (v0.54.0)
+- `read` modes: `diff` (new output, default), `last_page` (25 lines), `num_pages` + `pages`, `all` (whole buffer - use rarely). Grep with `pattern`, `case_insensitive`, `before` / `after` / `context`.
+- Check the real prompt with `last_page` before choosing a `wait_pattern` (regex).
+- `keystroke` keys: `enter`, `ctrl_c`, `ctrl_z`, `ctrl_d`, `esc`, `tab`, `space`, `up`, `down`, `backspace`.
+- `raw: True` on `send` skips escape processing (e.g. MikroTik). Keep pasted lines short on FortiOS and older IOS.
+- Sessions close after 30 min idle; buffers keep all output (10 MB cap).
 
-Subscribe to real-time GNS3 server events for monitoring lab state changes.
+## SSH
 
-**Workflow**:
+Enable SSH on the device through the console first, then:
+
+```python
+ssh(operations=[
+    {"type": "configure", "node_name": "R1", "device_dict": {
+        "device_type": "cisco_ios", "host": "10.1.0.1", "username": "admin", "password": "..."}},
+    {"type": "command", "node_name": "R1", "command": "show version"},
+    {"type": "command", "node_name": "R1", "command": ["interface Gi0/1", "no shutdown"]},
+])
+ssh(operations=[{"type": "command", "node_name": "@", "command": "ping -c 2 10.1.0.1"}])  # on the proxy
 ```
-1. notification(action="subscribe")                    # Controller-level (all events)
-2. notification(action="subscribe", project_id="...")   # Project-level events only
-3. notification(action="read")                          # New events since last read
-4. notification(action="read", filter_action="node.")   # Only node events
-5. notification(action="read", filter_action="log.error") # Only error logs
-6. notification(action="status")                        # Check subscription stats
-7. notification(action="unsubscribe")                   # Stop and clear buffer
+
+- `host` is the device's lab IP. `proxy` (default `host`) picks a lab proxy for isolated networks: `query_resource("proxies://")`.
+- Options: `force: True` for a fresh session (after a lab restart), `session_timeout`; per command `expect_string`, `read_timeout`, `wait_timeout` (long jobs report progress).
+- Sessions expire after 30 min idle and are recreated on the next `configure`.
+
+## Notifications
+
+```python
+notification(action="subscribe", project_id="<id>")          # omit project_id for controller events
+notification(action="read", filter_action="node.updated")    # modes: diff (default), all, last + limit
 ```
 
-**Event Types**:
-- Controller: `compute.*`, `project.*`, `template.*`, `log.error`, `log.warning`, `log.info`, `ping`
-- Project: `node.created/updated/deleted`, `link.created/updated/deleted`, `drawing.*`, `snapshot.restored`, `ping`
+Project events: `node.*`, `link.*`, `drawing.*`, `snapshot.restored`, `ping`. Controller events: `compute.*`, `project.*`, `template.*`, `log.error|warning|info`, `ping` (CPU/memory). One subscription at a time; buffer keeps 5000 events.
 
-**Read Modes**:
-- `diff`: New events since last read (default, most efficient)
-- `all`: Entire buffer
-- `last`: Last N events (uses `limit` parameter)
+## Resources (`query_resource`)
 
-**Best Practices**:
-- Use `diff` mode to avoid re-processing old events
-- Filter by action prefix to reduce noise (e.g., `filter_action="node."`)
-- `ping` events include CPU/memory metrics - useful for monitoring server health
-- Only one subscription active at a time (unsubscribe before switching scope)
-- Buffer holds up to 5000 events, auto-trims to 3000 when full
+`projects://`, `projects://<id>`, `projects://<id>/readme`, `projects://<id>/topology_report`, `nodes://<pid>/`, `nodes://<pid>/<nid>`, `nodes://<pid>/<nid>/template`, `links://<pid>/`, `drawings://<pid>/`, `templates://`, `templates://<tid>`, `sessions://console/`, `sessions://ssh/`, `sessions://ssh/<node>/history`, `sessions://ssh/<node>/buffer`, `proxies:///status`, `proxies://`, `diagrams://<pid>/topology`.
 
-## Connection Management (v0.38.0)
+## Connection
 
-Server implements non-blocking authentication with background reconnection.
+The server starts without waiting for GNS3 and authenticates in the background (retry 5 s -> 300 s). `gns3_connection(action="check")` shows the state and last error, `retry` re-authenticates now, `reconnect` also clears console/SSH/notification sessions (use after a GNS3 restart).
 
-**Key Behaviors**:
-- Server starts in 3 seconds even when GNS3 unavailable
-- Background task authenticates with exponential backoff (5s → 10s → 30s → 60s → 300s max)
-- All 29 tools available immediately (will fail gracefully if GNS3 disconnected)
+## Troubleshooting
 
-**Connection Tools**:
-- `check_gns3_connection()` - Check connection status, error details, last attempt time
-- `retry_gns3_connection()` - Force immediate reconnection (bypasses backoff timer)
+| Symptom | Do this |
+|---|---|
+| "No project opened" / wrong project | `project(action="list")`, then `project(action="open", name=...)` |
+| Console times out or is silent | node `started`? `read` with `last_page`; boot may still run - wait-only `send_and_wait` |
+| Console type is vnc/spice | only telnet consoles are supported; change with `node(action="set", console_type="telnet")` (node stopped) |
+| SSH `SSH_DISCONNECTED` | `configure` again with `force: True` |
+| `unapplied_properties` | key unknown for that node type - check `nodes://<pid>/<nid>` |
+| `The image '<x>' is missing` | upload the image to the GNS3 server first |
+| Link "port in use" | `link(action="list")`, disconnect the old link in the same batch |
+| Tools fail after GNS3 restart | `gns3_connection(action="reconnect")` |
 
-**Error Handling**:
-- Tool failures return clear error messages with connection status
-- Check connection before operations if previous operations failed
-- Connection auto-recovers when GNS3 becomes available
-
-## SSH Proxy Routing
-
-Multi-proxy architecture enables isolated network access through lab-internal proxies.
-
-**Routing Strategies**:
-- **Auto-routing** (default): Use `node_name` only, server routes to correct proxy
-- **Manual routing**: Specify `proxy` parameter for explicit control
-- **Main proxy**: Use `proxy="host"` for host-level SSH proxy (default)
-- **Lab proxies**: Use `proxy=proxy_id` for intra-lab proxies (discover via resources)
-
-**Prerequisites**:
-- SSH must be enabled on device first (use console to configure)
-- Proxy must have network connectivity to target device
-- Device must be started and SSH service running
-
-**Configuration Steps**:
-1. Enable SSH on device via console
-2. Configure SSH session: `configure_ssh_session("R1", device_dict)`
-3. Execute commands: `execute_ssh_command("R1", "show version")`
-
-## Project State Management
-
-**Requirements**:
-- Most tools require an active opened project
-- Server auto-detects opened projects on GNS3 connection
-- Only one project can be opened at a time in GNS3
-
-**Project Operations**:
-- `open_project(project_name)` - Open project by name (auto-closes current)
-- `create_project(name)` - Create new project (auto-opens)
-- `close_project()` - Close current project
-
-**Error Recovery**:
-- If tools fail with "No opened project" error
-- Check GNS3 connection: `check_gns3_connection()`
-- Open required project: `open_project("My Lab")`
-- Retry operation
-
-## Device-Specific Behaviors
-
-### Cisco IOS/IOS-XE
-- Use `\n` for newlines in console commands
-- Wait for `#` prompt (privileged mode) or `>` (user mode)
-- Commands may take 2-5 seconds to complete
-- Use `send_and_wait_console()` with appropriate prompt patterns
-
-### Cisco NX-OS
-- Similar to IOS but with different command syntax
-- Prompts: `switch#` or `switch(config)#`
-- Configuration mode requires `configure terminal`
-
-### MikroTik RouterOS
-- Console may show ANSI escape codes
-- Use `raw=True` parameter to preserve formatting
-- Prompts: `[admin@MikroTik] >` or similar
-- Commands return immediately
-
-### Juniper Junos
-- Use `>` for operational mode, `#` for configuration mode
-- Requires `commit` to apply configuration changes
-- Use `| display set` for configuration display
-
-### Arista EOS
-- Similar to Cisco IOS syntax
-- Prompts: `switch#` or `switch(config)#`
-- Supports `bash` shell access
-
-### Linux (Alpine, Debian, Ubuntu)
-- SSH strongly preferred over console for automation
-- Console may have getty login prompt (requires credentials)
-- Use standard bash commands
-- Watch for password prompts on sudo
-
-## Long-Running Operations
-
-Some operations take extended time to complete:
-
-**Node Operations**:
-- Node startup: 30-60 seconds (progress notifications available, v0.39.0)
-- Node shutdown: 10-30 seconds
-- Firmware upgrades: 10-20 minutes (via SSH commands)
-
-**SSH Operations**:
-- Show commands: 1-10 seconds
-- Configuration commands: 2-30 seconds (progress notifications for wait_timeout > 10s, v0.39.0)
-- File transfers: 10+ seconds per MB
-- Firmware/backup operations: 5-20 minutes (progress notifications available, v0.39.0)
-
-**Best Practices**:
-- Use `wait_timeout` parameter for long SSH operations
-- Monitor progress via notifications for node start and SSH commands (v0.39.0)
-- For multi-step operations, check status between steps
-- Allow extra time for first command after session creation
-
-## Performance Optimization
-
-**Caching** (v0.3.0):
-- Project/node/link data cached with 30-second TTL
-- Reduces redundant API calls in batch operations
-- Automatic cache invalidation on modifications
-
-**Batch Operations**:
-- Use batch tools for multiple operations (10×+ faster)
-- Two-phase validation prevents partial failures
-- Examples: `console_batch_operations()`, `ssh_batch_operations()`, `create_drawings_batch()`
-
-**Resource Efficiency**:
-- Close unused console sessions: `disconnect_console()`
-- Clean up SSH sessions: `disconnect_ssh_session()`
-- Periodic cleanup runs every 5 minutes automatically
-
-## Troubleshooting Common Issues
-
-**Console Connection Fails**:
-1. Verify node is started: check status in node list
-2. Wait 30-60s after start command
-3. Check console type is "telnet" (not vnc/spice)
-4. Try waking console: `send_console_data("node", "\n")`
-
-**SSH Connection Fails**:
-1. Verify SSH is enabled on device (check via console)
-2. Verify device is reachable from proxy
-3. Check proxy is running and accessible
-4. Verify credentials in device_dict match device configuration
-
-**Commands Return No Output**:
-1. Check if device is at prompt (read console buffer)
-2. Verify command syntax is correct for device type
-3. Try sending newline to wake device: `send_console_data("node", "\n")`
-4. Check if command requires privilege escalation
-
-**GNS3 Connection Lost**:
-1. Use `check_gns3_connection()` to verify status
-2. Check error details in connection_error field
-3. Use `retry_gns3_connection()` to reconnect manually
-4. Verify GNS3 server is running and accessible
-
-## Resource Discovery
-
-Use MCP resources to discover lab topology and state:
-
-**Projects**: `projects://` - List all projects
-**Nodes**: `nodes://{project_id}/` - List nodes in project
-**Links**: `links://{project_id}/` - Network topology
-**Topology Report** (v0.40.0): `projects://{project_id}/topology_report` - Unified report with nodes, links, statistics
-**Templates**: `templates://` - Available node templates
-**Console Sessions**: `sessions://console/` - Active console connections
-**SSH Sessions**: `sessions://ssh/` - Active SSH connections
-**Proxies**: `proxies://` - Lab proxy registry
-
-**Topology Report** (v0.40.0) provides comprehensive overview in single call:
-- Node statistics (types, statuses, connection counts)
-- Link topology with port details
-- Table format for readability
-- JSON data for programmatic access
-- Replaces 3+ separate tool calls (list_projects, list_nodes, get_links)
-
-Resources provide read-only views of current state. Use tools to modify state.
+Guided workflows are available as prompts: "Node Setup Workflow", "Lab Setup Workflow", "SSH Setup Workflow", "Topology Discovery Workflow", "Troubleshooting Workflow".

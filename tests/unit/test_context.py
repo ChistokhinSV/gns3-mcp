@@ -145,7 +145,7 @@ class TestValidateCurrentProject:
         assert result is not None
         error = json.loads(result)
         assert "No project opened" in error["error"]
-        assert "open_project" in error["suggested_action"]
+        assert 'project(action="open"' in error["suggested_action"]
 
     @pytest.mark.asyncio
     async def test_project_still_exists_and_opened(self, mock_app_context):

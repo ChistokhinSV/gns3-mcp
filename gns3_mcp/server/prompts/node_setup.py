@@ -3,6 +3,251 @@
 Complete workflow for adding a new node to a lab: create, configure IP, document in README, establish SSH.
 """
 
+import ipaddress
+import json
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass(frozen=True)
+class _Node:
+    name: str
+    ip: str
+    netmask: str  # dotted, e.g. 255.255.255.0
+    prefix: str  # prefix length, e.g. 24
+    username: str
+    password: str
+    device_type: str
+
+
+def _call(head: str, items: list[dict[str, Any]]) -> str:
+    """Render `<head>[...])` with one dict per line.
+
+    json.dumps (not f-string interpolation) keeps user values with quotes and regex
+    backslashes valid in the rendered example.
+    """
+    if len(items) == 1:
+        return f"{head}[{json.dumps(items[0])}])"
+    lines = "\n".join(f"    {json.dumps(item)}," for item in items)
+    return f"{head}[\n{lines}\n])"
+
+
+def _console(*ops: dict[str, Any]) -> str:
+    return _call("console(operations=", list(ops))
+
+
+def _sw(node: str, command: str | None, pattern: str, timeout: int = 30) -> dict[str, Any]:
+    """send_and_wait op. command=None is wait-only (nothing sent); "" sends just Enter."""
+    op: dict[str, Any] = {"type": "send_and_wait", "node_name": node}
+    if command is not None:
+        op["command"] = command + "\n"
+    op["wait_pattern"] = pattern
+    op["timeout"] = timeout
+    return op
+
+
+def _cisco_ios(d: _Node) -> str:
+    n = d.name
+    # Unanchored: IOS log lines (%LINK-3-UPDOWN, %SSH-5-ENABLED) can arrive after the prompt
+    ios = "#"
+    boot = _console(_sw(n, "", r"\[yes/no\]:|RETURN to get started|[>#]\s*$", 180))
+    dialog = _console(_sw(n, "no", r"RETURN to get started|[>#]\s*$", 120))
+    iface = _console(
+        _sw(n, "", r"[>#]\s*$"),
+        _sw(n, "enable", ios),
+        _sw(n, "configure terminal", ios),
+        _sw(n, "interface GigabitEthernet0/0", ios),
+        _sw(n, f"ip address {d.ip} {d.netmask}", ios),
+        _sw(n, "no shutdown", ios),
+        _sw(n, "end", ios),
+        _sw(n, "show ip interface brief", ios),
+    )
+    ssh = _console(
+        _sw(n, "configure terminal", ios),
+        _sw(n, f"hostname {n}", ios),
+        _sw(n, "ip domain-name lab.local", ios),
+        _sw(n, f"username {d.username} privilege 15 secret {d.password}", ios),
+        _sw(n, "crypto key generate rsa modulus 2048", ios, 120),
+        _sw(n, "ip ssh version 2", ios),
+        _sw(n, "line vty 0 4", ios),
+        _sw(n, "login local", ios),
+        _sw(n, "transport input ssh", ios),
+        _sw(n, "end", ios),
+        _sw(n, "write memory", ios, 60),
+    )
+    return f"""**Cisco IOS IP Configuration** (fresh IOSv prompts: `Router>`, `Router#`)
+
+**1. Wait for boot** (30-60 s after `started`); Enter wakes the console:
+
+```python
+{boot}
+```
+
+If the output asks `initial configuration dialog? [yes/no]:`, answer `no`:
+
+```python
+{dialog}
+```
+
+**2. Configure the management interface and verify** (last result = `show ip interface brief`):
+
+```python
+{iface}
+```
+
+**3. Enable SSH and save** (RSA keys need a hostname other than `Router` and a domain name):
+
+```python
+{ssh}
+```
+"""
+
+
+def _linux(d: _Node) -> str:
+    n = d.name
+    sh = r"[#$]\s*$"
+    login = _console(
+        _sw(n, "", r"login:|[#$]\s*$", 300),
+        _sw(n, "root", r"[Pp]assword:|[#$]\s*$"),
+    )
+    temp_ip = _console(
+        _sw(n, f"ip addr add {d.ip}/{d.prefix} dev eth0", sh),
+        _sw(n, "ip link set eth0 up", sh),
+        _sw(n, "ip addr show eth0", sh),
+    )
+    interfaces = (
+        "cat > /etc/network/interfaces << 'EOF'\n"
+        "auto lo\niface lo inet loopback\n\n"
+        "auto eth0\niface eth0 inet static\n"
+        f"    address {d.ip}\n    netmask {d.netmask}\nEOF"
+    )
+    persist = _console(
+        _sw(n, interfaces, sh),
+        _sw(n, "/etc/init.d/networking restart", sh, 60),
+    )
+    user = _console(
+        _sw(n, "rc-update add sshd default", sh),
+        _sw(n, "service sshd start", sh, 60),
+        _sw(n, f"adduser {d.username}", r"[Pp]assword:"),
+        _sw(n, d.password, "Retype"),
+        _sw(n, d.password, sh),
+        _sw(n, f"addgroup {d.username} wheel", sh),
+    )
+    return f"""**Linux IP Configuration** (Alpine example)
+
+**1. Wait for boot (10-20 s) and log in as root:**
+
+```python
+{login}
+```
+
+If `Password:` appears, send the image's root password (template usage, Step 2.5).
+
+**2. Configure IP address (temporary) and verify:**
+
+```python
+{temp_ip}
+```
+
+**3. Make it persistent** (Alpine `/etc/network/interfaces`):
+
+```python
+{persist}
+```
+
+**4. Enable SSH and create user {d.username}** (no `sshd` service? `apk add openssh` first, needs internet):
+
+```python
+{user}
+```
+"""
+
+
+def _mikrotik_routeros(d: _Node) -> str:
+    n = d.name
+    ros = r"\] >"
+    login = _console(
+        _sw(n, "", r"Login:|\] >", 180),
+        _sw(n, "admin", "Password:"),
+        _sw(n, "", r"\[Y/n\]|password>|\] >"),
+    )
+    first_login = _console(
+        _sw(n, "n", r"password>|\] >"),
+        _sw(n, "<new admin password>", "password>"),
+        _sw(n, "<new admin password>", ros),
+    )
+    ip = _console(
+        _sw(n, f"/ip address add address={d.ip}/{d.prefix} interface=ether1", ros),
+        _sw(n, "/ip address print", ros),
+    )
+    ssh = _console(
+        _sw(n, f"/user add name={d.username} password={d.password} group=full", ros),
+        _sw(n, "/ip service enable ssh", ros),
+    )
+    return f"""**MikroTik RouterOS IP Configuration** (prompt `[admin@MikroTik] >`)
+
+**1. Wait for boot and log in** (admin / blank password):
+
+```python
+{login}
+```
+
+RouterOS 7 then asks to view the license (`[Y/n]`) and to set a new admin password; record it in the README:
+
+```python
+{first_login}
+```
+
+**2. Configure IP address and verify:**
+
+```python
+{ip}
+```
+
+**3. Create SSH user and enable SSH service:**
+
+```python
+{ssh}
+```
+"""
+
+
+def _generic(d: _Node) -> str:
+    example = _console(
+        _sw(d.name, "", r"[Ll]ogin:|[>#$]\s*$", 180),
+        _sw(d.name, "<CLI command>", "<prompt regex>"),
+    )
+    return f"""**Generic IP Configuration (device_type: {d.device_type}):**
+
+1. Access device console and log in (credentials: template usage, Step 2.5)
+2. Configure IP address {d.ip}/{d.prefix} on the management interface
+3. Enable SSH service
+4. Create user {d.username} with password
+5. Verify configuration
+
+Send each CLI line as a `send_and_wait` with the device prompt regex as `wait_pattern`
+(check the real prompt with a `read` in `last_page` mode first):
+
+```python
+{example}
+```
+
+Refer to device documentation for specific commands.
+"""
+
+
+_IP_CONFIGS = {
+    "cisco_ios": _cisco_ios,
+    "linux": _linux,
+    "mikrotik_routeros": _mikrotik_routeros,
+}
+_MGMT_INTERFACE = {
+    "cisco_ios": "GigabitEthernet0/0",
+    "linux": "eth0",
+    "mikrotik_routeros": "ether1",
+}
+_VERIFY_COMMAND = {"linux": "uname -a", "mikrotik_routeros": "/system resource print"}
+
 
 def render_node_setup_prompt(
     node_name: str,
@@ -26,7 +271,7 @@ def render_node_setup_prompt(
         node_name: Name for the new node (e.g., "Router1")
         template_name: GNS3 template to use (e.g., "Cisco IOSv", "Alpine Linux")
         ip_address: Management IP to assign (e.g., "192.168.1.10")
-        subnet_mask: Subnet mask (default: "255.255.255.0")
+        subnet_mask: Subnet mask (default: "255.255.255.0"; a prefix length like "24" also works)
         device_type: Device type for SSH (cisco_ios, linux, etc.)
         username: SSH username to create (default: "admin")
         password: SSH password to set (default: "admin")
@@ -34,392 +279,172 @@ def render_node_setup_prompt(
     Returns:
         Formatted workflow instructions as string
     """
+    try:
+        net = ipaddress.IPv4Network(f"0.0.0.0/{subnet_mask}")
+        netmask, prefix = str(net.netmask), str(net.prefixlen)
+    except ValueError:
+        netmask = prefix = subnet_mask
 
-    # Device-specific IP configuration commands
-    ip_configs = {
-        "cisco_ios": f"""
-**Cisco IOS IP Configuration:**
+    d = _Node(node_name, ip_address, netmask, prefix, username, password, device_type)
+    ip_config = _IP_CONFIGS.get(device_type, _generic)(d)
+    mgmt_if = _MGMT_INTERFACE.get(device_type, "<mgmt interface>")
 
-1. Wait for boot (30-60 seconds), then access console:
-   ```
-   console_send("{node_name}", "\\n")
-   console_read("{node_name}", mode="last_page")
-   ```
-
-2. Enter privileged mode:
-   ```
-   console_send("{node_name}", "enable\\n")
-   ```
-
-3. Configure management interface:
-   ```
-   console_send("{node_name}", "configure terminal\\n")
-   console_send("{node_name}", "interface GigabitEthernet0/0\\n")
-   console_send("{node_name}", "ip address {ip_address} {subnet_mask}\\n")
-   console_send("{node_name}", "no shutdown\\n")
-   console_send("{node_name}", "end\\n")
-   ```
-
-4. Verify IP configuration:
-   ```
-   console_send("{node_name}", "show ip interface brief\\n")
-   console_read("{node_name}", mode="last_page")
-   ```
-
-5. Save configuration:
-   ```
-   console_send("{node_name}", "write memory\\n")
-   ```
-
-6. Create SSH user:
-   ```
-   console_send("{node_name}", "configure terminal\\n")
-   console_send("{node_name}", "username {username} privilege 15 secret {password}\\n")
-   console_send("{node_name}", "crypto key generate rsa modulus 2048\\n")
-   console_send("{node_name}", "ip ssh version 2\\n")
-   console_send("{node_name}", "line vty 0 4\\n")
-   console_send("{node_name}", "login local\\n")
-   console_send("{node_name}", "transport input ssh\\n")
-   console_send("{node_name}", "end\\n")
-   console_send("{node_name}", "write memory\\n")
-   ```
-""",
-        "linux": f"""
-**Linux IP Configuration:**
-
-1. Wait for boot (10-20 seconds), login via console:
-   ```
-   console_send("{node_name}", "\\n")
-   console_read("{node_name}", mode="last_page")
-   # Login with default credentials
-   console_send("{node_name}", "root\\n")
-   console_send("{node_name}", "password\\n")
-   ```
-
-2. Configure IP address (temporary):
-   ```
-   console_send("{node_name}", "ip addr add {ip_address}/{subnet_mask} dev eth0\\n")
-   console_send("{node_name}", "ip link set eth0 up\\n")
-   ```
-
-3. Verify IP:
-   ```
-   console_send("{node_name}", "ip addr show eth0\\n")
-   console_read("{node_name}", mode="last_page")
-   ```
-
-4. Configure persistent (Alpine Linux example):
-   ```
-   console_send("{node_name}", "cat > /etc/network/interfaces << 'EOF'\\n")
-   console_send("{node_name}", "auto lo\\n")
-   console_send("{node_name}", "iface lo inet loopback\\n")
-   console_send("{node_name}", "\\n")
-   console_send("{node_name}", "auto eth0\\n")
-   console_send("{node_name}", "iface eth0 inet static\\n")
-   console_send("{node_name}", "    address {ip_address}\\n")
-   console_send("{node_name}", "    netmask {subnet_mask}\\n")
-   console_send("{node_name}", "EOF\\n")
-   console_send("{node_name}", "/etc/init.d/networking restart\\n")
-   ```
-
-5. Enable SSH (if not already enabled):
-   ```
-   console_send("{node_name}", "rc-update add sshd default\\n")
-   console_send("{node_name}", "service sshd start\\n")
-   ```
-
-6. Set password for root or create user:
-   ```
-   console_send("{node_name}", "adduser {username}\\n")
-   # Follow prompts to set password
-   console_send("{node_name}", "{password}\\n")
-   console_send("{node_name}", "{password}\\n")
-   # Add to sudoers
-   console_send("{node_name}", "addgroup {username} wheel\\n")
-   ```
-""",
-        "mikrotik_routeros": f"""
-**MikroTik RouterOS IP Configuration:**
-
-1. Wait for boot, access console:
-   ```
-   console_send("{node_name}", "\\n")
-   console_read("{node_name}", mode="last_page")
-   ```
-
-2. Login with default credentials (admin / blank password):
-   ```
-   console_send("{node_name}", "admin\\n")
-   console_send("{node_name}", "\\n")
-   ```
-
-3. Configure IP address:
-   ```
-   console_send("{node_name}", "/ip address add address={ip_address}/24 interface=ether1\\n")
-   ```
-
-4. Verify IP:
-   ```
-   console_send("{node_name}", "/ip address print\\n")
-   console_read("{node_name}", mode="last_page")
-   ```
-
-5. Create SSH user:
-   ```
-   console_send("{node_name}", "/user add name={username} password={password} group=full\\n")
-   ```
-
-6. Enable SSH service:
-   ```
-   console_send("{node_name}", "/ip service enable ssh\\n")
-   ```
-""",
+    nq, tq = json.dumps(node_name), json.dumps(template_name)
+    first_read = _console({"type": "read", "node_name": node_name, "mode": "last_page"})
+    wait_only = _console(_sw(node_name, None, r"[Ll]ogin:|[>#$]\s*$", 300))
+    device_dict = {
+        "device_type": device_type,
+        "host": ip_address,
+        "username": username,
+        "password": password,
+        "port": 22,
     }
-
-    # Get device-specific config or generic
-    ip_config = ip_configs.get(
-        device_type,
-        f"""
-**Generic IP Configuration (device_type: {device_type}):**
-
-1. Access device console and login
-2. Configure IP address {ip_address}/{subnet_mask} on management interface
-3. Enable SSH service
-4. Create user {username} with password
-5. Verify configuration
-
-Refer to device documentation for specific commands.
-""",
+    configure_op = {"type": "configure", "node_name": node_name, "device_dict": device_dict}
+    command_op = {
+        "type": "command",
+        "node_name": node_name,
+        "command": _VERIFY_COMMAND.get(device_type, "show version"),
+    }
+    ssh_configure = _call("ssh(operations=", [configure_op])
+    ssh_proxy = _call("ssh(operations=", [{**configure_op, "proxy": "<proxy_id>"}])
+    ssh_verify = _call("ssh(operations=", [command_op])
+    ssh_full = _call("ssh(operations=", [configure_op, command_op])
+    ssh_ping = _call(
+        "ssh(operations=",
+        [{"type": "command", "node_name": "@", "command": f"ping -c 2 {ip_address}"}],
+    )
+    link_batch = _call(
+        'link(action="batch", connections=',
+        [
+            {
+                "action": "connect",
+                "node_a": node_name,
+                "adapter_a": 1,
+                "port_a": 0,
+                "node_b": "ExistingRouter",
+                "adapter_b": 1,
+                "port_b": 0,
+            }
+        ],
     )
 
-    # Format with parameters
-    ip_config = ip_config.format(
-        node_name=node_name,
-        ip_address=ip_address,
-        subnet_mask=subnet_mask,
-        username=username,
-        password=password,
-    )
-
-    # Build complete workflow
     workflow = f"""# Complete Node Setup: {node_name}
 
 This workflow guides you through setting up **{node_name}** from scratch.
 
 **What This Does:**
-1. ✅ Create node from template
-2. ✅ Start node and wait for boot
-3. ✅ Configure IP address via console
-4. ✅ Document IP/credentials in project README
-5. ✅ Establish SSH session for automation
+1. Create node from template
+2. Start node and wait for boot
+3. Configure IP address via console
+4. Document IP/credentials in project README
+5. Establish SSH session for automation
+
+Console ops in one `console(operations=[...])` batch run in order. Each `send_and_wait`
+result carries `output` and `pattern_found` - check `pattern_found` before the next step.
+`wait_pattern` is a regex.
 
 ## Prerequisites
 
-- Project must be opened
-- Template "{template_name}" must exist (check resource `projects://{{id}}/templates/`)
-- Console access available after node starts
+- The right project is current: `project(action="list")`, then `project(action="open", name="<project>")` if needed
+- Template "{template_name}" exists: `query_resource("templates://")`
 
 ## Step 1: Create Node
 
-Create the node from template and position it on canvas:
-
 ```python
-node(
-    action="create",
-    template_name="{template_name}",
-    node_name="{node_name}",
-    x=100,  # Adjust position as needed
-    y=100
-)
+node(action="create", template_name={tq}, node_name={nq}, x=100, y=100)
 ```
 
-Note the returned node_id for reference.
+Note `node_id` from the result - resource URIs below need the ID, not the name.
+`project_id`: `project(action="list")`.
 
 ## Step 2: Start Node
 
-Start the node and wait for boot sequence:
-
 ```python
-node(action="set", node_name="{node_name}", state_action="start")
+node(action="set", node_name={nq}, state_action="start")  # waits up to ~60 s for 'started'
 ```
 
-**Wait time depends on device type:**
+`started` means the VM runs; the OS keeps booting:
 - Cisco routers: 30-60 seconds
 - Linux nodes: 10-20 seconds
 - MikroTik: 15-30 seconds
 
-Monitor boot via console:
+The first console batch for a node may contain only `read` ops (others are skipped), so open it with:
+
 ```python
-# Check boot progress
-console_read("{node_name}", mode="all")
+{first_read}
 ```
 
 ## Step 2.5: Check Template Usage Field
 
-Before configuring the device, check the template's usage field for device-specific guidance:
-
 ```python
-# View node template usage information
-Resource: nodes://{{project_id}}/{node_name}/template
+query_resource("nodes://<project_id>/<node_id>/template")
 ```
 
 **The usage field may contain:**
 - Default credentials for initial login
 - Special boot procedures or timing requirements
-- Device-specific configuration quirks
-- Recommended interface naming conventions
-- Known limitations or compatibility notes
+- Device-specific configuration quirks and interface naming
 - Management interface defaults
 
-**Example usage field content:**
-```
-Alpine Linux default login:
-- Username: root
-- Password: (blank - just press Enter)
-
-After first login, set password with: passwd
-
-For persistent network config, edit /etc/network/interfaces
-```
-
-Review this information before proceeding with configuration to avoid common pitfalls.
+Review it before Step 3 to avoid common pitfalls.
 
 ## Step 3: Configure IP Address
 
 {ip_config}
-
 ## Step 4: Document in Project README
 
-Update project README with node details for future reference:
+`update` replaces the whole README, so read it first:
 
 ```python
-# First, get existing README (if any)
-current_notes = get_project_readme()
+project_docs(action="get")
+```
 
-# Append new node information
-update_project_readme(f\"\"\"
-{{current_notes}}
+Append this section to the returned markdown:
 
+```markdown
 ## Node: {node_name}
-
-### Network Configuration
-- **IP Address**: {ip_address}/{subnet_mask}
-- **Interface**: GigabitEthernet0/0 (or eth0 for Linux)
-- **Template**: {template_name}
-- **Device Type**: {device_type}
-
-### Credentials
-- **Username**: {username}
-- **Password**: {password}
-- **SSH Access**: ssh://{username}@{ip_address}:22
-
-### Notes
-- Created: {{datetime.now().strftime("%Y-%m-%d %H:%M")}}
-- Purpose: [Add purpose here]
-- Connected to: [Add connections here]
-
-### Configuration
-```
-[Paste key configuration here]
+- IP Address: {ip_address}/{prefix} ({mgmt_if})
+- Template: {template_name}, device_type: {device_type}
+- Credentials: {username} / {password} (SSH port 22)
+- Purpose / connected to: <fill in>
 ```
 
-### Troubleshooting
-- **Issue**: [Document common issues]
-- **Fix**: [Document solutions]
-\"\"\")
+```python
+project_docs(action="update", content=readme)  # readme = existing README + section above
 ```
-
-**Pro tip:** Keep README organized with clear sections for each node.
 
 ## Step 5: Establish SSH Session
 
-Configure SSH session for automated management:
-
-### Standard Connection (Devices Reachable from GNS3 Host):
+Device reachable from the GNS3 host:
 
 ```python
-ssh(operations=[{{
-    "type": "configure",
-    "node_name": "{node_name}",
-    "device_dict": {{
-        "device_type": "{device_type}",
-        "host": "{ip_address}",
-        "username": "{username}",
-        "password": "{password}",
-        "port": 22
-    }}
-}}])
+{ssh_configure}
 ```
 
-### Isolated Network Connection (v0.26.0 Multi-Proxy):
-
-For devices on isolated networks, use lab proxy:
+Isolated lab network: take a `proxy_id` from `query_resource("proxies://")` and add it:
 
 ```python
-# 1. Discover lab proxies: check proxies://
-# 2. Configure SSH through lab proxy:
-ssh(operations=[{{
-    "type": "configure",
-    "node_name": "{node_name}",
-    "device_dict": {{
-        "device_type": "{device_type}",
-        "host": "{ip_address}",
-        "username": "{username}",
-        "password": "{password}",
-        "port": 22
-    }},
-    "proxy": "<proxy_id>"  # proxy_id from registry
-}}])
+{ssh_proxy}
 ```
 
 ## Step 6: Verify SSH Connection
 
-Test SSH access with a simple command:
-
 ```python
-# Cisco
-ssh(operations=[{{"type": "command", "node_name": "{node_name}", "command": "show version"}}])
-
-# Linux
-ssh(operations=[{{"type": "command", "node_name": "{node_name}", "command": "uname -a"}}])
-
-# MikroTik
-ssh(operations=[{{"type": "command", "node_name": "{node_name}", "command": "/system resource print"}}])
+{ssh_verify}
 ```
 
-Check SSH session status:
-```python
-# Via resource
-sessions://ssh/{node_name}
-```
+Session status: `query_resource("sessions://ssh/{node_name}")`
 
 ## Step 7: Connect to Network (Optional)
 
-If this node needs to connect to other nodes:
-
 ```python
-set_connection(connections=[
-    {{
-        "action": "connect",
-        "node_a": "{node_name}",
-        "node_b": "ExistingRouter",
-        "port_a": 0,
-        "port_b": 1,
-        "adapter_a": "GigabitEthernet0/1",  # Or adapter number
-        "adapter_b": "GigabitEthernet0/0"
-    }}
-])
+{link_batch}
 ```
 
-Update README with connection info:
-```python
-update_project_readme(f\"\"\"
-[previous content]
-
-### Connections
-- {node_name} Gi0/1 ← → ExistingRouter Gi0/0
-\"\"\")
-```
+Numbers are (adapter, port): adapter 1 port 0 is the node's second interface. A port name in
+`adapter_*` (case-sensitive, e.g. "Gi0/1", "eth1") fixes adapter and port; get names from
+`link(action="list", project_id="<project_id>")` or `query_resource("nodes://<project_id>/<node_id>")`.
+Then add the connection to the README (Step 4).
 
 ## Completion Checklist
 
@@ -432,30 +457,28 @@ update_project_readme(f\"\"\"
 
 ## Next Steps
 
-Now that {node_name} is configured:
-
-1. **Configure routing protocols** (OSPF, BGP, etc.)
-2. **Add to monitoring** (document in README)
-3. **Create snapshot** before major changes: `create_snapshot("Before {node_name} routing config")`
-4. **Update architecture notes** in README with role and relationships
+1. **Configure routing protocols** (OSPF, BGP, etc.) over SSH
+2. **Back up before major changes**: save the device config and keep key settings in the README (there is no snapshot tool)
+3. **Update architecture notes** in the README with role and relationships
+4. **Review the lab**: `query_resource("projects://<project_id>/topology_report")`
 
 ## Troubleshooting
 
 **Node won't start:**
-- Check template is valid: resource `projects://{{id}}/templates/`
-- Verify enough resources (RAM, CPU) on GNS3 server
-- Check GNS3 server logs
+- Read the error `details` of the `node` result (missing image, not enough RAM/CPU)
+- Check the template: `query_resource("templates://")`
+- GNS3 errors: `notification(action="subscribe", project_id="<project_id>")`, then `notification(action="read", filter_action="log.error")`
 
 **Can't access console:**
-- Wait for boot completion (check console output)
-- Verify node is started: resource `projects://{{id}}/nodes/{node_name}`
-- Check console type is telnet
+- Node `started`, console type `telnet`: `query_resource("nodes://<project_id>/<node_id>")`
+- Sends skipped? The first batch for a node may only contain `read` ops
+- Still booting: `{first_read}` shows the real prompt; wait without sending: `{wait_only}`
+- Stale consoles after a GNS3 restart: `gns3_connection(action="reconnect")`
 
 **SSH connection fails:**
-- Verify IP is pingable from GNS3 server
-- Confirm SSH service is running on device
-- Check credentials are correct
-- Review SSH configuration commands executed successfully
+- Ping from the SSH proxy: `{ssh_ping}`
+- Confirm SSH service is running and the user exists (Step 3)
+- Stale session (`SSH_DISCONNECTED`): re-run `configure` with `"force": True`
 
 **IP not working:**
 - Verify interface is up (`no shutdown` for Cisco)
@@ -463,41 +486,16 @@ Now that {node_name} is configured:
 - Confirm subnet doesn't conflict with existing network
 - Verify physical connections if connecting to other nodes
 
-## Example: Complete Workflow Code
+## Example: Complete Workflow
 
 ```python
-# 1. Create and start node
-create_node(template_name="{template_name}", node_name="{node_name}", x=100, y=100)
-set_node(node_name="{node_name}", action="start")
-
-# 2. Wait for boot
-import time
-time.sleep(45)  # Adjust based on device type
-
-# 3. Configure via console (see device-specific commands above)
-console_send("{node_name}", "\\n")
-# [Execute IP configuration commands...]
-
-# 4. Document in README
-update_project_readme(f\"\"\"
-# My Lab
-
-## {node_name}
-- IP: {ip_address}/{subnet_mask}
-- User: {username}
-- Pass: {password}
-\"\"\")
-
-# 5. Configure SSH
-ssh_configure("{node_name}", {{
-    "device_type": "{device_type}",
-    "host": "{ip_address}",
-    "username": "{username}",
-    "password": "{password}"
-}})
-
-# 6. Verify
-ssh_command("{node_name}", "show version")
+node(action="create", template_name={tq}, node_name={nq}, x=100, y=100)
+node(action="set", node_name={nq}, state_action="start")
+{first_read}
+# Step 3 console batches - check pattern_found in each result
+project_docs(action="get")
+project_docs(action="update", content=readme)  # existing README + node section
+{ssh_full}
 ```
 
 **Success!** {node_name} is now ready for network automation.

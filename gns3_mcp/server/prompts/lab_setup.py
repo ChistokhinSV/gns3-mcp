@@ -521,11 +521,9 @@ def render_lab_setup_prompt(
     # Generate link creation commands
     link_commands = []
     for node_a, node_b in links:
-        link_commands.append(
-            f"""link(connections=[
+        link_commands.append(f"""link(connections=[
     {{"action": "connect", "node_a": "{node_a}", "node_b": "{node_b}", "adapter_a": 0, "adapter_b": 0, "port_a": 0, "port_b": 0}}
-])"""
-        )
+])""")
 
     # Generate IP configuration examples
     ip_examples = []
@@ -616,7 +614,7 @@ This creates SVG and PNG diagrams of your topology.
 **IMPORTANT**: Document the lab topology in the project README for future reference and team collaboration:
 
 ```python
-update_project_readme(f\"\"\"
+project_docs(action="update", content=f\"\"\"
 # {project_name}
 
 ## Topology Overview
@@ -734,7 +732,7 @@ Example:
 
 1. **Configure routing**: Use SSH or console to configure routing protocols
 2. **Test connectivity**: Verify reachability between nodes
-3. **Create snapshot**: Save working configuration with `create_snapshot()`
+3. **Save configs**: Save device configurations (e.g. `write memory`) and note them with `project_docs`
 4. **Document**: Add labels and drawings to clarify topology
 
 ## Troubleshooting

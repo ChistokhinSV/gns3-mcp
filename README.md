@@ -2,7 +2,7 @@
 
 Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS3 projects, nodes, and device consoles through Claude Desktop or any MCP-compatible client.
 
-**Version**: 0.56.1 · Requires GNS3 server v3.x (v3 API) · See [CHANGELOG.md](CHANGELOG.md)
+**Version**: 0.56.2 · Requires GNS3 server v3.x (v3 API) · See [CHANGELOG.md](CHANGELOG.md)
 
 ## Features
 

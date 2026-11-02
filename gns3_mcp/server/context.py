@@ -147,8 +147,8 @@ async def validate_current_project(app: "IAppContext") -> str | None:
                 return json.dumps(
                     ErrorResponse(
                         error="No project opened in GNS3",
-                        details="No projects are currently opened. Open a project in GNS3 or use open_project()",
-                        suggested_action="Open a project in GNS3 GUI, or call list_projects() then open_project(project_name)",
+                        details='No projects are currently opened. Open one in GNS3 or with project(action="open")',
+                        suggested_action='Open a project in the GNS3 GUI, or call project(action="list") then project(action="open", name=...)',
                     ).model_dump(),
                     indent=2,
                 )
@@ -174,8 +174,8 @@ async def validate_current_project(app: "IAppContext") -> str | None:
             return json.dumps(
                 ErrorResponse(
                     error="Project no longer exists",
-                    details=f"Project ID {app.current_project_id} not found. Use list_projects() and open_project()",
-                    suggested_action="Call list_projects() to see current projects, then open_project(project_name)",
+                    details=f'Project ID {app.current_project_id} not found. Use project(action="list") and project(action="open")',
+                    suggested_action='Call project(action="list") to see current projects, then project(action="open", name=...)',
                 ).model_dump(),
                 indent=2,
             )
@@ -185,8 +185,8 @@ async def validate_current_project(app: "IAppContext") -> str | None:
             return json.dumps(
                 ErrorResponse(
                     error=f"Project is {project['status']}",
-                    details=f"Project '{project['name']}' is not open. Use open_project() to reopen",
-                    suggested_action=f"Call open_project('{project['name']}') to reopen this project",
+                    details=f"Project '{project['name']}' is not open. Use project(action='open') to reopen",
+                    suggested_action=f"Call project(action='open', name='{project['name']}') to reopen this project",
                 ).model_dump(),
                 indent=2,
             )

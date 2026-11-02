@@ -282,7 +282,7 @@ class TestErrorHelperFunctions:
         assert "R1" in parsed["error"]
         assert parsed["error_code"] == "NODE_NOT_FOUND"
         assert "R2, R3, Switch1" in parsed["details"]
-        assert "list_nodes()" in parsed["suggested_action"]
+        assert 'node(action="list"' in parsed["suggested_action"]
         assert parsed["context"]["node_name"] == "R1"
         assert parsed["context"]["project_id"] == "abc123"
         assert parsed["context"]["available_nodes"] == ["R2", "R3", "Switch1"]
@@ -294,14 +294,14 @@ class TestErrorHelperFunctions:
         parsed = json.loads(error_json)
         assert "TestProject" in parsed["error"]
         assert parsed["error_code"] == "PROJECT_NOT_FOUND"
-        assert "list_projects()" in parsed["suggested_action"]
+        assert 'project(action="list")' in parsed["suggested_action"]
 
         # Test without project name (no project open)
         error_json = project_not_found_error()
         parsed = json.loads(error_json)
         assert "No project currently open" in parsed["error"]
         assert parsed["error_code"] == "PROJECT_NOT_FOUND"
-        assert "open_project()" in parsed["suggested_action"]
+        assert 'project(action="open"' in parsed["suggested_action"]
 
     def test_template_not_found_error(self):
         """Test template not found error helper"""
@@ -313,7 +313,7 @@ class TestErrorHelperFunctions:
         assert "Cisco IOSv" in parsed["error"]
         assert parsed["error_code"] == "TEMPLATE_NOT_FOUND"
         assert "Alpine Linux, Ethernet switch" in parsed["details"]
-        assert "list_templates()" in parsed["suggested_action"]
+        assert "templates://" in parsed["suggested_action"]
 
     def test_drawing_not_found_error(self):
         """Test drawing not found error helper"""

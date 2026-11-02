@@ -36,7 +36,7 @@ Resource: projects://{{project_id}}
 
 **Using Tools:**
 ```
-list_projects()
+project(action="list")
 ```
 
 Identify the project ID for the topology you want to discover.
@@ -254,7 +254,7 @@ export_topology_diagram(
 
 **Project Not Found:**
 - Verify project name is correct
-- Check if project is open (use open_project tool)
+- Check if project is open (`project(action="open", name=...)`)
 - List all projects to confirm existence
 
 **No Nodes Returned:**

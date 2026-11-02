@@ -15,536 +15,297 @@ async def render_troubleshooting_prompt(node_name: str = None, issue_type: str =
         Formatted workflow instructions as string
     """
 
-    node_section = f"**Troubleshooting Node: {node_name}**\n" if node_name else ""
+    node_section = (
+        f"**Troubleshooting Node: {node_name}** (use it in place of R1 in the examples)\n"
+        if node_name
+        else ""
+    )
 
     issue_section = ""
     if issue_type:
+        # (focus description, where to start in the workflow)
         issue_map = {
-            "connectivity": "network connectivity issues",
-            "console": "console access problems",
-            "ssh": "SSH connection failures",
-            "performance": "performance degradation",
+            "connectivity": ("network connectivity issues", "Steps 1, 3-5"),
+            "console": ("console access problems", "Step 2"),
+            "ssh": ("SSH connection failures", "Step 8"),
+            "performance": ("performance degradation", "Step 7"),
         }
-        issue_section = f"\n**Focus Area: {issue_map.get(issue_type, issue_type)}**\n"
+        focus, start = issue_map.get(issue_type, (issue_type, "Step 1"))
+        issue_section = f"\n**Focus Area: {focus}** - start with {start}\n"
 
     workflow = f"""# Network Troubleshooting Workflow
 
 {node_section}{issue_section}
-This guided workflow helps you systematically troubleshoot issues in GNS3 network labs.
+Systematic troubleshooting of GNS3 labs with the gns3 MCP tools. Replace R1, SW1, Host1 (Linux)
+and `<project_id>` with real names and IDs.
 
-## Troubleshooting Methodology
+## Methodology
 
-Follow the OSI model bottom-up approach:
-1. **Layer 1 (Physical)**: Links, node state, connections
-2. **Layer 2 (Data Link)**: Switching, VLANs, MAC addresses
+Work bottom-up through the OSI model:
+1. **Layer 1 (Physical)**: node state, links, cabling
+2. **Layer 2 (Data Link)**: interfaces, VLANs, MAC tables
 3. **Layer 3 (Network)**: IP addressing, routing, reachability
-4. **Layer 4+ (Transport/Application)**: Services, protocols, applications
+4. **Layer 4+ (Transport/Application)**: services, firewalls, DNS
+
+Prefer `ssh` once SSH works on a device. Use `console` before the device has an IP/SSH,
+for devices without SSH, or when the network path itself is broken.
 
 ## Step 1: Verify Lab State
 
-**Check Project README First:**
-
-Before diving into diagnostics, review the project README for documented information:
-```
-# View project documentation
-Resource: projects://{{project_id}}/readme
-```
-
-**Look for:**
-- Node IP addresses and credentials
-- Known issues or troubleshooting notes
-- Network topology design (subnets, VLANs, routing)
-- Configuration dependencies
-- Recent changes or maintenance notes
-
-Having this baseline information helps identify configuration mismatches and expected behavior.
-
-**Check Node Status:**
-```
-# View all nodes and their states
-Resource: projects://{{project_id}}/nodes/
+```python
+project_docs(action="get")                                 # IP plan, credentials, known issues
+project(action="list")                                     # find <project_id>; open it if needed
+query_resource("projects://<project_id>/topology_report")  # nodes + links + status
+node(action="list", project_id="<project_id>")             # status, console type and port
 ```
 
-**Key Checks:**
-- ✅ Are affected nodes **started**? (not stopped or suspended)
-- ✅ Did nodes boot successfully? (no boot errors)
-- ✅ Are nodes consuming resources? (CPU, memory within limits)
+Key checks:
+- Affected nodes are **started** (not stopped or suspended) and booted without errors
+- Links exist between the intended ports and are not suspended
+- Tools fail or sessions are stale after a GNS3 restart: `gns3_connection(action="reconnect")`
 
-**Start Stopped Nodes:**
-```
-set_node(node_name="NodeName", action="start")
-```
-
-**Check Link Status:**
-```
-# View all links
-Resource: projects://{{project_id}}/links/
-```
-
-**Key Checks:**
-- ✅ Are links **active**? (not suspended)
-- ✅ Are ports connected to correct adapters?
-- ✅ Do link types match device capabilities?
-
-**Activate Suspended Links:**
-```
-set_connection(operations=[
-    {
-        "action": "unsuspend",
-        "link_id": "link-uuid-here"
-    }
-])
+```python
+node(action="set", node_name="R1", state_action="start")   # waits up to ~60 s for 'started'
+node(action="set", node_name="*", state_action="start")    # all nodes, in parallel
+node(action="set", node_name="R1", state_action="reload")  # reboot a hung node
+notification(action="subscribe", project_id="<project_id>")
+notification(action="read", filter_action="log.error")     # or "node.updated", "link."
 ```
 
 ## Step 2: Verify Console Access
 
-**Check Console Sessions:**
-```
-# View active console sessions
-Resource: sessions://console/{{node_name}}
-```
-
-**Test Console Access:**
-```
-# Send command to console
-console_send("NodeName", "\\n")
-
-# Read response
-console_read("NodeName", mode="last_page")
+```python
+query_resource("sessions://console/")                      # active console sessions
+# First batch for a never-accessed node may only contain 'read' ops
+console(operations=[{{"type": "read", "node_name": "R1", "mode": "last_page"}}])
+console(operations=[
+    {{"type": "send", "node_name": "R1", "data": "\\n"}},    # wake the console
+    {{"type": "read", "node_name": "R1", "mode": "last_page"}},
+])
 ```
 
-**Common Console Issues:**
-
-**Issue: "Connection refused"**
-- **Cause**: Node not started or console port not open
-- **Fix**: Start node, wait 10-30 seconds, retry
-
-**Issue: "Timeout connecting"**
-- **Cause**: Node still booting or console type unsupported
-- **Fix**: Wait longer, check console_type is "telnet"
-
-**Issue: "No output from console"**
-- **Cause**: Device prompt not sending data, terminal settings
-- **Fix**: Send keystroke to trigger prompt:
+**Common console issues:**
+- **Connection refused**: node not started or console port not open. Start it, wait 10-30 s, retry.
+- **Timeout / no output**: node still booting, or console type is not `telnet` (see `node list`).
+  Wait for the boot without sending anything (omit `command`):
+```python
+console(operations=[{{"type": "send_and_wait", "node_name": "R1",
+                      "wait_pattern": "login:|[>#]", "timeout": 300}}])
 ```
-console_keystroke("NodeName", "enter")
-console_read("NodeName", mode="last_page")
+- **Stuck CLI or garbled output**: break out and re-check the prompt. If it stays broken,
+  `gns3_connection(action="reconnect")` clears all console sessions; they reopen on next use.
+```python
+console(operations=[
+    {{"type": "keystroke", "node_name": "R1", "key": "ctrl_c"}},
+    {{"type": "keystroke", "node_name": "R1", "key": "enter"}},
+    {{"type": "read", "node_name": "R1", "mode": "last_page"}},
+])
 ```
-
-**Issue: "Garbled output"**
-- **Cause**: Terminal encoding mismatch
-- **Fix**: Disconnect and reconnect console:
-```
-console_disconnect("NodeName")
-# Wait 2 seconds, then reconnect automatically on next send
-console_send("NodeName", "\\n")
-```
+- **`wait_pattern` never matches**: it is a regex; confirm the real prompt with `read` `last_page`.
 
 ## Step 3: Layer 1 - Physical Connectivity
 
-**Verify Physical Topology:**
-```
-# Export topology diagram to visualize connections
-export_topology_diagram(
-    output_path="C:/path/to/troubleshooting",
-    format="svg"
-)
+```python
+link(action="list", project_id="<project_id>")     # port names and link ids
+export_topology_diagram(output_path="C:/labs/troubleshooting", format="svg")
 ```
 
-**Check Port Status Indicators:**
-- 🟢 **Green**: Port active (node started, link not suspended)
-- 🔴 **Red**: Port stopped (node stopped OR link suspended)
+Diagram port colours: green = node started and link active; red = node stopped OR link suspended.
 
-**Common Layer 1 Issues:**
-
-**Issue: Link shows red indicator**
-- Check node status: `Resource: projects://{id}/nodes/{id}`
-- Check link status: `Resource: projects://{id}/links/`
-- Start nodes if stopped
-- Unsuspend links if suspended
-
-**Issue: Nodes not physically connected**
-- Verify link exists between nodes
-- Check adapter/port numbers match device interfaces
-- Create missing links:
-```
-set_connection(operations=[
-    {
-        "action": "connect",
-        "node_a": "R1",
-        "node_b": "R2",
-        "adapter_a": "GigabitEthernet0/0",  # Or adapter number
-        "adapter_b": "GigabitEthernet0/0",
-        "port_a": 0,
-        "port_b": 0
-    }
+**Common Layer 1 issues:**
+- **Red port / link**: start the stopped node(s). The tools cannot resume a suspended link -
+  resume it in the GNS3 GUI, or disconnect and reconnect it in one `link` batch.
+- **Missing or mis-cabled link**: compare ports with the device interfaces, then fix in one
+  validated batch (nothing changes unless every operation passes):
+```python
+link(action="batch", connections=[
+    {{"action": "disconnect", "link_id": "<link_id from link list>"}},
+    {{"action": "connect", "node_a": "R1", "adapter_a": "GigabitEthernet0/0", "port_a": 0,
+     "node_b": "R2", "adapter_b": "GigabitEthernet0/0", "port_b": 0}},
 ])
 ```
 
-## Step 4: Layer 2 - Data Link Issues
+## Step 4: Layer 2 - Data Link
 
-**Check Interface Status:**
-```
-# Cisco
-ssh_command("R1", "show interfaces status")
-ssh_command("R1", "show interfaces")
-
-# MikroTik
-ssh_command("R1", "/interface print")
-
-# Linux
-ssh_command("Host1", "ip link show")
-```
-
-**Common Layer 2 Issues:**
-
-**Issue: Interface administratively down**
-- **Symptom**: "administratively down" in show interfaces
-- **Fix (Cisco)**:
-```
-ssh_command("R1", [
-    "interface GigabitEthernet0/0",
-    "no shutdown"
+```python
+ssh(operations=[
+    {{"type": "command", "node_name": "R1", "command": "show interfaces"}},
+    {{"type": "command", "node_name": "SW1", "command": "show interfaces status"}},
+    {{"type": "command", "node_name": "SW1", "command": "show vlan brief"}},
+    {{"type": "command", "node_name": "SW1", "command": "show mac address-table"}},
 ])
 ```
+MikroTik: `/interface print`. Linux: `ip link show`.
 
-**Issue: VLAN mismatch**
-- **Symptom**: Devices on same link can't communicate
-- **Check VLANs**:
+**Common Layer 2 issues:**
+- **Interface administratively down** - a command list is sent as config commands:
+```python
+ssh(operations=[{{"type": "command", "node_name": "R1",
+                  "command": ["interface GigabitEthernet0/0", "no shutdown"]}}])
 ```
-ssh_command("SW1", "show vlan brief")
-```
-- Verify access ports on same VLAN or trunk allows VLAN
+- **VLAN mismatch** (devices on the same link can't talk): access ports in the same VLAN,
+  or the trunk allows the VLAN.
+- **MAC flapping / duplicate MACs** (intermittent connectivity): the same MAC on several ports in
+  `show mac address-table` - often a Layer 2 loop.
 
-**Issue: MAC address conflicts**
-- **Symptom**: Intermittent connectivity, flapping
-- **Check MAC table**:
-```
-ssh_command("SW1", "show mac address-table")
-```
-- Look for duplicate MACs
+## Step 5: Layer 3 - Network
 
-## Step 5: Layer 3 - Network Layer Issues
-
-**Check IP Addressing:**
-```
-# Cisco
-ssh_command("R1", "show ip interface brief")
-
-# MikroTik
-ssh_command("R1", "/ip address print")
-
-# Linux
-ssh_command("Host1", "ip addr show")
-```
-
-**Common Layer 3 Issues:**
-
-**Issue: IP address not configured**
-- **Symptom**: Interface shows "unassigned" or no IP
-- **Fix (Cisco)**:
-```
-ssh_command("R1", [
-    "interface GigabitEthernet0/0",
-    "ip address 192.168.1.1 255.255.255.0",
-    "no shutdown"
+```python
+ssh(operations=[
+    {{"type": "command", "node_name": "R1", "command": "show ip interface brief"}},
+    {{"type": "command", "node_name": "R1", "command": "show ip route"}},
+    {{"type": "command", "node_name": "R1", "command": "show ip arp"}},
+    {{"type": "command", "node_name": "R1", "command": "show ip ospf neighbor"}},
 ])
 ```
+MikroTik: `/ip address print`, `/ip route print`. Linux: `ip addr show`, `ip route show`.
 
-**Issue: IP address conflict**
-- **Symptom**: "Duplicate IP address" warnings
-- **Check ARP cache**:
-```
-ssh_command("R1", "show ip arp")
-```
-- Verify each device has unique IP
-
-**Issue: Subnet mismatch**
-- **Symptom**: Devices can't ping despite being "connected"
-- **Verify**: Both ends of link in same subnet
-- Example: 192.168.1.1/24 ↔ 192.168.1.2/24 ✅
-- Example: 192.168.1.1/24 ↔ 192.168.2.1/24 ❌
-
-**Check Routing:**
-```
-# Cisco
-ssh_command("R1", "show ip route")
-
-# MikroTik
-ssh_command("R1", "/ip route print")
-
-# Linux
-ssh_command("Host1", "ip route show")
-```
-
-**Issue: No route to destination**
-- **Symptom**: "Destination unreachable" or "Network unreachable"
-- **Fix**: Add static route or enable routing protocol
-```
-# Cisco static route
-ssh_command("R1", [
-    "ip route 10.0.0.0 255.0.0.0 192.168.1.254"
+**Common Layer 3 issues:**
+- **IP address missing** ("unassigned"): no IP means no SSH - configure over the console:
+```python
+console(operations=[
+    {{"type": "send_and_wait", "node_name": "R1", "command": "configure terminal\\n", "wait_pattern": "#"}},
+    {{"type": "send_and_wait", "node_name": "R1", "command": "interface GigabitEthernet0/0\\n", "wait_pattern": "#"}},
+    {{"type": "send_and_wait", "node_name": "R1", "command": "ip address 192.168.1.1 255.255.255.0\\n", "wait_pattern": "#"}},
+    {{"type": "send_and_wait", "node_name": "R1", "command": "no shutdown\\n", "wait_pattern": "#"}},
+    {{"type": "send_and_wait", "node_name": "R1", "command": "end\\n", "wait_pattern": "R1#"}},
 ])
 ```
-
-**Test Reachability:**
+- **IP conflict** ("Duplicate address" warnings): check `show ip arp`; every device needs a unique IP.
+- **Subnet mismatch** (link up, ping fails): both ends must share the subnet.
+  192.168.1.1/24 <-> 192.168.1.2/24 works; 192.168.1.1/24 <-> 192.168.2.1/24 does not.
+- **No route** ("Destination/Network unreachable"): add a static route or fix the routing
+  protocol (`show ip protocols`, `show ip ospf neighbor`, `show ip bgp summary`):
+```python
+ssh(operations=[{{"type": "command", "node_name": "R1",
+                  "command": ["ip route 10.0.0.0 255.0.0.0 192.168.1.254"]}}])
 ```
-# ICMP ping test
-ssh_command("R1", "ping 192.168.1.2")
 
-# Continuous ping (Ctrl+C to stop in console)
-console_send("R1", "ping 192.168.1.2 repeat 100\\n")
-# Wait, then read output
-console_read("R1", mode="last_page")
+**Test reachability** from the device and from the SSH proxy (`"@"`):
+```python
+ssh(operations=[
+    {{"type": "command", "node_name": "R1", "command": "ping 192.168.1.2"}},
+    {{"type": "command", "node_name": "@", "command": "ping -c 2 192.168.1.2"}},
+])
+console(operations=[{{"type": "send_and_wait", "node_name": "R1",
+                      "command": "ping 192.168.1.2 repeat 100\\n",
+                      "wait_pattern": "Success rate", "timeout": 120}}])
 ```
 
 ## Step 6: Layer 4+ - Services and Applications
 
-**Check Service Status:**
-```
-# Linux services
-ssh_command("Host1", "systemctl status sshd")
-ssh_command("Host1", "netstat -tuln")  # Listening ports
-
-# Cisco services
-ssh_command("R1", "show ip sockets")
-```
-
-**Common Service Issues:**
-
-**Issue: Service not running**
-- **Symptom**: Connection refused to service port
-- **Fix**: Start service
-```
-ssh_command("Host1", "systemctl start sshd")
+```python
+ssh(operations=[
+    {{"type": "command", "node_name": "Host1", "command": "systemctl status sshd"}},
+    {{"type": "command", "node_name": "Host1", "command": "ss -tuln"}},    # listening ports
+    {{"type": "command", "node_name": "Host1", "command": "iptables -L -n -v"}},
+    {{"type": "command", "node_name": "R1", "command": "show ip sockets"}},
+])
 ```
 
-**Issue: Firewall blocking**
-- **Symptom**: Connection timeout (not refused)
-- **Check firewall rules**:
-```
-ssh_command("Host1", "iptables -L -n -v")
-```
+**Common service issues:**
+- **Connection refused** to a service port: service not running - `systemctl start sshd`.
+- **Connection timeout** (not refused): firewall dropping traffic - review `iptables -L -n -v`.
+- **IP works, hostname fails**: DNS - test with `nslookup` / `dig`, check the resolver config.
 
-**Issue: DNS resolution failing**
-- **Symptom**: Can ping IP but not hostname
-- **Test DNS**:
-```
-ssh_command("Host1", "nslookup example.com")
-ssh_command("Host1", "dig example.com")
-```
+## Step 7: Performance
 
-## Step 7: Performance Troubleshooting
-
-**Check Resource Utilization:**
-
-**CPU Usage:**
+```python
+ssh(operations=[
+    {{"type": "command", "node_name": "R1", "command": "show processes cpu sorted"}},
+    {{"type": "command", "node_name": "R1", "command": "show memory statistics"}},
+    {{"type": "command", "node_name": "R1", "command": "show interfaces | include rate"}},
+    {{"type": "command", "node_name": "R1", "command": "show interfaces GigabitEthernet0/0 | include error"}},
+])
 ```
-# Cisco
-ssh_command("R1", "show processes cpu sorted")
+Linux: `top -b -n 1 | head -20`, `free -h`, `ip -s link show`.
 
-# Linux
-ssh_command("Host1", "top -b -n 1 | head -20")
+**Common performance issues:**
+- **High CPU**: routing loops, broadcast storms (Layer 2 loop - check spanning-tree), software bugs.
+- **Interface errors**: input - duplex mismatch or bad link; output - oversubscription, buffering.
+- **Packet loss**: extended ping, then read "Success rate" (long commands need `read_timeout`).
+  Intermittent loss: congestion or physical issue. Complete loss: Layer 1-3 configuration.
+```python
+ssh(operations=[{{"type": "command", "node_name": "R1",
+                  "command": "ping 192.168.1.2 repeat 1000", "read_timeout": 120}}])
 ```
-
-**Memory Usage:**
-```
-# Cisco
-ssh_command("R1", "show memory statistics")
-
-# Linux
-ssh_command("Host1", "free -h")
-```
-
-**Interface Utilization:**
-```
-# Cisco
-ssh_command("R1", "show interfaces | include rate")
-
-# Linux
-ssh_command("Host1", "ip -s link show")
-```
-
-**Common Performance Issues:**
-
-**Issue: High CPU usage**
-- **Cause**: Routing loops, broadcast storms, software bugs
-- **Check for loops**: Verify no Layer 2 loops (use spanning-tree)
-- **Check routing**: Look for routing loops in "show ip route"
-
-**Issue: High interface errors**
-```
-ssh_command("R1", "show interfaces GigabitEthernet0/0 | include error")
-```
-- **Input errors**: Bad cables, duplex mismatch
-- **Output errors**: Oversubscription, buffering issues
-
-**Issue: Packet loss**
-```
-# Extended ping with statistics
-console_send("R1", "ping 192.168.1.2 repeat 1000\\n")
-# Wait for completion
-console_read("R1", mode="last_page")
-```
-- Check "Success rate" percentage
-- Intermittent loss: Physical issue, congestion
-- Complete loss: Configuration issue (Layer 1-3)
 
 ## Step 8: SSH Troubleshooting
 
-**Check SSH Session Status:**
-```
-Resource: sessions://ssh/{{node_name}}
-```
-
-**Common SSH Issues:**
-
-**Issue: "Connection refused"**
-- **Cause**: SSH not enabled on device
-- **Fix**: Use console to enable SSH (see "SSH Setup Workflow" prompt)
-
-**Issue: "Authentication failed"**
-- **Cause**: Wrong username/password, user not configured
-- **Check configuration (Cisco)**:
-```
-console_send("R1", "show running-config | include username\\n")
-console_read("R1", mode="last_page")
+```python
+query_resource("sessions://ssh/R1")              # session state
+query_resource("sessions://ssh/R1/history")      # recent commands and results
+query_resource("proxies:///status")              # main SSH proxy health
+query_resource("proxies://")                     # lab proxies for isolated networks
+ssh(operations=[{{"type": "command", "node_name": "@", "command": "ping -c 2 192.168.1.1"}}])
 ```
 
-**Issue: "Host unreachable"**
-- **Cause**: Network connectivity issue (Layer 1-3)
-- **Fix**: Follow Layer 1-3 troubleshooting first
-
-**Issue: "Timeout"**
-- **Cause**: Slow device, high latency, firewall
-- **Fix**: Increase read_timeout in ssh_command:
+**Common SSH issues:**
+- **Connection refused**: SSH not enabled - enable it over the console ("SSH Setup Workflow" prompt).
+- **Authentication failed**: check credentials in `project_docs`, then on the device:
+```python
+console(operations=[{{"type": "send_and_wait", "node_name": "R1",
+                      "command": "show running-config | include username\\n", "wait_pattern": "R1#"}}])
 ```
-ssh_command("R1", "show version", read_timeout=60.0)
-```
-
-**Disconnect and Retry:**
-```
-ssh_disconnect("R1")
-# Wait 2 seconds
-ssh_configure("R1", {
-        "device_type": "cisco_ios",
-    "host": "192.168.1.1",
-    "username": "admin",
-    "password": "password"
-})
+- **Host unreachable**: Layer 1-3 problem between proxy and device - Steps 3-5. Devices on isolated
+  networks need a lab proxy: set `"proxy"` in the `configure` op (ids from `proxies://`).
+- **Timeout on slow commands**: raise `read_timeout` on the command op (see Step 7).
+- **SSH_DISCONNECTED / stale session after a lab restart**: re-configure with `force`:
+```python
+ssh(operations=[
+    {{"type": "configure", "node_name": "R1", "force": True, "device_dict": {{
+        "device_type": "cisco_ios", "host": "192.168.1.1",
+        "username": "admin", "password": "<from project_docs>"}}}},
+    {{"type": "command", "node_name": "R1", "command": "show version"}},
+])
 ```
 
 ## Step 9: Log Collection
 
-**Collect Device Logs:**
-```
-# Cisco
-ssh_command("R1", "show logging")
-ssh_command("R1", "show logging last 50")
-
-# Linux
-ssh_command("Host1", "journalctl -n 100")
-ssh_command("Host1", "dmesg | tail -50")
-```
-
-**Check Console History:**
-```
-# View command history
-Resource: sessions://ssh/{{node_name}}/history
-
-# View SSH buffer
-Resource: sessions://ssh/{{node_name}}/buffer
+```python
+ssh(operations=[
+    {{"type": "command", "node_name": "R1", "command": "show logging"}},
+    {{"type": "command", "node_name": "Host1", "command": "journalctl -n 100 --no-pager"}},
+])
+query_resource("sessions://ssh/R1/buffer")       # full SSH output buffer
+console(operations=[{{"type": "read", "node_name": "R1", "mode": "all",
+                      "pattern": "error|down", "case_insensitive": True, "context": 2}}])
+notification(action="read", filter_action="log.")  # GNS3 server log events
 ```
 
-**Save Configurations:**
-```
-# Cisco
-ssh_command("R1", "show running-config")
-ssh_command("R1", "show startup-config")
-
-# Save to startup
-ssh_command("R1", "write memory")
-```
+Once fixed, save the config: `ssh` command `write memory` (keep `show running-config` as a backup).
 
 ## Step 10: Baseline Comparison
 
-**Compare with Working Topology:**
-- Export current topology diagram
-- Compare with known-good state
-- Identify configuration differences
-
-**Document Changes:**
-- What changed before issue started?
-- Were new devices added?
-- Were configurations modified?
-- Did software/IOS versions change?
+- Compare the topology diagram and configs with the known-good design in the project docs
+- What changed before the issue: new nodes, edited configs, different images or versions?
+- Record root cause and fix: `project_docs(action="get")`, add notes, then
+  `project_docs(action="update", content="<full README>")` (update replaces the whole README)
 
 ## Troubleshooting Decision Tree
 
 ```
-Issue Detected
-    │
-    ├─ Nodes not started? → Start nodes, wait for boot
-    │
-    ├─ Links suspended/red? → Check connections, unsuspend links
-    │
-    ├─ Console not accessible? → Verify node started, check console type
-    │
-    ├─ Interface down? → Check config, "no shutdown", verify cable
-    │
-    ├─ No IP address? → Configure IP, verify subnet
-    │
-    ├─ Can't ping? → Check routing, verify reachability
-    │
-    ├─ Service not working? → Check service status, firewall rules
-    │
-    └─ Performance issues? → Check CPU/memory, look for loops
+Issue detected
+  |- Tools fail / stale sessions? -> gns3_connection(action="reconnect")
+  |- Nodes not started?           -> node set state_action="start", wait for boot
+  |- Link red or missing?         -> start nodes, re-cable with link batch
+  |- Console not accessible?      -> node started? console type telnet? read last_page
+  |- Interface down?              -> "no shutdown", check cabling
+  |- No IP address?               -> configure over console, verify subnet
+  |- Can't ping?                  -> routes, ARP, ping from the proxy ("@")
+  |- Service not working?         -> service status, listening ports, firewall
+  |- Slow or lossy?               -> CPU/memory, interface errors, Layer 2 loops
 ```
 
-## Related Prompts and Tools
+## Quick Reference
 
-**Prompts:**
-- **SSH Setup Workflow**: Enable SSH on devices for automation
-- **Topology Discovery Workflow**: Understand network structure
-
-**Resources (viewing state):**
-- `projects://{id}/nodes/` - Node status
-- `projects://{id}/links/` - Link status
-- `sessions://console/{node_name}` - Console session state
-- `sessions://ssh/{node_name}` - SSH session state
-
-**Tools (actions):**
-- `node(action="set", state_action="start|stop|reload", ...)` - Start/stop/reload nodes
-- `link(connections=[...])` - Manage links (batch)
-- `console(operations=[{"type": "send|read|keystroke", ...}])` - Console interaction (batch)
-- `ssh(operations=[{"type": "command", ...}])` - Execute commands via SSH (batch)
-- `export_topology_diagram(...)` - Visualize topology
-
-**Note**: v0.47.0 uses CRUD-style APIs. Individual tool examples in this guide use old API format and should be converted to batch operations.
-
-## Prevention and Best Practices
-
-**Configuration Management:**
-- Save configurations regularly (`write memory`)
-- Document changes before making them
-- Use version control for configuration files
-
-**Topology Documentation:**
-- Export topology diagrams
-- Maintain IP address spreadsheets
-- Document VLAN assignments
-
-**Regular Health Checks:**
-- Verify all nodes started
-- Check interface status
-- Review routing tables
-- Monitor resource utilization
-
-**Lab Hygiene:**
-- Close unused projects to free resources
-- Stop nodes when not in use
-- Clean up old console/SSH sessions
-- Remove unused links and devices
+- Resources via `query_resource(uri)`: `projects://<project_id>/topology_report`,
+  `nodes://<project_id>/`, `nodes://<project_id>/<node_id>`, `links://<project_id>/`,
+  `sessions://console/`, `sessions://ssh/<node_name>`, `sessions://ssh/<node_name>/history`,
+  `proxies:///status`, `proxies://`
+- Related prompts: "SSH Setup Workflow", "Topology Discovery Workflow"
+- Prevention: save configs after changes, keep IP plan/VLANs/credentials in the project docs,
+  export diagrams as a baseline, stop unused nodes and close unused projects
 """
 
     return workflow

@@ -614,7 +614,7 @@ class ErrorResponse(BaseModel):
                 "error": "Node 'Router1' not found in project 'Lab1'",
                 "error_code": "NODE_NOT_FOUND",
                 "details": "Available nodes: Router2, Router3, Switch1",
-                "suggested_action": "Use list_nodes() to see all available nodes in the project",
+                "suggested_action": 'Use node(action="list", project_id=...) to see all nodes in the project',
                 "context": {
                     "project_id": "abc123",
                     "node_name": "Router1",

@@ -590,7 +590,7 @@ async def export_topology_diagram(
                     ErrorResponse(
                         error="Cannot export empty project",
                         details="Project has no nodes or drawings to export. Add some nodes first.",
-                        suggested_action="Create nodes in your project using create_node() or the GNS3 GUI before exporting",
+                        suggested_action='Create nodes with node(action="create") or the GNS3 GUI before exporting',
                     ).model_dump(),
                     indent=2,
                 )

@@ -10,12 +10,16 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.56.1 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.56.2 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.56.1 - Claude plugin + MCPB uv runtime (0.56.0 unpublished)
+**Latest Release:** v0.56.2 - client texts use current tools
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.56.0)
+### Recent Changes (v0.26.0 - v0.56.2)
+
+**v0.56.2** - Client texts use current tools (GM-93): instructions.md rewritten (128 lines), prompts and error hints fixed; `tests/unit/test_client_texts.py` fails on any call to a removed tool name in client-facing text
+
+**v0.56.1** - published 0.56.0 + Dockerfile/smoke-test release fixes
 
 **v0.56.0** - Claude plugin + MCPB uv runtime (GM-91, GM-92)
 - `plugin/` = Claude plugin `gns3-lab` (Claude Code + Cowork): `uvx gns3-mcp@<ver>` + new `gns3-lab-automation` skill; repo is a marketplace (`.claude-plugin/marketplace.json`)

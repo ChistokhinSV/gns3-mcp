@@ -133,7 +133,7 @@ async def create_project_impl(
                 error=f"Project '{name}' already exists",
                 error_code=ErrorCode.INVALID_PARAMETER.value,
                 details=f"Project with ID {existing['project_id']} already has this name",
-                suggested_action="Use open_project() to open existing project, or choose a different name",
+                suggested_action='Use project(action="open", name=...) to open the existing project, or choose a different name',
                 context={"project_name": name, "existing_project_id": existing["project_id"]},
             )
             return (error_response, "")

@@ -286,7 +286,7 @@ class NodeStateError(GNS3Error):
                 "operation": operation,
             },
             suggestions=[
-                f"Stop node first: set_node_properties('{node_name}', action='stop')",
+                f"Stop node first: node(action='set', node_name='{node_name}', state_action='stop')",
                 f"Wait for node to reach {required_state} state",
                 "Check node status with resource nodes://<project_id>/",
             ],
