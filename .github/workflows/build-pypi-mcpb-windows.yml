@@ -68,15 +68,20 @@ jobs:
           Write-Host "Build successful:"
           Get-Item mcp-server\mcp-server.mcpb | Format-List
 
-          # Verify UV binary is included (size should be ~22 MB with UV binary)
-          $SizeMB = [math]::Round((Get-Item mcp-server\mcp-server.mcpb).Length / 1MB)
-          if ($SizeMB -lt 20) {
-            Write-Host "ERROR: .mcpb size is ${SizeMB}M - UV binary likely missing!"
-            Write-Host "Expected size: ~22 MB (compressed, includes 58 MB UV binary)"
-            Write-Host "Actual size: $SizeMB MB"
+          # Verify UV binary is inside the archive. A size threshold broke when uv
+          # releases shrank (58 MB -> 30 MB), so look for the entry itself.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path mcp-server\mcp-server.mcpb))
+          try {
+            $uv = $zip.Entries | Where-Object { $_.FullName -eq "uv.exe" }
+          } finally {
+            $zip.Dispose()
+          }
+          if (-not $uv -or $uv.Length -lt 5MB) {
+            Write-Host "ERROR: uv.exe missing from .mcpb (or truncated)"
             exit 1
           }
-          Write-Host "Size check passed: $SizeMB MB (UV binary included)"
+          Write-Host ("uv.exe included: {0:N1} MB" -f ($uv.Length / 1MB))
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -159,7 +164,9 @@ jobs:
             **Cursor/Windsurf:**
             See [full installation guide](https://github.com/${{ github.repository }}/blob/master/README.md#installation) for JSON configuration examples.
 
-            ### 🐳 Docker Deployment (NEW in v0.49.0)
+            ### 🐳 Docker Deployment
+
+            `MCP_API_KEY` is required (v0.55.0+); clients send it in the `MCP_API_KEY` header.
 
             **Quick Start with Docker Compose:**
             - Download docker-compose.yml and .env.example:
@@ -188,6 +195,7 @@ jobs:
               -e GNS3_PORT=80 \
               -e GNS3_USER=admin \
               -e GNS3_PASSWORD=your-password \
+              -e MCP_API_KEY=your-random-token-here \
               chistokhinsv/gns3-mcp:${{ steps.version.outputs.version }}
             ```
 
