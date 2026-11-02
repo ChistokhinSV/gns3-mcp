@@ -49,9 +49,9 @@ ENV GNS3_PORT=80
 ENV GNS3_USE_HTTPS=false
 ENV GNS3_VERIFY_SSL=false
 
-# Health check - verify server is listening and responding
+# Health check - /health answers without the API key
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -s http://localhost:${HTTP_PORT}/ > /dev/null || exit 1
+    CMD curl -fs http://localhost:${HTTP_PORT}/health > /dev/null || exit 1
 
 # Run MCP server in HTTP mode using CLI entry point
 CMD ["gns3-mcp", "--transport", "http", "--http-host", "0.0.0.0"]

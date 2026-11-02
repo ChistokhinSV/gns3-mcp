@@ -23,6 +23,7 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Fixed silently dropped `console_type` (QEMU etc.) and switch `ports`
 - `project close` 204 handled; `link batch` switch port names; `console` wait-only `send_and_wait` in batch
 - GNS3 v3 NodeUpdate top-level fields are listed in `NODE_UPDATE_TOP_LEVEL_FIELDS` (node_tools.py); everything else is nested under `properties`
+- GM-90: `build_http_app()` in main.py is the ONLY way to build the HTTP/SSE app (cli.py + main.py); `MCP_API_KEY` required, `GET /health` open; endpoint `/mcp`
 
 **v0.54.0** - GNS3 notification stream support
 - **New `notification` tool**: Subscribe to `/v3/notifications` real-time event stream

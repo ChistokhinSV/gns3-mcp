@@ -295,7 +295,7 @@ The .env file is now only used for development mode (`.\server.cmd run`).
 | HTTP_HOST | MCP HTTP bind address | 127.0.0.1 |
 | HTTP_PORT | MCP HTTP port | 8100 |
 | LOG_LEVEL | Logging level | INFO |
-| MCP_API_KEY | MCP API authentication key | (auto-generated) |
+| MCP_API_KEY | MCP API authentication key (required for HTTP mode) | - |
 | GNS3_USE_HTTPS | Use HTTPS for GNS3 | false |
 | GNS3_VERIFY_SSL | Verify SSL certificates | true |
 

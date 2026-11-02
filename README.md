@@ -2,24 +2,57 @@
 
 Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS3 projects, nodes, and device consoles through Claude Desktop or any MCP-compatible client.
 
-**Version**: 0.49.0
+**Version**: 0.55.0 · Requires GNS3 server v3.x (v3 API) · See [CHANGELOG.md](CHANGELOG.md)
 
 ## Features
 
-- **15 Tools**: CRUD-style GNS3 automation (v0.47.0: 53% consolidation from 32 tools)
-- **25 Resources**: Read-only data access (projects, nodes, links, sessions, topology reports)
-- **CRUD Pattern**: Consolidated tools with `action` parameters (`project(action="open")`, `node(action="create")`, etc.)
-- **Batch Operations**: Console and SSH operations use batch-only APIs for atomic execution
-- **Wildcard Support**: Node operations support patterns (`*`, `Router*`, `R[123]`, JSON arrays)
-- **Project Management**: Create, open, close GNS3 projects
-- **Node Control**: Start/stop/restart nodes with wildcard patterns and parallel execution
-- **Console Access**: Telnet console automation with pattern matching and grep filtering
-- **SSH Automation**: Network device automation via Netmiko (200+ device types)
-- **Network Topology**: Batch connect/disconnect links, create drawings, export diagrams
-- **Docker Integration**: Configure container networks, read/write files
-- **Tool Discovery**: `search_tools()` with category/capability/resource filtering
-- **Claude Desktop Support**: All resources accessible via tools (`query_resource`, `list_projects`, `list_nodes`, `get_topology`)
-- **Security**: API key authentication (HTTP mode), service privilege isolation, HTTPS support
+- **15 Tools**: CRUD-style tools with an `action` parameter (`project(action="open")`, `node(action="create")`, ...)
+- **25 Resources**: Read-only data (projects, nodes, links, templates, sessions, proxies, topology report)
+- **5 Prompts**: Guided workflows (SSH setup, topology discovery, troubleshooting, lab setup, node setup)
+- **Node Control**: Create from templates, start/stop/restart with wildcards (`*`, `Router*`, `R[123]`, JSON arrays) and parallel execution
+- **Node Hardware**: RAM, CPUs, adapters, QEMU disks (`hda`/`hdb`/`hdd`), CD-ROM image, QEMU options (e.g. `-cpu host`) on create and set; values GNS3 did not apply are reported back
+- **Console Access**: Batch telnet automation with pattern waits, wait-only mode, pagination handling, grep filtering
+- **SSH Automation**: Network device automation via Netmiko (200+ device types) through the SSH proxy
+- **Network Topology**: Batch connect/disconnect links with two-phase validation, drawings, SVG/PNG export
+- **Notifications**: Live GNS3 event stream (node/link/drawing changes, logs, compute events)
+- **Docker Nodes**: Configure container networks, read/write files
+- **Lab Services**: TFTP server and HTTP client/reverse proxy via the SSH proxy container
+- **Tool Discovery**: `search_tools()` with category/capability/resource filtering; `query_resource()` reads any resource from clients without resource support
+- **Security**: required API key on every HTTP/SSE entry point (`/health` open for probes), service privilege isolation, HTTPS to GNS3
+
+### Tools
+
+| Tool | Actions / purpose |
+|------|-------------------|
+| `gns3_connection` | `check`, `retry`, `reconnect` |
+| `project` | `list`, `open`, `create`, `close` |
+| `node` | `list`, `create`, `delete`, `set` (properties and start/stop/suspend/reload/restart) |
+| `link` | `list`, `batch` (connect / disconnect) |
+| `drawing` | `list`, `create`, `update`, `delete`, `batch` |
+| `console` | batch of `send`, `send_and_wait`, `read`, `keystroke` |
+| `ssh` | batch of `configure`, `command`, `read`, `disconnect` |
+| `node_file` | `read`, `write`, `configure_network` (Docker nodes) |
+| `project_docs` | `get`, `update` (per-project README / notes) |
+| `notification` | `subscribe`, `read`, `unsubscribe`, `status` |
+| `tftp`, `http_client` | SSH proxy lab services |
+| `query_resource`, `search_tools`, `export_topology_diagram` | resource access, tool discovery, diagram export |
+
+### Example
+
+```python
+# Ubuntu VM with a bigger boot disk, cloud-init ISO and host CPU model
+node(action="create", template_name="Ubuntu Cloud Guest", node_name="ops1", x=0, y=0,
+     ram=8192, cpus=4, adapters=2, hda_disk_image="ops1-60G.qcow2",
+     cdrom_image="ops1-seed.iso", options="-cpu host")
+
+# Wire it to switch port Ethernet2, start it, wait for the login prompt
+link(action="batch", connections=[{"action": "connect", "node_a": "ops1", "adapter_a": "eth0",
+     "port_a": 0, "node_b": "SW1", "adapter_b": "Ethernet2", "port_b": 0}])
+node(action="set", node_name="ops1", state_action="start")
+console(operations=[{"type": "read", "node_name": "ops1"}])  # first access: read only
+console(operations=[{"type": "send_and_wait", "node_name": "ops1",
+                     "wait_pattern": "login:", "timeout": 180}])  # wait-only, sends nothing
+```
 
 ## Installation
 
@@ -152,19 +185,8 @@ claude mcp get gns3-mcp
 
 2. **Install by double-clicking** the `.mcpb` file
 
-3. **Configure credentials** in Claude Desktop:
-   - Open Claude Desktop
-   - Go to Settings > Developer > Edit Config
-   - Find `gns3-mcp` server
-   - Add environment variables:
-     ```json
-     {
-       "GNS3_HOST": "192.168.1.20",
-       "GNS3_PORT": "80",
-       "GNS3_USER": "admin",
-       "GNS3_PASSWORD": "your-password"
-     }
-     ```
+3. **Enter credentials** when the installer asks: GNS3 host, GNS3 port, username, password.
+   Change them later in Settings > Extensions > GNS3 Lab Controller.
 
 4. **Restart Claude Desktop**
 
@@ -296,8 +318,8 @@ claude mcp get gns3-mcp
 
 **Connection Issues:**
 ```powershell
-# Test GNS3 server connectivity
-curl http://192.168.1.20:80/v3/projects
+# Test GNS3 server connectivity (no auth needed for this endpoint)
+curl http://192.168.1.20:80/v3/version
 
 # Check Claude Code MCP status
 claude mcp get gns3-mcp
@@ -311,6 +333,8 @@ claude mcp get gns3-mcp
 - **"Connection refused"**: Verify GNS3 server is running and accessible
 - **"Authentication failed"**: Check credentials in `.env` file
 - **"Socket is closed"**: SSH session expired, reconnect automatically on next command
+- **Stale console sessions after a GNS3 restart**: `gns3_connection(action="reconnect")`
+- **Node change "not applied by GNS3"**: the key is wrong for that node type or misplaced - check `query_resource("nodes://<project_id>/<node_id>")`
 
 **For Claude Desktop issues:**
 Check logs at:
@@ -343,7 +367,7 @@ C:\Users\<username>\AppData\Roaming\Claude\logs\mcp-server-GNS3 Lab Controller.l
 
 2. Configure Claude Code:
    ```powershell
-   claude mcp add --transport http gns3-mcp http://127.0.0.1:8100/mcp/ --scope user`
+   claude mcp add --transport http gns3-mcp http://127.0.0.1:8100/mcp --scope user `
      --header "MCP_API_KEY: your-random-token-here"
    ```
 
@@ -352,7 +376,7 @@ C:\Users\<username>\AppData\Roaming\Claude\logs\mcp-server-GNS3 Lab Controller.l
    gns3-mcp --transport http --http-port 8100
    ```
 
-**Note**: If `MCP_API_KEY` is missing from `.env`, it will be auto-generated on first start and automatically saved to `.env` for persistence.
+**Note**: `MCP_API_KEY` is required for HTTP/SSE transport - the server refuses to start without it. Every HTTP entry point checks it (`gns3-mcp`, Docker, `server.cmd install`, `python -m gns3_mcp.server.main`). `GET /health` needs no key.
 
 </details>
 
@@ -390,12 +414,18 @@ pip install uv
 # After code updates
 .\server.cmd reinstall        # Reinstall service
 
+# Service from the local checkout (.venv, picks up code changes on restart)
+.\server.cmd dev-install
+.\server.cmd dev-reinstall
+
 # Remove service
 .\server.cmd uninstall
 
 # Development mode (direct run, no service)
 .\server.cmd run
 ```
+
+After restarting the service, reconnect the MCP client (Claude Code: `/mcp` > gns3-mcp > Reconnect).
 
 **Key Features:**
 - ✅ **Portable**: Works from any folder location (no hardcoded paths)
@@ -430,11 +460,20 @@ GNS3_USER=admin
 GNS3_PASSWORD=your-password
 "@ | Out-File -FilePath .env -Encoding ASCII
 
-# Run directly (STDIO mode - no authentication)
-python gns3_mcp\cli.py --host 192.168.1.20 --port 80 --username admin --password your-password
+# Run directly (STDIO mode, reads .env from the current directory)
+python gns3_mcp\cli.py
 
 # Or add to Claude Code (project-scoped)
 claude mcp add --transport stdio gns3-mcp --scope project -- python "C:\full\path\to\gns3_mcp\cli.py"
+```
+
+> Keep the password in `.env` rather than `--password`: command-line arguments are visible to other processes.
+
+**Quality checks and tests:**
+```powershell
+just check                                  # lint, format, type check, tests, version + changelog
+python -m pytest tests\unit -q              # unit tests only
+just bump minor                             # bump version in all three version files
 ```
 
 **Build .mcpb package:**
@@ -442,6 +481,8 @@ claude mcp add --transport stdio gns3-mcp --scope project -- python "C:\full\pat
 just build
 # Creates: mcp-server\mcp-server.mcpb
 ```
+
+**Release:** push a `vX.Y.Z` tag - GitHub Actions publish PyPI, the `.mcpb` GitHub release and the Docker Hub image.
 
 </details>
 
@@ -475,6 +516,7 @@ GNS3_HOST=192.168.1.20
 GNS3_PORT=80
 GNS3_USER=admin
 GNS3_PASSWORD=your-password
+MCP_API_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 HTTP_PORT=8000
 LOG_LEVEL=INFO
 EOF
@@ -503,24 +545,13 @@ curl http://localhost:8022/health
 
 **Step 4: Configure Claude Desktop/Code**
 
-For **Claude Code** (HTTP mode):
+For **Claude Code** (HTTP mode, key from `.env`):
 ```powershell
-claude mcp add --transport http gns3-mcp --url http://localhost:8000
+claude mcp add --transport http gns3-mcp http://localhost:8000/mcp --scope user `
+  --header "MCP_API_KEY: your-random-token-here"
 ```
 
-For **Claude Desktop**, add to MCP configuration:
-```json
-{
-  "mcpServers": {
-    "gns3-mcp": {
-      "transport": {
-        "type": "http",
-        "url": "http://localhost:8000"
-      }
-    }
-  }
-}
-```
+For **Claude Desktop**, use the `.mcpb` package (STDIO) instead - see Installation.
 
 ### Using Docker Run (without compose)
 
@@ -532,6 +563,7 @@ docker run -d \
   -e GNS3_PORT=80 \
   -e GNS3_USER=admin \
   -e GNS3_PASSWORD=your-password \
+  -e MCP_API_KEY=your-random-token-here \
   --restart unless-stopped \
   chistokhinsv/gns3-mcp:latest
 ```
@@ -562,6 +594,7 @@ docker-compose up -d
 | `GNS3_PORT` | No | `80` | GNS3 API port |
 | `GNS3_USER` | Yes | - | GNS3 username |
 | `GNS3_PASSWORD` | Yes | - | GNS3 password |
+| `MCP_API_KEY` | Yes | - | Key clients send in the `MCP_API_KEY` header; container exits without it |
 | `HTTP_PORT` | No | `8000` | MCP server port |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 | `GNS3_USE_HTTPS` | No | `false` | Use HTTPS for GNS3 |
@@ -573,9 +606,9 @@ See [.env.example](.env.example) for complete list.
 
 The Docker deployment includes two containers:
 
-1. **gns3-mcp** - Main MCP server (port 8000)
+1. **gns3-mcp** - Main MCP server (port 8000, endpoint `/mcp`)
    - Provides MCP protocol access to GNS3
-   - HTTP/SSE transport modes
+   - Streamable HTTP transport, `MCP_API_KEY` header auth; `GET /health` open for the healthcheck
    - Bridge network mode
 
 2. **gns3-ssh-proxy** - SSH gateway (port 8022)
@@ -616,7 +649,10 @@ For more details, see [docs/DOCKER_HUB.md](docs/DOCKER_HUB.md).
 ## Documentation
 
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
+- **[skill/SKILL.md](skill/SKILL.md)** - Agent skill: GNS3 workflows and tool usage for AI agents
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - SSH proxy deployment instructions
+- **[PORTABLE_SETUP.md](PORTABLE_SETUP.md)** - Windows service setup
+- **[ERROR_CODES.md](ERROR_CODES.md)** - Error codes returned by tools
 - **[docs/architecture/](docs/architecture/)** - Architecture documentation and C4 diagrams
 
 ## License

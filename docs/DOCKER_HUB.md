@@ -30,6 +30,7 @@ GNS3_HOST=192.168.1.20
 GNS3_PORT=80
 GNS3_USER=admin
 GNS3_PASSWORD=your-password
+MCP_API_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 HTTP_PORT=8000
 LOG_LEVEL=INFO
 EOF
@@ -37,7 +38,7 @@ EOF
 # 3. Start both MCP server and SSH proxy
 docker-compose up -d
 
-# 4. Verify services are running
+# 4. Verify services are running (/health needs no key)
 curl http://localhost:8000/health
 curl http://localhost:8022/health
 
@@ -55,6 +56,7 @@ docker run -d \
   -e GNS3_PORT=80 \
   -e GNS3_USER=admin \
   -e GNS3_PASSWORD=your-password \
+  -e MCP_API_KEY=your-random-token-here \
   -e HTTP_HOST=0.0.0.0 \
   -e HTTP_PORT=8000 \
   -e LOG_LEVEL=INFO \
@@ -75,14 +77,14 @@ docker run -d \
 | `HTTP_HOST` | No | `0.0.0.0` | MCP server listen address |
 | `HTTP_PORT` | No | `8000` | MCP server port |
 | `LOG_LEVEL` | No | `INFO` | Logging level (DEBUG/INFO/WARNING/ERROR) |
-| `MCP_API_KEY` | No | auto | API key for MCP authentication |
+| `MCP_API_KEY` | **Yes** | - | API key clients send in the `MCP_API_KEY` header; the container exits without it |
 
 ## Architecture
 
 The GNS3 MCP ecosystem consists of two containers:
 
 1. **gns3-mcp** (this image) - Main MCP server providing GNS3 API access
-   - Port: 8000 (HTTP/SSE transport)
+   - Port: 8000, endpoint `/mcp` (Streamable HTTP), `GET /health` for probes
    - Network: Bridge mode
    - Protocols: MCP over HTTP
 
@@ -91,22 +93,14 @@ The GNS3 MCP ecosystem consists of two containers:
    - Network: Host mode (required for isolated lab networks)
    - Protocols: Netmiko SSH automation
 
-## Usage with Claude Desktop
+## Usage with Claude Code
 
-Add to Claude Desktop MCP configuration:
-
-```json
-{
-  "mcpServers": {
-    "gns3-mcp": {
-      "transport": {
-        "type": "http",
-        "url": "http://localhost:8000"
-      }
-    }
-  }
-}
+```bash
+claude mcp add --transport http gns3-mcp http://localhost:8000/mcp --scope user \
+  --header "MCP_API_KEY: your-random-token-here"
 ```
+
+For Claude Desktop use the `.mcpb` package from [GitHub Releases](https://github.com/ChistokhinSV/gns3-mcp/releases) (STDIO).
 
 ## Available Tools
 
@@ -130,7 +124,9 @@ Add to Claude Desktop MCP configuration:
 - `export_topology_diagram()` - Export topology to SVG/PNG
 
 ### Utilities
-- `gns3_connection()` - Check/retry GNS3 server connection
+- `gns3_connection()` - Check/retry/reconnect GNS3 server connection
+- `notification()` - Live GNS3 event stream
+- `tftp()`, `http_client()` - Lab services via the SSH proxy
 - `search_tools()` - Discover tools by category/capability
 - `query_resource()` - Universal resource access
 
@@ -186,9 +182,9 @@ docker logs -t gns3-mcp-server
 
 ## Security Considerations
 
-- Container has **no built-in authentication** (use firewalls/VPNs)
+- Every MCP request needs the `MCP_API_KEY` header (since v0.55.0; earlier images had **no** authentication)
+- Only `GET /health` is open, for the healthcheck
 - GNS3 credentials stored as environment variables
-- MCP_API_KEY can be set for basic authentication
 - Recommended for internal/lab networks only
 - Do not expose port 8000 to public internet
 
@@ -217,12 +213,14 @@ docker exec gns3-mcp-server ping -c 3 ${GNS3_HOST}
 # Manual health check
 curl -v http://localhost:8000/health
 
-# Check if FastMCP provides health endpoint
-docker exec gns3-mcp-server curl -v http://localhost:8000/
+# 401 here means the server is up and wants the API key
+docker exec gns3-mcp-server curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/mcp
 ```
 
 ## Version History
 
+- **v0.55.0** - `MCP_API_KEY` required and enforced, `/health` endpoint, node properties/disks/options, batch fixes
+- **v0.54.0** - GNS3 notification stream
 - **v0.49.0** - Docker support, multi-platform builds
 - **v0.48.0** - List action integration in CRUD tools
 - **v0.47.0** - Aggressive tool consolidation (32→15 tools)

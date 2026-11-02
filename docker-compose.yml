@@ -20,7 +20,7 @@ services:
       - GNS3_PASSWORD=${GNS3_PASSWORD}
       - GNS3_USE_HTTPS=${GNS3_USE_HTTPS:-false}
       - GNS3_VERIFY_SSL=${GNS3_VERIFY_SSL:-true}
-      - MCP_API_KEY=${MCP_API_KEY:-}
+      - MCP_API_KEY=${MCP_API_KEY:?MCP_API_KEY must be set in .env}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

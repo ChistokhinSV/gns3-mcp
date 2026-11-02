@@ -22,6 +22,7 @@ import argparse
 import json
 import logging
 import os
+import secrets
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Literal
 
@@ -2393,6 +2394,64 @@ async def search_tools(
 # #     ]
 
 
+# ============================================================================
+# HTTP/SSE transport: health probe + API key auth (GM-90)
+# ============================================================================
+
+# Paths reachable without MCP_API_KEY (liveness probes for Docker/monitoring)
+PUBLIC_HTTP_PATHS = frozenset({"/health"})
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health(request: Request) -> JSONResponse:
+    """Liveness probe - answers without touching GNS3 or requiring the API key"""
+    return JSONResponse({"status": "ok", "version": VERSION})
+
+
+def build_http_app(transport: str = "http") -> Any:
+    """Create the ASGI app for HTTP or SSE transport with MCP_API_KEY auth.
+
+    Shared by the `gns3-mcp` console script (Docker, uvx, `server.cmd install`) and
+    `python -m gns3_mcp.server.main` (`server.cmd dev-install`), so every network
+    deployment enforces the same key. Before v0.55.0 only the latter checked it.
+
+    Raises:
+        SystemExit: MCP_API_KEY is not set. A generated key could not reach clients
+            without logging a secret, so the server refuses to start instead.
+    """
+    api_key = os.getenv("MCP_API_KEY", "").strip()
+    if not api_key:
+        raise SystemExit(
+            "Error: MCP_API_KEY is required for HTTP/SSE transport.\n"
+            'Generate one:  python -c "import secrets; print(secrets.token_urlsafe(32))"\n'
+            "Set it in .env or the environment; clients send it in the 'MCP_API_KEY' header."
+        )
+
+    # sse_app() is gone in FastMCP 3.x; http_app(transport=...) works on 2.13+ and 3.x
+    app = mcp.http_app(transport="sse" if transport == "sse" else "http")
+
+    async def verify_api_key(request: Request, call_next):
+        """Reject requests without the right MCP_API_KEY header (CWE-306)"""
+        if request.url.path in PUBLIC_HTTP_PATHS:
+            return await call_next(request)
+
+        # Starlette headers are case-insensitive; compare in constant time
+        client_key = request.headers.get("MCP_API_KEY", "")
+        if not secrets.compare_digest(client_key.encode(), api_key.encode()):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "error": "Unauthorized",
+                    "detail": "Invalid or missing MCP_API_KEY header. "
+                    "Add header: 'MCP_API_KEY: <your-key-from-env>'",
+                },
+            )
+        return await call_next(request)
+
+    app.add_middleware(BaseHTTPMiddleware, dispatch=verify_api_key)
+    return app
+
+
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="GNS3 MCP Server")
@@ -2450,47 +2509,11 @@ if __name__ == "__main__":
         import uvicorn
 
         print(
-            f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp/"
+            f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp"
         )
 
-        # Create ASGI app for HTTP transport
-        app = mcp.http_app()
-
-        # Add API key authentication middleware (CWE-306 fix)
-        api_key = os.getenv("MCP_API_KEY")
-        if not api_key:
-            # Auto-generate API key for dev/local use
-            import secrets
-
-            api_key = secrets.token_urlsafe(32)
-            logger.warning(
-                f"MCP_API_KEY not found in environment, auto-generated: {api_key[:8]}..."
-            )
-            logger.warning("For production, set MCP_API_KEY in .env file to use a persistent key")
-            # Set it in environment for this session
-            os.environ["MCP_API_KEY"] = api_key
-
-        async def verify_api_key(request: Request, call_next):
-            """Verify MCP_API_KEY header for all HTTP requests (except health/status)"""
-            # Skip auth for health/status endpoints (if any)
-            if request.url.path in ["/health", "/status"]:
-                return await call_next(request)
-
-            # Check API key header (case-insensitive)
-            client_key = request.headers.get("MCP_API_KEY") or request.headers.get("mcp_api_key")
-            if client_key != api_key:
-                return JSONResponse(
-                    status_code=401,
-                    content={
-                        "error": "Unauthorized",
-                        "detail": "Invalid or missing MCP_API_KEY header. "
-                        "Add header: 'MCP_API_KEY: <your-key-from-env>'",
-                    },
-                )
-            return await call_next(request)
-
-        app.add_middleware(BaseHTTPMiddleware, dispatch=verify_api_key)
-
+        # Create ASGI app with API key auth + /health
+        app = build_http_app("http")
         print("[INFO] API key authentication enabled (MCP_API_KEY required)")
 
         # Run with uvicorn
@@ -2504,8 +2527,8 @@ if __name__ == "__main__":
             f"Starting MCP server with SSE transport at http://{args.http_host}:{args.http_port}/sse"
         )
 
-        # Create ASGI app for SSE transport
-        app = mcp.sse_app()
+        # Create ASGI app for SSE transport (same auth as HTTP)
+        app = build_http_app("sse")
 
         # Run with uvicorn
         uvicorn.run(app, host=args.http_host, port=args.http_port, log_level="info")

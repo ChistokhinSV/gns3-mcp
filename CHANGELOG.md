@@ -5,7 +5,16 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.55.0] - 2026-11-02 - Node Properties That Stick + Batch Fixes
+## [0.55.0] - 2026-11-02 - Node Properties That Stick + Batch Fixes + HTTP Auth Everywhere
+
+### Security
+- **HTTP/SSE mode of the `gns3-mcp` command had no authentication** (GM-90). The `MCP_API_KEY`
+  check lived only in `python -m gns3_mcp.server.main`; the console script used by the Docker image
+  (listening on `0.0.0.0:8000`), `server.cmd install` and uvx/pip skipped it. Both entry points now
+  share `build_http_app()` with the key check (constant-time compare) for HTTP and SSE.
+- **BREAKING: `MCP_API_KEY` is required for HTTP/SSE.** The server refuses to start without it.
+  Before, a random key was generated and only 8 characters logged, so clients could not connect
+  anyway. docker-compose fails early with a clear message when the key is missing.
 
 ### Added
 - **`node set` QEMU disk/boot params** (GM-86): `hda_disk_image`, `hdb_disk_image`,
@@ -14,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Read-back verification** for `node create`/`set`: values GNS3 dropped or changed are
   reported (`unapplied_properties` on create, `Warning: not applied by GNS3` on set).
 - Node detail (`nodes://{pid}/{nid}`) shows `hdb_disk_image`, `cdrom_image`, `options`.
+- **`GET /health`** (no key): `{"status": "ok", "version": ...}`. The docker-compose healthcheck
+  called it but it returned 404, so containers were reported unhealthy; the Dockerfile
+  `HEALTHCHECK` now uses it too.
 
 ### Fixed
 - **`node create` ignored `properties`** (GM-86): the template endpoint only takes
@@ -34,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`port_*` was used instead).
 - **`console` `send_and_wait` wait-only mode** (GM-89): omitting `command` raised
   `INTERNAL_ERROR 'command'` in batch mode.
+- **`--transport sse` crashed** on FastMCP 3.x (`sse_app()` was removed); now uses
+  `http_app(transport="sse")`, which works on FastMCP 2.13+ and 3.x.
+- **README** brought up to date (was v0.49.0): tool table, install/HTTP/Docker commands, endpoint `/mcp`.
 
 ## [0.54.2] - 2026-04-21 - HTTP Transport Startup Fix
 

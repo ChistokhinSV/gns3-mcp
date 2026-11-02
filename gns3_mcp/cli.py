@@ -129,7 +129,7 @@ Environment variables (.env file):
 
     # Import MCP server (after .env is loaded)
     try:
-        from gns3_mcp.server.main import mcp
+        from gns3_mcp.server.main import build_http_app, mcp
     except ImportError as e:
         print(f"Error: Failed to import MCP server: {e}", file=sys.stderr)
         print("\nThis usually means dependencies are not installed.", file=sys.stderr)
@@ -155,11 +155,12 @@ Environment variables (.env file):
             sys.exit(1)
 
         print(
-            f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp/"
+            f"Starting MCP server with HTTP transport at http://{args.http_host}:{args.http_port}/mcp"
         )
 
-        # Create ASGI app for HTTP transport
-        app = mcp.http_app()
+        # Create ASGI app with API key auth + /health (GM-90: was unauthenticated)
+        app = build_http_app("http")
+        print("[INFO] API key authentication enabled (MCP_API_KEY required)")
 
         # Run with uvicorn
         uvicorn.run(app, host=args.http_host, port=args.http_port, log_level="info")
@@ -178,8 +179,8 @@ Environment variables (.env file):
             f"Starting MCP server with SSE transport at http://{args.http_host}:{args.http_port}/sse"
         )
 
-        # Create ASGI app for SSE transport
-        app = mcp.sse_app()
+        # Create ASGI app for SSE transport (same auth as HTTP)
+        app = build_http_app("sse")
 
         # Run with uvicorn
         uvicorn.run(app, host=args.http_host, port=args.http_port, log_level="info")

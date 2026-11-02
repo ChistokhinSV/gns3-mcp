@@ -44,6 +44,15 @@ Use MCP resources and tools instead of local file operations:
 
 ## Resolved Issues
 
+### [RESOLVED v0.55.0] CLI HTTP mode had no API key auth and no /health (GM-90, 2026-11-02)
+Found while refreshing README. `gns3-mcp --transport http` (Docker on 0.0.0.0:8000, uvx, `server.cmd install`)
+skipped the `MCP_API_KEY` middleware that only `python -m gns3_mcp.server.main` had; `/health` was 404 so
+docker-compose marked containers unhealthy; `--transport sse` crashed on FastMCP 3 (`sse_app()` removed).
+**Fix:** shared `build_http_app()` in main.py for both entry points (HTTP + SSE), `MCP_API_KEY` required
+(exit if missing), `GET /health` open. Tests: `tests/unit/test_http_app.py`; verified live on :8101 (CLI) and :8100 (service).
+
+---
+
 ### [RESOLVED v0.55.0] node create ignores `properties`; node set cannot change disk/cdrom images (2026-10-19, from 119.snow_fwupgrades)
 
 **Repro**
