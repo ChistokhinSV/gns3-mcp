@@ -16,8 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install UV package manager for faster dependency installation
 RUN pip install --no-cache-dir uv
 
-# Copy requirements and install production dependencies only
-COPY mcp-server/requirements.txt .
+# Install production dependencies first (cached layer)
 RUN uv pip install --system \
     fastmcp>=2.13.0.2 \
     fastapi>=0.115.0 \

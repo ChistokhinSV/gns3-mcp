@@ -5,7 +5,18 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.56.0] - 2026-11-02 - Claude Plugin + MCPB uv Runtime
+## [0.56.1] - 2026-11-02 - Release Fixes for 0.56.0
+
+0.56.0 was tagged but never published: both release workflows failed. 0.56.1 ships all of
+0.56.0 (below) plus:
+
+### Fixed
+- Dockerfile copied `mcp-server/requirements.txt` (unused, removed in 0.56.0); the image builds again.
+  Verified on Docker 29: no key -> exits, with key -> container `healthy`, `/mcp` 401 without key.
+- Release smoke test read `InitializeResult.serverInfo`, renamed `server_info` in mcp SDK 2.x
+  (CI installs 2.3.0). The bundle itself was fine.
+
+## [0.56.0] - 2026-11-02 - Claude Plugin + MCPB uv Runtime (not published)
 
 ### Added
 - **Claude plugin `gns3-lab`** for Claude Code and Cowork (GM-92), in `plugin/`, with the repo as a

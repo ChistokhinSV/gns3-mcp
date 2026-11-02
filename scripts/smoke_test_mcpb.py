@@ -37,7 +37,9 @@ async def check(bundle_dir: Path, entry_point: str) -> int:
         init = await asyncio.wait_for(session.initialize(), timeout=300)
         tools = await session.list_tools()
         names = sorted(t.name for t in tools.tools)
-        print(f"initialize OK ({init.serverInfo.name}), {len(names)} tools: {', '.join(names)}")
+        # `serverInfo` became `server_info` in newer mcp SDKs
+        info = getattr(init, "server_info", None) or getattr(init, "serverInfo", None)
+        print(f"initialize OK ({info.name}), {len(names)} tools: {', '.join(names)}")
         if len(names) != EXPECTED_TOOLS:
             print(f"ERROR: expected {EXPECTED_TOOLS} tools")
             return 1
