@@ -201,6 +201,9 @@ class GNS3Client(IGns3Client):
             f"{self.base_url}/v3/projects/{project_id}/close", headers=self._headers(), json={}
         )
         response.raise_for_status()
+        # GNS3 v3 answers 204 No Content on close
+        if response.status_code == 204 or not response.content:
+            return {}
         return response.json()
 
     async def get_snapshots(self, project_id: str) -> List[Dict[str, Any]]:

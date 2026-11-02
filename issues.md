@@ -44,6 +44,64 @@ Use MCP resources and tools instead of local file operations:
 
 ## Resolved Issues
 
+### [RESOLVED v0.55.0] node create ignores `properties`; node set cannot change disk/cdrom images (2026-10-19, from 119.snow_fwupgrades)
+
+**Repro**
+1. `node(action="create", template_name="Ubuntu Cloud Guest", node_name="ops1", properties={"ram": 12288, "cpus": 6, "adapters": 2, "hda_disk_image": "ops1-ubuntu2404-60G.qcow2", "cdrom_image": "ops1-seed.iso"})` -> "Node created successfully".
+2. `query_resource("nodes://<pid>/<nid>")` -> ram 1024, cpus 1, adapters 1, hda_disk_image = template default. All overrides silently dropped.
+3. `node(action="set", node_name="ops1", hda_disk_image="...")` -> pydantic "Unexpected keyword argument". The schema exposes `hdd_disk_image` (4th disk, QEMU `hdd`) while the docstring says "HDD disk image path" — easy to set the wrong disk. No way to set `hda_disk_image`, `cdrom_image`, `hdb_disk_image`, `adapter_type`, `mac_address`, `options`.
+
+**Expected**
+- `create` applies `properties` (or fails loudly listing unsupported keys).
+- `set` supports at least `hda_disk_image`, `hdb_disk_image`, `cdrom_image`, `options` for QEMU nodes.
+
+**Workaround used**: set ram/cpus/adapters via `set`; resized linked-clone overlay with `qemu-img resize` on the GNS3 VM; used template default cloud-init ISO.
+
+**Task**: fix create-properties passthrough in node tool; add disk/cdrom params to `set`; add test.
+
+### [RESOLVED v0.55.0] `project(action="close")` reports failure although the project closed (2026-10-19, from 119.snow_fwupgrades)
+
+`project(action="close")` -> `{"error": "Failed to close project", "details": "Expecting value: line 1 column 1 (char 0)"}`, but `project(action="list")` right after shows the project `closed`. Looks like the close call gets an empty body (204) and the client tries `response.json()`. Fix: treat 2xx with empty body as success.
+
+Related to the `set` gap above: QEMU `options` (e.g. `-cpu host`) cannot be set via MCP. Needed because the default `qemu64` CPU lacks x86-64-v2 and modern images (postgres 15 / glibc 2.34+ builds) crash with "Fatal glibc error: CPU does not support x86-64-v2". Workaround used: close project, edit `<project>.gns3` JSON on the GNS3 VM, reopen.
+
+### [RESOLVED v0.55.0] `link(action="batch")` connect result reports the wrong switch port name (2026-10-20, from 119.snow_fwupgrades)
+
+`link(action="batch", connections=[{"action":"connect","node_a":"FGT-SITE002","node_b":"SW-MGMT","adapter_a":0,"port_a":0,"adapter_b":0,"port_b":2}, ... port_b 3])`
+-> result lists `"port_b": 2, "port_b_name": "Ethernet0"` (and `port_b 3` -> `"Ethernet0"`). The links are created correctly:
+`link(action="list")` shows `port_number 2 / "Ethernet2"` and `3 / "Ethernet3"` on SW-MGMT. For an ethernet_switch
+the name seems to be derived from `adapter_b` instead of `port_b`.
+
+**Expected**: `port_b_name` = name of the port actually used (`Ethernet2`, `Ethernet3`).
+**Impact**: misleading - looks like both links landed on the port already used by ops1.
+**Task**: build port names from the node's `ports[]` matched by (adapter_number, port_number); add a test with a switch port > 0.
+
+### [RESOLVED v0.55.0] `console` `send_and_wait` wait-only mode fails with INTERNAL_ERROR `'command'` (2026-11-02, from 123.Ansible_Studio_VSCODE)
+
+The tool description says `command` is optional for `send_and_wait` (v0.49.0 wait-only mode: omit `command` to just wait for a pattern). Omitting it fails:
+
+`console(operations=[{"type":"send","node_name":"ops1","data":"\n"}, {"type":"send_and_wait","node_name":"ops1","wait_pattern":"(login:|\$ |# )","timeout":15}])`
+-> op 1: `{"error": "'command'", "error_code": "INTERNAL_ERROR", "details": "Unexpected error executing send_and_wait operation"}` (a `KeyError` on `op["command"]`, it seems).
+The same op with `"command": "\n"` works (`pattern_found: true`, `wait_only: false`).
+
+**Expected**: no `command` -> wait for `wait_pattern` without sending (`wait_only: true`), as documented.
+**Task**: read `command` with `.get()` in the batch dispatcher for `send_and_wait` and pass `None` through; add a test for the wait-only batch op.
+
+#### Resolution (v0.55.0, 2026-11-02) - GM-86, GM-87, GM-88, GM-89
+- **GM-86**: template endpoint (`TemplateUsage`) only accepts x/y/name/compute_id. `create` now applies
+  `properties` (+ explicit ram/cpus/adapters/console_type/disk params) via follow-up `PUT /nodes/{id}`
+  and reads back; dropped keys -> `unapplied_properties`. `set` gained `hda_disk_image`, `hdb_disk_image`,
+  `cdrom_image`, `options` and a `properties` passthrough. Read-back also exposed two silent drops,
+  fixed too: `console_type` (QEMU etc., was nested) and switch `ports` (was top-level). GNS3 error
+  reasons (e.g. missing image) now surfaced.
+- **GM-87**: `close_project()` treats 204/empty body as success.
+- **GM-88**: `resolve_adapter_identifier()` takes the port number; named adapters drive the link's port.
+- **GM-89**: batch dispatcher uses `op.get("command")`.
+- Verified live on GNS3 3.0.6 (throwaway project `mcp_test_GM86`, deleted after); unit tests in
+  `tests/unit/test_tool_fixes.py`, `test_link_validator.py`, `test_gns3_client.py`.
+
+---
+
 ### [RESOLVED] SSH Configure Documentation - Parameter Confusion (v0.28.4)
 **Discovered**: 2025-10-27
 **Affects**: MCP Server v0.1.0+

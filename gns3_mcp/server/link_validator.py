@@ -8,7 +8,7 @@ This prevents partial topology changes that leave the network in an inconsistent
 """
 
 import logging
-from typing import Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -86,15 +86,19 @@ class LinkValidator:
                 self.adapter_name_to_num[node_name][port_name] = (adapter_num, port_num)
 
     def resolve_adapter_identifier(
-        self, node_name: str, identifier: any
+        self, node_name: str, identifier: Any, port: int = 0
     ) -> Tuple[int, int, str, str | None]:
         """Resolve adapter identifier (name or number) to (adapter_num, port_num, name, error)
 
         Args:
             node_name: Node name
             identifier: Either:
-                - int: adapter number (assumes port 0)
-                - str: port name like "eth0", "GigabitEthernet0/0", "Ethernet0"
+                - int: adapter number, combined with `port`
+                - str: port name like "eth0", "GigabitEthernet0/0", "Ethernet0";
+                  the name fully identifies (adapter, port), so `port` is ignored
+            port: Port number on the adapter (used with numeric identifiers only).
+                  Switches/hubs expose all ports on adapter 0, so the port number
+                  is what selects e.g. Ethernet2.
 
         Returns:
             Tuple of (adapter_number, port_number, port_name, error_message)
@@ -103,10 +107,9 @@ class LinkValidator:
         if node_name not in self.nodes:
             return (0, 0, "", f"Node '{node_name}' not found")
 
-        # If it's an int, it's an adapter number (port 0)
         if isinstance(identifier, int):
             adapter_num = identifier
-            port_num = 0
+            port_num = port
 
             # Try to get the actual port name
             if node_name in self.adapter_names:

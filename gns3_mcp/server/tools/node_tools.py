@@ -269,6 +269,9 @@ async def get_node_details_impl(app: "IAppContext", node_name: str) -> str:
             adapters=props.get("adapters"),
             hdd_disk_image=props.get("hdd_disk_image"),
             hda_disk_image=props.get("hda_disk_image"),
+            hdb_disk_image=props.get("hdb_disk_image"),
+            cdrom_image=props.get("cdrom_image"),
+            options=props.get("options"),
         )
 
         return json.dumps(node_info.model_dump(), indent=2)
@@ -285,6 +288,78 @@ async def get_node_details_impl(app: "IAppContext", node_name: str) -> str:
                 "exception": str(e),
             },
         )
+
+
+# Top-level fields of the GNS3 v3 NodeUpdate schema. Anything else is a node-type
+# specific property that must go nested under "properties" (GM-86).
+NODE_UPDATE_TOP_LEVEL_FIELDS = frozenset(
+    {
+        "aux",
+        "aux_type",
+        "console",
+        "console_auto_start",
+        "console_type",
+        "custom_adapters",
+        "first_port_name",
+        "label",
+        "locked",
+        "name",
+        "port_name_format",
+        "port_segment_size",
+        "symbol",
+        "x",
+        "y",
+        "z",
+    }
+)
+
+
+def _split_node_properties(
+    props: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """Split raw node properties into (top-level NodeUpdate fields, nested properties)"""
+    top = {k: v for k, v in props.items() if k in NODE_UPDATE_TOP_LEVEL_FIELDS}
+    nested = {k: v for k, v in props.items() if k not in NODE_UPDATE_TOP_LEVEL_FIELDS}
+    return top, nested
+
+
+def _find_unapplied_properties(
+    requested_top: Dict[str, Any], requested_nested: Dict[str, Any], node: Dict[str, Any]
+) -> Dict[str, Dict[str, Any]]:
+    """Compare requested values with the node returned by PUT /nodes/{id}.
+
+    GNS3 silently drops keys a node type does not know (and the template endpoint drops
+    all overrides), so reading the result back is the only way to notice a value that
+    did not stick.
+    """
+    unapplied: Dict[str, Dict[str, Any]] = {}
+    actual_props = node.get("properties") or {}
+    for key, wanted in requested_nested.items():
+        if key not in actual_props:
+            unapplied[key] = {
+                "requested": wanted,
+                "actual": None,
+                "reason": f"not a property of {node.get('node_type', 'this')} nodes",
+            }
+        elif actual_props[key] != wanted:
+            unapplied[key] = {"requested": wanted, "actual": actual_props[key]}
+    for key, wanted in requested_top.items():
+        if node.get(key) != wanted:
+            unapplied[key] = {"requested": wanted, "actual": node.get(key)}
+    return unapplied
+
+
+def _http_error_detail(e: Exception) -> str:
+    """Return the GNS3 API error message from an HTTP error, else str(e)"""
+    response = getattr(e, "response", None)
+    if response is not None:
+        try:
+            data = response.json()
+            if isinstance(data, dict) and data.get("message"):
+                return str(data["message"])
+        except Exception:
+            pass
+    return str(e)
 
 
 async def _set_single_node_impl(
@@ -304,10 +379,17 @@ async def _set_single_node_impl(
     adapters: int | None = None,
     console_type: str | None = None,
     ctx: Context | None = None,
+    properties: Dict[str, Any] | None = None,
 ) -> List[str]:
     """Perform set_node operation on a single node.
 
     Internal helper function extracted from set_node_impl to support bulk operations.
+
+    Args:
+        properties: Raw GNS3 node properties (e.g. hda_disk_image, cdrom_image, options).
+            NodeUpdate top-level fields are sent top-level, the rest nested under
+            "properties". Explicit params win on conflict. Values are read back and
+            any that did not stick are reported as a warning.
 
     Returns:
         List of result messages (not JSON)
@@ -342,8 +424,9 @@ async def _set_single_node_impl(
         raise ValueError(f"Node must be stopped to change: {', '.join(requires_stopped)}")
 
     # Handle property updates
-    update_payload = {}
-    hardware_props = {}
+    raw_top, raw_nested = _split_node_properties(properties or {})
+    update_payload: Dict[str, Any] = dict(raw_top)
+    hardware_props: Dict[str, Any] = {}
 
     # Top-level properties
     if x is not None:
@@ -374,27 +457,58 @@ async def _set_single_node_impl(
         else:
             hardware_props["adapters"] = adapters
     if console_type is not None:
-        hardware_props["console_type"] = console_type
+        # Top-level NodeUpdate field for every node type; nested it was silently dropped
+        update_payload["console_type"] = console_type
 
     # Special handling for ethernet switches
+    ports_mapping = None
     if ports is not None:
         if node["node_type"] == "ethernet_switch":
+            # Keep settings of existing ports (VLAN, type, name); only add/remove ports
+            current = {
+                p["port_number"]: p
+                for p in (node.get("properties") or {}).get("ports_mapping") or []
+            }
             ports_mapping = [
-                {"name": f"Ethernet{i}", "port_number": i, "type": "access", "vlan": 1}
+                current.get(
+                    i, {"name": f"Ethernet{i}", "port_number": i, "type": "access", "vlan": 1}
+                )
                 for i in range(ports)
             ]
-            hardware_props["ports_mapping"] = ports_mapping
         else:
             results.append("Warning: Port configuration only supported for ethernet switches")
 
     # Wrap hardware properties in 'properties' for node types that use nested structure
+    nested_props = dict(raw_nested)
     if hardware_props and node_type in PROPERTIES_NESTED_TYPES:
-        update_payload["properties"] = hardware_props
+        nested_props.update(hardware_props)
     elif hardware_props:
         update_payload.update(hardware_props)
+    if ports_mapping is not None:
+        # ports_mapping is a switch property; sent top-level it was silently dropped
+        nested_props["ports_mapping"] = ports_mapping
+    if nested_props:
+        update_payload["properties"] = nested_props
 
     if update_payload:
-        await gns3.update_node(current_project_id, node_id, update_payload)
+        updated_node = await gns3.update_node(current_project_id, node_id, update_payload)
+
+        # Verify what goes through 'properties', console_type and the raw passthrough;
+        # flattened legacy fields (non-nested node types) are not echoed back the same way
+        updated_node = updated_node if isinstance(updated_node, dict) else {}
+        verify_top = {k: update_payload[k] for k in raw_top}
+        if console_type is not None:
+            verify_top["console_type"] = console_type
+        unapplied = _find_unapplied_properties(
+            verify_top,
+            {k: v for k, v in nested_props.items() if k != "ports_mapping"},
+            updated_node,
+        )
+        if ports_mapping is not None:
+            # GNS3 may add defaults (e.g. ethertype) to entries, so compare the count only
+            actual = (updated_node.get("properties") or {}).get("ports_mapping") or []
+            if len(actual) != ports:
+                unapplied["ports"] = {"requested": ports, "actual": len(actual)}
 
         # Build change summary
         changes = []
@@ -411,13 +525,17 @@ async def _set_single_node_impl(
             changes.append(", ".join(pos_parts))
         if locked is not None:
             changes.append(f"locked={locked}")
-        for k, v in hardware_props.items():
+        if console_type is not None:
+            changes.append(f"console_type={console_type}")
+        for k, v in {**raw_top, **raw_nested, **hardware_props}.items():
             if k != "ports_mapping":
                 changes.append(f"{k}={v}")
-        if "ports_mapping" in hardware_props:
+        if ports_mapping is not None:
             changes.append(f"ports={ports}")
 
         results.append(f"Updated: {', '.join(changes)}")
+        if unapplied:
+            results.append(f"Warning: not applied by GNS3: {json.dumps(unapplied, default=str)}")
 
     # Handle action
     if action:
@@ -512,6 +630,7 @@ async def set_node_impl(
     console_type: str | None = None,
     ctx: Context | None = None,
     parallel: bool = True,
+    properties: Dict[str, Any] | None = None,
 ) -> str:
     """Configure node properties and/or control node state.
 
@@ -530,6 +649,7 @@ async def set_node_impl(
     - Stateless devices can be renamed while running: ethernet_switch, ethernet_hub,
       atm_switch, frame_relay_switch, cloud, nat
     - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU/IOU/Docker/Dynamips nodes
+    - Other properties (hda/hdb disk, cdrom_image, options, ...) go through `properties`
     - For IOU nodes, 'adapters' maps to 'ethernet_adapters' automatically
     - ports parameter applies to ethernet_switch nodes only
     - action values: start, stop, suspend, reload, restart
@@ -546,10 +666,12 @@ async def set_node_impl(
         name: New name for the node (requires stop for QEMU/Docker)
         ram: RAM in MB (QEMU/IOU nodes)
         cpus: Number of CPUs (QEMU nodes)
-        hdd_disk_image: Path to HDD disk image (QEMU nodes)
+        hdd_disk_image: FOURTH disk image, QEMU 'hdd' slot (boot disk is hda_disk_image)
         adapters: Network adapters count (QEMU: adapters, IOU: ethernet_adapters)
         console_type: Console type - telnet, vnc, spice, etc.
         parallel: Execute operations concurrently (default: True for start/stop actions)
+        properties: Raw GNS3 node properties (v0.55.0), e.g. hda_disk_image, cdrom_image,
+            options, adapter_type, mac_address. Unapplied keys are reported as a warning.
 
     Returns:
         For single node: Status message (backward compatible)
@@ -599,6 +721,7 @@ async def set_node_impl(
                 adapters,
                 console_type,
                 ctx,
+                properties=properties,
             )
 
             if not results:
@@ -614,7 +737,7 @@ async def set_node_impl(
             return create_error_response(
                 error=f"Failed to update node '{resolved_names[0]}'",
                 error_code=ErrorCode.OPERATION_FAILED.value,
-                details=str(e),
+                details=_http_error_detail(e),
                 suggested_action="Check node state and GNS3 server logs",
                 context={"node_name": resolved_names[0], "exception": str(e)},
             )
@@ -650,6 +773,7 @@ async def set_node_impl(
                     adapters,
                     console_type,
                     None,  # No ctx for parallel
+                    properties=properties,
                 )
             )
 
@@ -658,7 +782,9 @@ async def set_node_impl(
         for node, res in zip(nodes_to_process, results_list, strict=True):
             if isinstance(res, Exception):
                 result.add_failure(
-                    node["name"], str(res), suggestion="Check node state and permissions"
+                    node["name"],
+                    _http_error_detail(res),
+                    suggestion="Check node state and permissions",
                 )
             else:
                 result.add_success(node["name"], {"changes": res})
@@ -683,12 +809,15 @@ async def set_node_impl(
                     adapters,
                     console_type,
                     ctx,
+                    properties=properties,
                 )
                 result.add_success(node["name"], {"changes": node_results})
             except ValueError as e:
                 result.add_failure(node["name"], str(e), suggestion="Check validation requirements")
             except Exception as e:
-                result.add_failure(node["name"], str(e), suggestion="Check GNS3 server logs")
+                result.add_failure(
+                    node["name"], _http_error_detail(e), suggestion="Check GNS3 server logs"
+                )
 
     return result.to_json()
 
@@ -711,7 +840,10 @@ async def create_node_impl(
         y: Y coordinate position (top-left corner of node icon)
         node_name: Optional custom name for the node
         compute_id: Compute ID (default: "local")
-        properties: Optional dict to override template properties
+        properties: Optional dict to override template properties. The template
+            endpoint ignores overrides, so they are applied with a follow-up
+            PUT /nodes/{id} and read back; keys that did not stick are listed in
+            'unapplied_properties' (GM-86).
 
     Note: Coordinates represent the top-left corner of the node icon.
     Icon sizes are PNG: 78×78, SVG/internal: 58×58.
@@ -729,11 +861,10 @@ async def create_node_impl(
                 template_name=template_name, available_templates=available_templates
             )
 
+        # TemplateUsage accepts only x/y/name/compute_id - overrides are applied below
         payload = {"x": x, "y": y, "compute_id": compute_id}
         if node_name:
             payload["name"] = node_name.strip()  # Strip whitespace
-        if properties:
-            payload["properties"] = properties
 
         result = await gns3.create_node_from_template(
             current_project_id, template["template_id"], payload
@@ -789,6 +920,37 @@ async def create_node_impl(
                 if "label" in result:
                     result["label"]["text"] = requested_name
 
+        unapplied: Dict[str, Dict[str, Any]] = {}
+        if properties:
+            props = dict(properties)
+            # IOU has no generic 'adapters' property
+            if result.get("node_type") == "iou" and "adapters" in props:
+                props["ethernet_adapters"] = props.pop("adapters")
+            top, nested = _split_node_properties(props)
+            update_payload: Dict[str, Any] = dict(top)
+            if nested:
+                update_payload["properties"] = nested
+            try:
+                result = await gns3.update_node(
+                    current_project_id, result["node_id"], update_payload
+                )
+            except Exception as e:
+                return create_error_response(
+                    error=f"Node '{result.get('name')}' created, but properties were not applied",
+                    error_code=ErrorCode.OPERATION_FAILED.value,
+                    details=_http_error_detail(e),
+                    suggested_action=(
+                        "Fix the values and retry with node(action='set', properties=...), "
+                        "or delete the node"
+                    ),
+                    context={
+                        "node_id": result.get("node_id"),
+                        "node_name": result.get("name"),
+                        "properties": props,
+                    },
+                )
+            unapplied = _find_unapplied_properties(top, nested, result)
+
         # Convert to NodeSummary for clean output
         node_summary = NodeSummary(
             project_id=current_project_id,
@@ -800,9 +962,20 @@ async def create_node_impl(
             console=result.get("console"),
         )
 
-        return json.dumps(
-            {"message": "Node created successfully", "node": node_summary.model_dump()}, indent=2
-        )
+        response: Dict[str, Any] = {
+            "message": "Node created successfully",
+            "node": node_summary.model_dump(),
+        }
+        if properties:
+            response["applied_properties"] = [k for k in properties if k not in unapplied]
+        if unapplied:
+            response["message"] = "Node created, but some properties were not applied"
+            response["unapplied_properties"] = unapplied
+            response["warning"] = (
+                "GNS3 ignored or changed these values; check names against the node type "
+                "(query_resource nodes://{project_id}/{node_id})"
+            )
+        return json.dumps(response, indent=2, default=str)
 
     except Exception as e:
         return create_error_response(

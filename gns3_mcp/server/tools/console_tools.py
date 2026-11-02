@@ -1210,7 +1210,7 @@ async def console_batch_impl(app: "IAppContext", operations: list[dict]) -> str:
                 result = await send_and_wait_console_impl(
                     app,
                     node_name,
-                    op["command"],
+                    op.get("command"),  # Optional: omitted -> wait-only mode
                     op.get("wait_pattern"),
                     op.get("timeout", 30),
                     op.get("raw", False),

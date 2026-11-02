@@ -173,6 +173,31 @@ class TestAdapterNameResolution:
         assert "Available ports" in error
         assert "eth0" in error or "eth1" in error
 
+    def test_resolve_numeric_adapter_switch_port(self):
+        """GM-88: switch port > 0 on adapter 0 resolves to its own name, not Ethernet0"""
+        switch = {
+            "node_id": "sw-1",
+            "name": "SW-MGMT",
+            "node_type": "ethernet_switch",
+            "ports": [
+                {"adapter_number": 0, "port_number": i, "name": f"Ethernet{i}"} for i in range(8)
+            ],
+        }
+        validator = LinkValidator([switch], [])
+
+        adapter, port, name, error = validator.resolve_adapter_identifier("SW-MGMT", 0, 2)
+        assert error is None
+        assert (adapter, port, name) == (0, 2, "Ethernet2")
+
+        adapter, port, name, error = validator.resolve_adapter_identifier("SW-MGMT", 0, 3)
+        assert (adapter, port, name) == (0, 3, "Ethernet3")
+
+    def test_resolve_adapter_name_ignores_port_arg(self, validator):
+        """A port name fully identifies (adapter, port); the numeric port arg is ignored"""
+        adapter, port, name, error = validator.resolve_adapter_identifier("Router1", "eth1", 0)
+        assert error is None
+        assert (adapter, port, name) == (0, 1, "eth1")
+
 
 # ===== Connect Validation Tests =====
 

@@ -10,12 +10,19 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.54.0 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.55.0 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.54.0 - GNS3 Notification Stream Support
+**Latest Release:** v0.55.0 - Node properties that stick + batch fixes
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.54.0)
+### Recent Changes (v0.26.0 - v0.55.0)
+
+**v0.55.0** - Node properties that stick + batch fixes (GM-86..89)
+- `node create` applies `properties` + explicit hw params via follow-up PUT (template endpoint drops them); read-back reports `unapplied_properties`
+- `node set`: new `hda_disk_image`, `hdb_disk_image`, `cdrom_image`, `options`; `properties` passthrough; warns on dropped values; GNS3 error reasons surfaced
+- Fixed silently dropped `console_type` (QEMU etc.) and switch `ports`
+- `project close` 204 handled; `link batch` switch port names; `console` wait-only `send_and_wait` in batch
+- GNS3 v3 NodeUpdate top-level fields are listed in `NODE_UPDATE_TOP_LEVEL_FIELDS` (node_tools.py); everything else is nested under `properties`
 
 **v0.54.0** - GNS3 notification stream support
 - **New `notification` tool**: Subscribe to `/v3/notifications` real-time event stream

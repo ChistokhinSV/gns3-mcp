@@ -159,6 +159,9 @@ class NodeInfo(BaseModel):
     adapters: int | None = None
     hdd_disk_image: str | None = None
     hda_disk_image: str | None = None
+    hdb_disk_image: str | None = None
+    cdrom_image: str | None = None
+    options: str | None = None
 
     def to_detail_view(self) -> Dict[str, Any]:
         """Detail view - show all fields"""

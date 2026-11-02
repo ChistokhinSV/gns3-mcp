@@ -174,9 +174,9 @@ async def set_connection_impl(
         resolved_ops = []
         for idx, op in enumerate(parsed_ops):
             if isinstance(op, ConnectOperation):
-                # Resolve adapter_a
+                # Resolve adapter_a (a port name like "Ethernet2" overrides port_a)
                 adapter_a_num, port_a_num, port_a_name, error = (
-                    validator.resolve_adapter_identifier(op.node_a, op.adapter_a)
+                    validator.resolve_adapter_identifier(op.node_a, op.adapter_a, op.port_a)
                 )
                 if error:
                     return create_error_response(
@@ -193,7 +193,7 @@ async def set_connection_impl(
 
                 # Resolve adapter_b
                 adapter_b_num, port_b_num, port_b_name, error = (
-                    validator.resolve_adapter_identifier(op.node_b, op.adapter_b)
+                    validator.resolve_adapter_identifier(op.node_b, op.adapter_b, op.port_b)
                 )
                 if error:
                     return create_error_response(
@@ -223,7 +223,7 @@ async def set_connection_impl(
 
                 # Validate with resolved numbers
                 validation_error = validator.validate_connect(
-                    op.node_a, op.node_b, op.port_a, op.port_b, adapter_a_num, adapter_b_num
+                    op.node_a, op.node_b, port_a_num, port_b_num, adapter_a_num, adapter_b_num
                 )
             else:  # DisconnectOperation
                 resolved_ops.append({"op": op})
@@ -271,12 +271,12 @@ async def set_connection_impl(
                             {
                                 "node_id": node_a["node_id"],
                                 "adapter_number": resolved["adapter_a_num"],
-                                "port_number": op.port_a,
+                                "port_number": resolved["port_a_num"],
                             },
                             {
                                 "node_id": node_b["node_id"],
                                 "adapter_number": resolved["adapter_b_num"],
-                                "port_number": op.port_b,
+                                "port_number": resolved["port_b_num"],
                             },
                         ]
                     }
@@ -290,8 +290,8 @@ async def set_connection_impl(
                             link_id=result.get("link_id"),
                             node_a=op.node_a,
                             node_b=op.node_b,
-                            port_a=op.port_a,
-                            port_b=op.port_b,
+                            port_a=resolved["port_a_num"],
+                            port_b=resolved["port_b_num"],
                             adapter_a=resolved["adapter_a_num"],
                             adapter_b=resolved["adapter_b_num"],
                             port_a_name=resolved["port_a_name"],

@@ -5,6 +5,36 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.55.0] - 2026-11-02 - Node Properties That Stick + Batch Fixes
+
+### Added
+- **`node set` QEMU disk/boot params** (GM-86): `hda_disk_image`, `hdb_disk_image`,
+  `cdrom_image`, `options` (e.g. `-cpu host`). Any other GNS3 property (`hdc_disk_image`,
+  `adapter_type`, `mac_address`, ...) goes through `properties`, now accepted by `set` too.
+- **Read-back verification** for `node create`/`set`: values GNS3 dropped or changed are
+  reported (`unapplied_properties` on create, `Warning: not applied by GNS3` on set).
+- Node detail (`nodes://{pid}/{nid}`) shows `hdb_disk_image`, `cdrom_image`, `options`.
+
+### Fixed
+- **`node create` ignored `properties`** (GM-86): the template endpoint only takes
+  x/y/name/compute_id, so overrides were silently dropped. They are now applied with a follow-up
+  `PUT /nodes/{id}`; failures return an error naming the created node. Explicit `ram`, `cpus`,
+  `adapters`, `console_type`, disk params also apply on create (were ignored before).
+- **`hdd_disk_image` description** said "HDD disk image" - it is the 4th disk slot, not the boot disk.
+- **`console_type` on QEMU/IOU/Docker/Dynamips** was sent nested under `properties` and silently
+  ignored; now sent top-level (NodeUpdate field).
+- **Switch `ports`** was sent top-level and silently ignored; now nested `ports_mapping`, keeping
+  existing port VLAN/type settings when resizing.
+- **`node set` errors** now carry GNS3's reason (e.g. "The image 'x' is missing",
+  "Cannot change ports on a switch that is already connected") instead of a bare `409 Conflict`.
+- **`project close` reported failure** although the project closed (GM-87): `204 No Content`
+  was parsed as JSON.
+- **`link batch` wrong port name** for switch ports > 0 (GM-88): numeric adapters assumed port 0
+  for the name lookup. A named adapter (`"Ethernet3"`) now also drives the link's port number
+  (`port_*` was used instead).
+- **`console` `send_and_wait` wait-only mode** (GM-89): omitting `command` raised
+  `INTERNAL_ERROR 'command'` in batch mode.
+
 ## [0.54.2] - 2026-04-21 - HTTP Transport Startup Fix
 
 ### Fixed

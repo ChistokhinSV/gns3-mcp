@@ -31,9 +31,6 @@ from export_tools import (
     export_topology_diagram,
 )
 from fastmcp import Context, FastMCP
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse
 from interfaces import IAppContext
 from models import (
     ErrorResponse,
@@ -46,6 +43,9 @@ from prompts import (
     render_topology_discovery_prompt,
     render_troubleshooting_prompt,
 )
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from tools.console_tools import (
     console_batch_impl,
 )
@@ -1016,7 +1016,15 @@ async def node(
     name: Annotated[str | None, "New name (REQUIRES node stopped)"] = None,
     ram: Annotated[int | None, "RAM in MB (QEMU nodes only)"] = None,
     cpus: Annotated[int | None, "Number of CPUs (QEMU nodes only)"] = None,
-    hdd_disk_image: Annotated[str | None, "HDD disk image path (QEMU nodes only)"] = None,
+    hda_disk_image: Annotated[
+        str | None, "Primary (boot) disk image, QEMU 'hda' slot (QEMU only)"
+    ] = None,
+    hdb_disk_image: Annotated[str | None, "Second disk image, QEMU 'hdb' slot (QEMU only)"] = None,
+    hdd_disk_image: Annotated[
+        str | None, "FOURTH disk image, QEMU 'hdd' slot - not the boot disk (QEMU only)"
+    ] = None,
+    cdrom_image: Annotated[str | None, "CD-ROM ISO image, e.g. cloud-init seed (QEMU only)"] = None,
+    options: Annotated[str | None, "Extra QEMU command-line options, e.g. '-cpu host'"] = None,
     adapters: Annotated[
         int | None, "Network adapters (QEMU: adapters, IOU: ethernet_adapters)"
     ] = None,
@@ -1026,7 +1034,9 @@ async def node(
     ] = "table",
     compute_id: Annotated[str, "Compute server ID (for 'create')"] = "local",
     properties: Annotated[
-        Dict[str, Any] | None, "Override template properties for 'create' (e.g., {'ram': 512})"
+        Dict[str, Any] | None,
+        "Raw GNS3 node properties for 'create' and 'set' (e.g. {'ram': 4096, 'hdc_disk_image': "
+        "'x.qcow2', 'adapter_type': 'virtio-net-pci'}). Keys GNS3 does not apply are reported back",
     ] = None,
     parallel: Annotated[
         bool, "Execute operations concurrently (default: True for start/stop/suspend)"
@@ -1053,7 +1063,10 @@ async def node(
 
     Validation Rules:
         - name parameter requires node to be stopped
-        - Hardware properties (ram, cpus, hdd_disk_image, adapters) apply to QEMU/IOU/Docker/Dynamips
+        - Hardware properties (ram, cpus, adapters, hd*_disk_image, cdrom_image, options) apply
+          to both 'create' and 'set'; disk/cdrom/options are QEMU-only
+        - Disk slots: hda = boot disk, hdb = 2nd, hdc = 3rd (via properties), hdd = 4th
+        - Values GNS3 did not apply are reported ('unapplied_properties' / warning) - never silent
         - For IOU nodes, 'adapters' maps to 'ethernet_adapters' automatically
         - ports parameter applies to ethernet_switch nodes only
         - state_action values: start, stop, suspend, reload, restart
@@ -1070,6 +1083,8 @@ async def node(
         # Create new node
         >>> node(action="create", template_name="Alpine Linux", x=100, y=200)
         >>> node(action="create", template_name="Cisco IOSv", x=300, y=400, node_name="R1", properties={"ram": 1024})
+        >>> node(action="create", template_name="Ubuntu Cloud Guest", x=0, y=0, node_name="ops1",
+        ...      ram=12288, cpus=6, adapters=2, hda_disk_image="ops1.qcow2", cdrom_image="seed.iso")
 
         # Delete node
         >>> node(action="delete", node_name="Router1")
@@ -1082,8 +1097,22 @@ async def node(
 
         # Configure node properties
         >>> node(action="set", node_name="R1", x=100, y=200, ram=2048)
+        >>> node(action="set", node_name="ops1", hda_disk_image="ops1-60G.qcow2", options="-cpu host")
     """
     app: IAppContext = ctx.request_context.lifespan_context
+
+    # QEMU disk/cdrom/options travel as raw properties (explicit params win)
+    qemu_props = {
+        k: v
+        for k, v in {
+            "hda_disk_image": hda_disk_image,
+            "hdb_disk_image": hdb_disk_image,
+            "cdrom_image": cdrom_image,
+            "options": options,
+        }.items()
+        if v is not None
+    }
+    raw_properties = {**(properties or {}), **qemu_props} or None
 
     if action == "list":
         if not project_id:
@@ -1101,8 +1130,29 @@ async def node(
         if error:
             return error
 
+        # Explicit hardware params were silently ignored on create before v0.55.0
+        create_props = {
+            k: v
+            for k, v in {
+                "ram": ram,
+                "cpus": cpus,
+                "adapters": adapters,
+                "hdd_disk_image": hdd_disk_image,
+                "console_type": console_type,
+            }.items()
+            if v is not None
+        }
+        create_props = {**(raw_properties or {}), **create_props} or None
+
         return await create_node_impl(
-            app.gns3, app.current_project_id, template_name, x, y, node_name, compute_id, properties
+            app.gns3,
+            app.current_project_id,
+            template_name,
+            x,
+            y,
+            node_name,
+            compute_id,
+            create_props,
         )
 
     elif action == "delete":
@@ -1141,6 +1191,7 @@ async def node(
             console_type,
             ctx=ctx,
             parallel=parallel,
+            properties=raw_properties,
         )
 
 
@@ -1292,6 +1343,12 @@ async def link(
     Connection Operations (for 'batch' action):
         Connect: {action: "connect", node_a, node_b, port_a, port_b, adapter_a, adapter_b}
         Disconnect: {action: "disconnect", link_id}
+
+    Port addressing:
+        - adapter_* as number: link uses (adapter_*, port_*). Switches/hubs have all ports
+          on adapter 0, so port_b=2 selects Ethernet2.
+        - adapter_* as port name ("eth1", "Ethernet2", "Gi0/1"): the name fixes both adapter
+          and port; port_* is ignored.
 
     Examples:
         # List links

@@ -544,12 +544,13 @@ Each operation in the batch can be any of these types with **full parameter supp
    {
        "type": "send_and_wait",
        "node_name": "R1",
-       "command": "show ip interface brief\n",
+       "command": "show ip interface brief\n",  // optional: omit for wait-only mode
        "wait_pattern": "Router#",  // optional
        "timeout": 30,  // optional
        "raw": false  // optional
    }
    ```
+   Wait-only (e.g. boot): `{"type": "send_and_wait", "node_name": "R1", "wait_pattern": "login:", "timeout": 120}`
 
 3. **"read"** - Read console output
    ```json
@@ -1207,6 +1208,9 @@ connections = [
 - **Adapter names** (recommended): Use port names like "eth0", "GigabitEthernet0/0", "Ethernet0"
 - **Adapter numbers** (legacy): Use numeric adapter index (0, 1, 2, ...)
 - Response always shows **both**: `"adapter_a": 0, "port_a_name": "eth0"`
+- A **name** fixes adapter *and* port (`"Ethernet3"` = adapter 0 port 3); `port_*` is then ignored
+- With a **number**, the link uses (`adapter_*`, `port_*`). Switches/hubs keep all ports on
+  adapter 0, so `adapter_b: 0, port_b: 2` is `Ethernet2` (v0.55.0 reports the right name)
 
 **Returns:**
 ```json
@@ -1280,6 +1284,25 @@ set_node("Switch1", ports=16)
 # Combined operation
 set_node("R1", action="start", x=150, y=300)
 ```
+
+### QEMU Hardware, Disks and Options (v0.55.0)
+
+Same params work on `node(action="create")` and `node(action="set")` (node stopped):
+- `ram`, `cpus`, `adapters`, `console_type`
+- `hda_disk_image` (boot disk), `hdb_disk_image`, `hdd_disk_image` (4th slot, **not** boot),
+  `cdrom_image` (e.g. cloud-init seed ISO), `options` (e.g. `"-cpu host"` for x86-64-v2 guests)
+- Anything else via `properties={...}` (`hdc_disk_image`, `adapter_type`, `mac_address`, ...)
+
+```python
+node(action="create", template_name="Ubuntu Cloud Guest", node_name="ops1", x=0, y=0,
+     ram=12288, cpus=6, adapters=2, hda_disk_image="ops1-60G.qcow2", cdrom_image="ops1-seed.iso",
+     options="-cpu host")
+node(action="set", node_name="ops1", properties={"adapter_type": "virtio-net-pci"})
+```
+- Results are read back: `unapplied_properties` (create) / `Warning: not applied by GNS3` (set)
+  list keys GNS3 ignored - check the key name for that node type.
+- Images must exist on the GNS3 server, else the error says `The image '<name>' is missing`.
+- Switch `ports` can only change while no links are attached.
 
 **Restart Behavior:**
 - Stops node and polls status (3 attempts × 5 seconds)

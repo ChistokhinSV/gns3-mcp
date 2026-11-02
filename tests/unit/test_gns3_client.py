@@ -193,6 +193,19 @@ class TestProjectMethods:
         assert project["status"] == "opened"
         authenticated_client.client.post.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_close_project_empty_body(self, authenticated_client):
+        """GM-87: 204 No Content on close is success, not a JSON decode error"""
+        mock_response = MagicMock()
+        mock_response.status_code = 204
+        mock_response.content = b""
+        mock_response.json.side_effect = json.JSONDecodeError("Expecting value", "", 0)
+        mock_response.raise_for_status = MagicMock()
+
+        authenticated_client.client.post = AsyncMock(return_value=mock_response)
+
+        assert await authenticated_client.close_project("proj-1") == {}
+
 
 # ===== Node Methods Tests =====
 

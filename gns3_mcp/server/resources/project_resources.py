@@ -186,6 +186,9 @@ async def get_node_impl(app: "IAppContext", project_id: str, node_id: str) -> st
             adapters=props.get("adapters"),
             hdd_disk_image=props.get("hdd_disk_image"),
             hda_disk_image=props.get("hda_disk_image"),
+            hdb_disk_image=props.get("hdb_disk_image"),
+            cdrom_image=props.get("cdrom_image"),
+            options=props.get("options"),
         ).model_dump()
 
         return json.dumps(info, indent=2)
