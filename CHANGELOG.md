@@ -5,6 +5,16 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.56.4] - 2026-11-03 - Icon
+
+### Added
+- **Icon** for the Claude plugin and the `.mcpb` extension: a gecko climbing a network graph - its
+  feet are nodes linked to two hub "routers" and four leaf devices - on a dark-teal tile (original
+  artwork, not the GNS3 logo).
+  Source `plugin/assets/icon.svg`; `python scripts/render_icon.py` renders `plugin/assets/icon.png`
+  (1024 px, `icon` in `plugin.json`) and `mcp-server/icon.png` (512 px, `icon` in the MCPB manifest).
+  Clears the `ICON_MISSING` warning from `claude plugin validate`.
+
 ## [0.56.3] - 2026-11-03 - Server Instructions Ship in the PyPI Package
 
 ### Fixed

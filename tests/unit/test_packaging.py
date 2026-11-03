@@ -124,6 +124,20 @@ def test_runtime_data_files_are_package_data():
     assert data_files <= declared, sorted(str(p) for p in data_files - declared)
 
 
+def test_icons_exist_and_are_square():
+    """plugin.json and the MCPB manifest point at PNGs rendered from plugin/assets/icon.svg"""
+    from PIL import Image
+
+    plugin = json.loads((ROOT / "plugin" / ".claude-plugin" / "plugin.json").read_text())
+    manifest = json.loads((ROOT / "mcp-server" / "manifest.json").read_text(encoding="utf-8"))
+    for path, min_size in (
+        (ROOT / "plugin" / plugin["icon"], 512),  # Anthropic directory: 512-2048 px
+        (ROOT / "mcp-server" / manifest["icon"], 256),  # MCPB: 256 px minimum
+    ):
+        with Image.open(path) as img:
+            assert img.format == "PNG" and img.width == img.height >= min_size, path
+
+
 def test_plugin_runs_matching_server_version():
     plugin = json.loads((ROOT / "plugin" / ".claude-plugin" / "plugin.json").read_text())
     mcp = (ROOT / "plugin" / ".mcp.json").read_text()

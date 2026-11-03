@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.56.3 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.56.4 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.56.3 - server instructions ship in the PyPI wheel
+**Latest Release:** v0.56.4 - plugin and .mcpb icon
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.56.3)
+### Recent Changes (v0.26.0 - v0.56.4)
+
+**v0.56.4** - icon (gecko climbing a network graph, feet are nodes): source `plugin/assets/icon.svg`, `python scripts/render_icon.py` writes `plugin/assets/icon.png` (1024) and `mcp-server/icon.png` (512); both committed
 
 **v0.56.3** - instructions.md now in the PyPI wheel (`[tool.setuptools.package-data]`, GM-94); non-.py runtime files must be listed there (test + CI wheel check)
 
