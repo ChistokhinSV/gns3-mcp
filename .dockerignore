@@ -64,6 +64,5 @@ justfile
 *.log
 .DS_Store
 Thumbs.db
-issues.md
 MIGRATION*.md
 REFACTORING*.md

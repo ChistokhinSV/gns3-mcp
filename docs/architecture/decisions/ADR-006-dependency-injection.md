@@ -273,7 +273,7 @@ gns3 = deps.get(IGns3Client)
 ### Neutral
 
 - 🟨 **Migration Required**: Existing tools need updating
-  - Planned phased rollout (see MIGRATION_GM-46.md)
+  - Planned phased rollout
   - Tools can use global state during transition
 - 🟨 **Learning Curve**: Developers need to understand DI pattern
   - Mitigated: Comprehensive docs (migration guide, usage guide)
@@ -342,9 +342,6 @@ gns3 = deps.get(IGns3Client)
 
 ## References
 
-- [GM-46: Implement DI Container](https://chistokhin.youtrack.cloud/issue/GM-46)
-- [GM-47: Comprehensive Tests](https://chistokhin.youtrack.cloud/issue/GM-47)
-- [MIGRATION_GM-46.md](../../MIGRATION_GM-46.md) - Migration guide
 - [DI_USAGE_GUIDE.md](../../DI_USAGE_GUIDE.md) - Usage patterns
 - [di_container.py](../../../gns3_mcp/server/di_container.py) - Implementation
 - [test_di_container.py](../../../tests/unit/test_di_container.py) - Tests

@@ -147,7 +147,7 @@ read_console_diff(session_id)
 ### Test Script
 
 ```bash
-cd "C:\HOME\1. Scripts\008. GNS3 MCP\tests"
+cd "<path-to-gns3-mcp>\tests"
 
 # Direct console test
 python simple_console_test.py --host 192.168.1.20 --port 5000 --duration 5

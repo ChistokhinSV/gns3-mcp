@@ -235,7 +235,7 @@ docker push chistokhinsv/gns3-ssh-proxy:latest
 # ========================================
 
 # 1. Build image
-cd "C:\HOME\1. Scripts\008. GNS3 MCP\ssh-proxy"
+cd "<path-to-gns3-mcp>\ssh-proxy"
 docker build -t chistokhinsv/gns3-ssh-proxy:v0.1.0 .
 
 # 2. Push to Docker Hub

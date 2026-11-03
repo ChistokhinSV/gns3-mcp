@@ -46,7 +46,6 @@ Migration Strategy:
 - RESOURCES: Keep global state until FastMCP supports context in resources
 - TARGET: Pure DI architecture (eliminate global state entirely)
 
-See docs/MIGRATION_GM-46.md for detailed migration guide.
 See docs/DI_USAGE_GUIDE.md for usage patterns and examples.
 """
 

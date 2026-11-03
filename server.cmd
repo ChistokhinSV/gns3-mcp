@@ -249,8 +249,11 @@ echo === Creating Service User Account ===
 echo.
 
 set "USERNAME=GNS3MCPService"
-set "PASSWORD=GNS3mcp!2025"
 set "DESCRIPTION=GNS3 MCP Service Account (Low Privilege)"
+REM Random password per machine (a fixed one used to live here, in a public repo).
+REM Base64 of 18 random bytes covers upper/lower/digits for the complexity policy; no "!"
+REM because delayed expansion is on.
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "$b = New-Object byte[] 18; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b).Replace('/','x').Replace('+','y')"`) do set "SVC_PASSWORD=%%p"
 
 REM 1. Check if user exists
 echo [1/3] Checking if user exists...
@@ -262,7 +265,7 @@ if %errorlevel% equ 0 (
 
 REM 2. Create user
 echo   Creating user: %USERNAME%
-net user "%USERNAME%" "%PASSWORD%" /add /comment:"%DESCRIPTION%" /passwordchg:no /expires:never /active:yes
+net user "%USERNAME%" "%SVC_PASSWORD%" /add /comment:"%DESCRIPTION%" /passwordchg:no /expires:never /active:yes
 if %errorlevel% neq 0 (
     echo   [ERROR] Failed to create user
     echo   Common causes:
@@ -273,6 +276,7 @@ if %errorlevel% neq 0 (
 
 REM Set password to never expire
 wmic useraccount where "name='%USERNAME%'" set PasswordExpires=FALSE >nul 2>&1
+set "SVC_CREATED=1"
 
 echo   [OK] User created successfully
 
@@ -327,11 +331,15 @@ echo.
 echo === Setup Complete ===
 echo.
 echo Service account: %USERNAME%
-echo Password: (stored in GNS3-MCP-HTTP.xml)
+if defined SVC_CREATED (
+    echo Password ^(shown once - enter it on the service's Log On tab, it is not stored^): %SVC_PASSWORD%
+) else (
+    echo Existing account kept. To set a new random password: net user %USERNAME% *
+)
 echo.
 echo Next steps:
 echo   1. Ensure .env contains GNS3 credentials
-echo   2. Ensure .env contains MCP_API_KEY (or leave empty for auto-gen)
+echo   2. Ensure .env contains MCP_API_KEY (required for HTTP mode)
 echo   3. Run: .\server.cmd install
 echo   4. Service will run as low-privilege user
 echo.
@@ -391,7 +399,9 @@ echo Running: .venv\Scripts\python -m gns3_mcp.server.main --transport http --ht
 echo.
 echo Server will pick up code changes on restart (Ctrl+C to stop)
 echo.
-".venv\Scripts\python.exe" -m gns3_mcp.server.main --host %GNS3_HOST% --port %GNS3_PORT% --username %USER% --password %PASSWORD% --transport http --http-port 8100
+REM No --password: main.py reads PASSWORD/GNS3_PASSWORD from the environment set above,
+REM so the password does not show up in process listings
+".venv\Scripts\python.exe" -m gns3_mcp.server.main --host %GNS3_HOST% --port %GNS3_PORT% --username %USER% --transport http --http-port 8100
 exit /b %errorlevel%
 
 :dev_install

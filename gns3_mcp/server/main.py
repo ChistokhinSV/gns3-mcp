@@ -1505,7 +1505,9 @@ async def project_docs(
         - Troubleshooting notes and runbooks
 
     Returns:
-        JSON with project_id and markdown content or success confirmation
+        JSON with project_id and markdown content, or for 'update' a confirmation with
+        content_length (sent), previous_length and stored_length (read back after the
+        write; a 'warning' is added if the stored text differs from what was sent)
 
     Examples:
         # Get README
@@ -1558,17 +1560,26 @@ async def project_docs(
             raise ValueError("content is required for 'update' action")
 
         try:
+            previous = await app.gns3.get_project_readme(project_id)
             success = await app.gns3.update_project_readme(project_id, content)
             if success:
-                return json.dumps(
-                    {
-                        "success": True,
-                        "project_id": project_id,
-                        "message": "README updated successfully",
-                        "content_length": len(content),
-                    },
-                    indent=2,
-                )
+                # Read back so the confirmation proves what GNS3 stored (GM-96): a caller
+                # that thought it sent more text can see previous vs stored length
+                stored = await app.gns3.get_project_readme(project_id)
+                result = {
+                    "success": True,
+                    "project_id": project_id,
+                    "message": "README updated successfully",
+                    "content_length": len(content),
+                    "previous_length": len(previous),
+                    "stored_length": len(stored),
+                }
+                if stored != content:
+                    result["warning"] = (
+                        "README read back differs from the content sent - "
+                        "check it with project_docs(action='get')"
+                    )
+                return json.dumps(result, indent=2)
             else:
                 return json.dumps(
                     {"error": "Failed to update README", "project_id": project_id}, indent=2

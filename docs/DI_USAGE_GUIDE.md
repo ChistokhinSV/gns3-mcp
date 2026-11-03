@@ -548,9 +548,7 @@ RuntimeError: "Application not initialized"
 
 ## Further Reading
 
-- [MIGRATION_GM-46.md](MIGRATION_GM-46.md) - Migrating from global state
 - [ADR-006-dependency-injection.md](architecture/decisions/ADR-006-dependency-injection.md) - Design decisions
-- [GLOBAL_STATE_TRANSITION.md](GLOBAL_STATE_TRANSITION.md) - Transition roadmap
 - [di_container.py](../gns3_mcp/server/di_container.py) - Implementation
 - [test_di_container.py](../tests/unit/test_di_container.py) - Test examples
 

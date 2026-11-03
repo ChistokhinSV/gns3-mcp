@@ -31,12 +31,9 @@ Comprehensive architecture documentation including C4 Model diagrams, ADRs, and 
 **User-Facing**:
 - [README.md](../README.md) - Project overview, installation, usage examples
 - [CLAUDE.md](../CLAUDE.md) - Development guidelines and version history
-- [MIGRATION_v0.3.md](../MIGRATION_v0.3.md) - Migration guide for breaking changes
 
 **Developer-Facing**:
 - [SKILL.md](../plugin/skills/gns3-lab-automation/SKILL.md) - Agent skill with GNS3 workflows (part of the Claude plugin)
-- [TEST_RESULTS.md](../tests/TEST_RESULTS.md) - Latest test coverage and results
-- [ARCHITECTURE_REVIEW.md](../ARCHITECTURE_REVIEW.md) - Architecture assessment and recommendations
 
 ### 🧪 Testing Documentation
 
@@ -142,8 +139,7 @@ Overall:              ~30% (focused on critical paths)
 **For Architects**:
 1. Review [ADRs](architecture/adr/) for key decisions
 2. Analyze [Component Diagram](architecture/03-c4-component-diagram.puml)
-3. Read [Architecture Review](../ARCHITECTURE_REVIEW.md)
-4. Check SOLID compliance in ADR appendices
+3. Check SOLID compliance in ADR appendices
 
 **For Contributors**:
 1. Review [CLAUDE.md](../CLAUDE.md) for coding guidelines
@@ -218,7 +214,6 @@ Overall:              ~30% (focused on critical paths)
 
 **Architecture Questions**:
 - Review [Architecture Decision Records](architecture/adr/)
-- Check [Architecture Review](../ARCHITECTURE_REVIEW.md)
 - File issue with `architecture` label
 
 ## Related Resources

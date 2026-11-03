@@ -5,6 +5,32 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.56.5] - 2026-11-03 - project_docs Confirms What Was Stored
+
+### Changed
+- **`project_docs(action="update")` reads the README back** (GM-96). The confirmation now has
+  `previous_length` and `stored_length` next to `content_length`, plus a `warning` when the stored
+  text differs from what was sent. A client reported two updates "300 characters apart" both answering
+  `content_length: 3204`; the stored README was in fact 3204 characters - the server had reported
+  what it received, and the extra text never arrived. With previous vs stored length that is now
+  visible in the response.
+
+### Security
+- **`server.cmd create-user` used a fixed password** for the `GNS3MCPService` Windows account,
+  published in this repository. It now generates a random 24-character password per machine and
+  prints it once; the variable no longer shares the name `PASSWORD` with the GNS3 password. If you
+  ran `create-user` before, reset that account's password (`net user GNS3MCPService *`) or remove it.
+- `server.cmd dev` no longer passes the GNS3 password as `--password` (visible in process listings);
+  the server reads it from the environment.
+
+### Removed
+- Internal working files that are not part of the product: `issues.md` (issues are tracked as
+  tickets), `project-b-lessons-adoption-report.md`, `ARCHITECTURE_REVIEW.md`,
+  `docs/MIGRATION_GM-46.md`, `docs/GLOBAL_STATE_TRANSITION.md`, `tests/TEST_RESULTS.md`, and
+  `data/SESSION.txt` (a captured API session that contained access tokens and an old password).
+- Personal paths and internal tracker links from the docs; `GLOBAL_SKILL_INSTALLATION.md` rewritten
+  as a short generic guide (plugin first, manual copy second).
+
 ## [0.56.4] - 2026-11-03 - Icon
 
 ### Added

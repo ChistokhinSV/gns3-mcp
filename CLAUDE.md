@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.56.4 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.56.5 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.56.4 - plugin and .mcpb icon
+**Latest Release:** v0.56.5 - project_docs update confirms what was stored
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.56.4)
+### Recent Changes (v0.26.0 - v0.56.5)
+
+**v0.56.5** - `project_docs` update returns `previous_length` + `stored_length` (read back after write) and a warning on mismatch (GM-96)
 
 **v0.56.4** - icon (gecko climbing a network graph, feet are nodes): source `plugin/assets/icon.svg`, `python scripts/render_icon.py` writes `plugin/assets/icon.png` (1024) and `mcp-server/icon.png` (512); both committed
 
@@ -246,8 +248,7 @@ All linting configuration centralized in [pyproject.toml](pyproject.toml):
 ├── tests/
 │   ├── test_mcp_console.py      # Console manager tests
 │   ├── interactive_console_test.py
-│   ├── list_nodes_helper.py     # Node discovery helper
-│   └── TEST_RESULTS.md          # Latest test results
+│   └── list_nodes_helper.py     # Node discovery helper
 ├── .env                         # GNS3 credentials (gitignored)
 ├── .mcp.json                    # MCP server config (Claude Code)
 ├── requirements.txt             # Python dependencies
@@ -419,7 +420,7 @@ claude mcp add --transport stdio gns3-mcp --scope user -- `
 ### Modify GNS3 API Client
 
 1. Edit `mcp-server/server/gns3_client.py`
-2. Refer to `data/SESSION.txt` for API endpoints
+2. Refer to https://apiv3.gns3.net/ (or the server's `/openapi.json`) for API endpoints
 3. Use `httpx` async client
 4. Return parsed JSON, not raw responses
 5. Test changes before packaging
@@ -657,7 +658,7 @@ Before considering a change complete:
 
 ### GNS3 v3 API Endpoints
 
-See `data/SESSION.txt` for complete traffic analysis.
+See https://apiv3.gns3.net/ for the full API (the server also serves `/openapi.json`).
 
 Key endpoints:
 - POST `/v3/access/users/authenticate` - Get JWT token
