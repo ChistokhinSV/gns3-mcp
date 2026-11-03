@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "gns3-mcp",
   "display_name": "GNS3 Lab Controller",
-  "version": "0.56.2",
+  "version": "0.56.3",
   "description": "GNS3 lab automation with AI agent",
   "long_description": "GNS3 v3 lab automation MCP server with 15 CRUD-style tools. Create/modify nodes (RAM, CPUs, QEMU disks, CD-ROM, options), wire links, configure devices via console/SSH, topology management, real-time notifications. Dependencies are installed by Claude Desktop with uv on first start.",
   "homepage": "https://github.com/ChistokhinSV/gns3-mcp",

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gns3-mcp"
-version = "0.56.2"
+version = "0.56.3"
 description = "GNS3 lab automation MCP server with AI agent integration"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -67,6 +67,11 @@ Changelog = "https://github.com/ChistokhinSV/gns3-mcp/blob/master/CHANGELOG.md"
 where = ["."]
 include = ["gns3_mcp*"]
 exclude = ["tests*", "mcp-server*", "skill*", "ssh-proxy*", "docs*", "data*", ".github*"]
+
+# Non-Python files the server reads at runtime; without this the wheel shipped
+# no instructions.md and PyPI/uvx installs sent empty server instructions (GM-94)
+[tool.setuptools.package-data]
+"gns3_mcp.server" = ["instructions.md"]
 
 [tool.ruff]
 line-length = 100

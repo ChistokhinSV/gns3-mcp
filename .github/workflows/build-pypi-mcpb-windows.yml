@@ -104,6 +104,8 @@ jobs:
         run: |
           python -m build
           Get-ChildItem dist\
+          # The server reads instructions.md at runtime; it was missing from every wheel before 0.56.3
+          python -c "import glob, sys, zipfile; names = zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist(); ok = 'gns3_mcp/server/instructions.md' in names; print('instructions.md in wheel:', ok); sys.exit(0 if ok else 1)"
 
       - name: Publish to PyPI
         if: steps.version.outputs.is_tagged == 'true'

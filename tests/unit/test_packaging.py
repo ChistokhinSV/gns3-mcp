@@ -102,6 +102,28 @@ def test_manifest_uses_uv_runtime_and_env_credentials():
     assert "linux" not in manifest["compatibility"]["platforms"]
 
 
+def test_runtime_data_files_are_package_data():
+    """GM-94: setuptools ships only .py files unless package-data lists the rest"""
+    with open(ROOT / "pyproject.toml", "rb") as f:
+        package_data = tomllib.load(f)["tool"]["setuptools"].get("package-data", {})
+
+    declared = {
+        (ROOT / package.replace(".", "/") / pattern).resolve()
+        for package, patterns in package_data.items()
+        for pattern in patterns
+    }
+    data_files = {
+        p.resolve()
+        for p in (ROOT / "gns3_mcp").rglob("*")
+        if p.is_file()
+        and p.suffix not in {".py", ".pyc"}
+        and p.name != "py.typed"  # shipped by setuptools automatically
+        and "__pycache__" not in p.parts
+    }
+    assert data_files, "expected at least instructions.md"
+    assert data_files <= declared, sorted(str(p) for p in data_files - declared)
+
+
 def test_plugin_runs_matching_server_version():
     plugin = json.loads((ROOT / "plugin" / ".claude-plugin" / "plugin.json").read_text())
     mcp = (ROOT / "plugin" / ".mcp.json").read_text()

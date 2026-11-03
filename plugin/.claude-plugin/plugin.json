@@ -1,7 +1,7 @@
 {
   "name": "gns3-lab",
   "displayName": "GNS3 Lab",
-  "version": "0.56.2",
+  "version": "0.56.3",
   "description": "Build, wire, configure and troubleshoot GNS3 network labs: projects, nodes (RAM, CPUs, QEMU disks, CD-ROM, options), links, device consoles, SSH, drawings and topology export. Bundles the gns3-mcp server (runs locally with uvx) and a skill with the workflows.",
   "author": {
     "name": "Sergei Chistokhin",

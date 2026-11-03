@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.56.2 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.56.3 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.56.2 - client texts use current tools
+**Latest Release:** v0.56.3 - server instructions ship in the PyPI wheel
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.56.2)
+### Recent Changes (v0.26.0 - v0.56.3)
+
+**v0.56.3** - instructions.md now in the PyPI wheel (`[tool.setuptools.package-data]`, GM-94); non-.py runtime files must be listed there (test + CI wheel check)
 
 **v0.56.2** - Client texts use current tools (GM-93): instructions.md rewritten (128 lines), prompts and error hints fixed; `tests/unit/test_client_texts.py` fails on any call to a removed tool name in client-facing text
 

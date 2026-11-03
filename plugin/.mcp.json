@@ -2,7 +2,7 @@
   "mcpServers": {
     "gns3": {
       "command": "uvx",
-      "args": ["gns3-mcp@0.56.2"],
+      "args": ["gns3-mcp@0.56.3"],
       "env": {
         "GNS3_HOST": "${user_config.gns3_host}",
         "GNS3_PORT": "${user_config.gns3_port}",

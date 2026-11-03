@@ -5,6 +5,19 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.56.3] - 2026-11-03 - Server Instructions Ship in the PyPI Package
+
+### Fixed
+- **PyPI/uvx/pip installs and the Claude plugin sent no server instructions** (GM-94): the wheel never
+  contained `gns3_mcp/server/instructions.md` (setuptools ships only `.py` files unless package data is
+  declared), and the server silently fell back to none. Verified: published 0.56.2 sends 0 characters,
+  a wheel with `[tool.setuptools.package-data]` sends all 8,003. The `.mcpb` and Docker image were not
+  affected (both run from source).
+
+### Added
+- `test_runtime_data_files_are_package_data`: every non-Python file under `gns3_mcp/` must be listed in
+  package data. The release workflow also checks the built wheel contains `instructions.md`.
+
 ## [0.56.2] - 2026-11-02 - Client Texts Use Current Tools
 
 ### Fixed
