@@ -153,7 +153,7 @@ This guided workflow helps you enable SSH access on **{node_name}** ({device_typ
 
 ## Prerequisites
 
-- Node must be running (check with resource `projects://{{id}}/nodes/`)
+- Node must be running (check with resource `nodes://<project_id>/`)
 - Console access available (check with resource `sessions://console/{node_name}`)
 - Know the device's management IP address
 

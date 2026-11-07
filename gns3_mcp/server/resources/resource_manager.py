@@ -2,12 +2,12 @@
 Resource Manager for GNS3 MCP Server
 
 Handles URI routing and resource retrieval for MCP resource protocol.
-Supports 15 resource URIs for browsable state.
+Routes resource URIs (ROUTES) to handler methods.
 """
 
 import json
 import re
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Tuple
 
 from interfaces import IResourceManager
 
@@ -15,40 +15,60 @@ if TYPE_CHECKING:
     from interfaces import IAppContext
 
 
+def _template_regex(template: str) -> str:
+    """'nodes://{project_id}/{node_id}' -> anchored regex with named groups"""
+    parts = re.split(r"\{(\w+)\}", template)
+    # re.split with a group alternates literal, name, literal, ...
+    body = "".join(
+        re.escape(part) if i % 2 == 0 else f"(?P<{part}>[^/]+)" for i, part in enumerate(parts)
+    )
+    return f"^{body}$"
+
+
 class ResourceManager(IResourceManager):
     """Manages MCP resources with URI routing"""
 
-    # URI patterns with named groups
-    URI_PATTERNS = {
-        # Project resources
-        r"^projects://$": "list_projects",
-        r"^projects://(?P<project_id>[^/]+)$": "get_project",
-        r"^projects://(?P<project_id>[^/]+)/readme$": "get_project_readme",
-        r"^projects://(?P<project_id>[^/]+)/sessions/console/$": "list_console_sessions",  # Project-scoped console sessions
-        r"^projects://(?P<project_id>[^/]+)/sessions/ssh/$": "list_ssh_sessions",  # Project-scoped SSH sessions
-        r"^nodes://(?P<project_id>[^/]+)/$": "list_nodes",
-        r"^nodes://(?P<project_id>[^/]+)/(?P<node_id>[^/]+)$": "get_node",
-        r"^nodes://(?P<project_id>[^/]+)/(?P<node_id>[^/]+)/template$": "get_node_template_usage",
-        r"^links://(?P<project_id>[^/]+)/$": "list_links",
-        r"^drawings://(?P<project_id>[^/]+)/$": "list_drawings",
-        # Templates (static, not project-scoped)
-        r"^templates://$": "list_templates",
-        r"^templates://(?P<template_id>[^/]+)$": "get_template",
-        # Session list resources (support query param: ?project_id=xxx)
-        r"^sessions://console/$": "list_console_sessions",  # All or filtered by ?project_id
-        r"^sessions://ssh/$": "list_ssh_sessions",  # All or filtered by ?project_id
-        # Node-specific session resources (by node name, not project-scoped)
-        r"^sessions://console/(?P<node_name>[^/]+)$": "get_console_session",
-        r"^sessions://ssh/(?P<node_name>[^/]+)$": "get_ssh_session",
-        r"^sessions://ssh/(?P<node_name>[^/]+)/history$": "get_ssh_history",
-        r"^sessions://ssh/(?P<node_name>[^/]+)/buffer$": "get_ssh_buffer",
-        # SSH proxy resources
-        r"^proxies:///status$": "get_proxy_status",
-        r"^proxies://$": "get_proxy_registry",
-        r"^proxies://sessions$": "list_proxy_sessions",
-        r"^proxies://project/(?P<project_id>[^/]+)$": "list_project_proxies",  # Path-based, not query param
-        r"^proxies://(?P<proxy_id>[^/]+)$": "get_proxy",
-    }
+    # Single routing table for query_resource and its "supported_patterns" hint (GM-99:
+    # a hand-kept copy drifted, so topology_report and diagrams were registered as MCP
+    # resources but rejected by query_resource). Templates are spelled exactly like the
+    # @mcp.resource URIs in main.py; tests/unit/test_resource_uris.py keeps them in sync.
+    # Order matters where templates overlap: literal paths before {param} ones.
+    ROUTES: List[Tuple[str, str]] = [
+        ("projects://", "list_projects"),
+        ("projects://{project_id}", "get_project"),
+        ("projects://{project_id}/readme", "get_project_readme"),
+        ("projects://{project_id}/topology_report", "get_topology_report"),
+        ("projects://{project_id}/sessions/console/", "list_console_sessions"),
+        ("projects://{project_id}/sessions/ssh/", "list_ssh_sessions"),
+        ("nodes://{project_id}/", "list_nodes"),
+        ("nodes://{project_id}/{node_id}", "get_node"),
+        ("nodes://{project_id}/{node_id}/template", "get_node_template_usage"),
+        ("links://{project_id}/", "list_links"),
+        ("drawings://{project_id}/", "list_drawings"),
+        ("templates://", "list_templates"),
+        ("templates://{template_id}", "get_template"),
+        # Session lists also take ?project_id=...
+        ("sessions://console/", "list_console_sessions"),
+        ("sessions://ssh/", "list_ssh_sessions"),
+        ("sessions://console/{node_name}", "get_console_session"),
+        ("sessions://ssh/{node_name}", "get_ssh_session"),
+        ("sessions://ssh/{node_name}/history", "get_ssh_history"),
+        ("sessions://ssh/{node_name}/buffer", "get_ssh_buffer"),
+        ("proxies:///status", "get_proxy_status"),
+        ("proxies://", "get_proxy_registry"),
+        ("proxies://sessions", "list_proxy_sessions"),
+        ("proxies://project/{project_id}", "list_project_proxies"),
+        ("proxies://{proxy_id}", "get_proxy"),
+        ("diagrams://{project_id}/topology", "get_topology_diagram"),
+    ]
+
+    # Query-parameter forms, listed in the error hint only
+    QUERY_FORMS = [
+        "sessions://console/?project_id={project_id}",
+        "sessions://ssh/?project_id={project_id}",
+    ]
+
+    URI_PATTERNS = {_template_regex(template): handler for template, handler in ROUTES}
 
     def __init__(self, app: "IAppContext"):
         self.app = app
@@ -60,7 +80,7 @@ class ResourceManager(IResourceManager):
         Supports both path parameters and query parameters.
 
         Args:
-            uri: Resource URI (e.g., projects://abc123/nodes/ or sessions://console/?project_id=abc)
+            uri: Resource URI (e.g., nodes://abc123/ or sessions://console/?project_id=abc)
 
         Returns:
             Tuple of (handler_name, parameters_dict) or (None, None) if no match
@@ -106,33 +126,7 @@ class ResourceManager(IResourceManager):
                 {
                     "error": "Invalid resource URI",
                     "uri": uri,
-                    "supported_patterns": [
-                        "projects://",
-                        "projects://{id}",
-                        "projects://{id}/readme",
-                        "projects://{id}/sessions/console/",
-                        "projects://{id}/sessions/ssh/",
-                        "nodes://{project_id}/",
-                        "nodes://{project_id}/{node_id}",
-                        "nodes://{project_id}/{node_id}/template",
-                        "links://{project_id}/",
-                        "drawings://{project_id}/",
-                        "templates://",
-                        "templates://{id}",
-                        "sessions://console/",
-                        "sessions://console/?project_id={id}",
-                        "sessions://console/{node_name}",
-                        "sessions://ssh/",
-                        "sessions://ssh/?project_id={id}",
-                        "sessions://ssh/{node_name}",
-                        "sessions://ssh/{node_name}/history",
-                        "sessions://ssh/{node_name}/buffer",
-                        "proxies:///status",
-                        "proxies://",
-                        "proxies://sessions",
-                        "proxies://project/{project_id}",
-                        "proxies://{proxy_id}",
-                    ],
+                    "supported_patterns": [t for t, _ in self.ROUTES] + self.QUERY_FORMS,
                 },
                 indent=2,
             )
@@ -156,104 +150,6 @@ class ResourceManager(IResourceManager):
                 },
                 indent=2,
             )
-
-    async def list_resources(self) -> List[Dict[str, Any]]:
-        """
-        List all available resources
-
-        Returns:
-            List of resource metadata dicts
-        """
-        resources = []
-
-        # Project resources
-        projects = await self.app.gns3.get_projects()
-
-        # Add projects list resource
-        resources.append(
-            {
-                "uri": "projects://",
-                "name": "Projects",
-                "description": "List of all GNS3 projects",
-                "mimeType": "application/json",
-            }
-        )
-
-        # Add individual project resources
-        for proj in projects:
-            project_id = proj["project_id"]
-            resources.extend(
-                [
-                    {
-                        "uri": f"projects://{project_id}",
-                        "name": f"Project: {proj['name']}",
-                        "description": f"Details for project {proj['name']}",
-                        "mimeType": "application/json",
-                    },
-                    {
-                        "uri": f"projects://{project_id}/nodes/",
-                        "name": f"Nodes in {proj['name']}",
-                        "description": f"List of nodes in project {proj['name']}",
-                        "mimeType": "application/json",
-                    },
-                    {
-                        "uri": f"projects://{project_id}/links/",
-                        "name": f"Links in {proj['name']}",
-                        "description": f"List of links in project {proj['name']}",
-                        "mimeType": "application/json",
-                    },
-                    {
-                        "uri": f"projects://{project_id}/templates/",
-                        "name": f"Templates in {proj['name']}",
-                        "description": f"Available templates for project {proj['name']}",
-                        "mimeType": "application/json",
-                    },
-                    {
-                        "uri": f"projects://{project_id}/drawings/",
-                        "name": f"Drawings in {proj['name']}",
-                        "description": f"List of drawings in project {proj['name']}",
-                        "mimeType": "application/json",
-                    },
-                    {
-                        "uri": f"projects://{project_id}/snapshots/",
-                        "name": f"Snapshots in {proj['name']}",
-                        "description": f"List of snapshots in project {proj['name']}",
-                        "mimeType": "application/json",
-                    },
-                ]
-            )
-
-        # Session resources
-        resources.extend(
-            [
-                {
-                    "uri": "sessions://console/",
-                    "name": "Console Sessions",
-                    "description": "List of active console sessions",
-                    "mimeType": "application/json",
-                },
-                {
-                    "uri": "sessions://ssh/",
-                    "name": "SSH Sessions",
-                    "description": "List of active SSH sessions",
-                    "mimeType": "application/json",
-                },
-                {
-                    "uri": "proxies://status",
-                    "name": "Main SSH Proxy Status",
-                    "description": "Gets status of the main SSH proxy that resides on GNS3 host",
-                    "mimeType": "application/json",
-                },
-                {
-                    "uri": "proxies://sessions",
-                    "name": "SSH Proxy Sessions",
-                    "description": "All SSH proxy sessions",
-                    "mimeType": "application/json",
-                },
-            ]
-        )
-
-        return resources
 
     # ========================================================================
     # Project Resource Handlers
@@ -323,6 +219,15 @@ class ResourceManager(IResourceManager):
         from .project_resources import get_topology_report_impl
 
         return await get_topology_report_impl(self.app, project_id)
+
+    async def get_topology_diagram(self, project_id: str) -> str:
+        """SVG topology diagram (diagrams://{project_id}/topology)"""
+        from export_tools import generate_topology_diagram_content
+
+        content, _mime_type = await generate_topology_diagram_content(
+            self.app, project_id, format="svg", dpi=150
+        )
+        return content
 
     async def get_template(self, template_id: str) -> str:
         """Get template details with usage notes"""

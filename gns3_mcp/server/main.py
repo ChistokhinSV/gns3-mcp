@@ -429,7 +429,7 @@ async def resource_proxy_sessions() -> str:
     so you can see which proxy manages each session.
 
     Use this for a global view of all SSH connectivity across the entire lab infrastructure.
-    For project-specific sessions, use projects://{id}/sessions/ssh instead.
+    For project-specific sessions, use projects://{id}/sessions/ssh/ instead.
     """
     return await get_app().resource_manager.list_proxy_sessions()
 
@@ -492,16 +492,10 @@ async def resource_topology_diagram(ctx: Context, project_id: str) -> str:
 
     For humans: Use export_topology_diagram() tool to save SVG/PNG files to disk.
     """
-    from export_tools import generate_topology_diagram_content
-
     app: AppContext = ctx.request_context.lifespan_context
 
     try:
-        # Always return SVG format (most useful for agents)
-        content, mime_type = await generate_topology_diagram_content(
-            app, project_id, format="svg", dpi=150
-        )
-        return content
+        return await app.resource_manager.get_topology_diagram(project_id)
 
     except Exception as e:
         error_response = ErrorResponse(error="Failed to generate topology diagram", details=str(e))
@@ -2174,13 +2168,14 @@ async def search_tools(
     - **idempotent**: Multiple executions produce same result
 
     **Resource Mapping:**
-    - **projects://**: project, list_projects, query_resource
-    - **nodes://{project_id}/**: node, list_nodes, query_resource
+    - **projects://**: project, query_resource
+    - **projects://{project_id}/topology_report**: query_resource
+    - **nodes://{project_id}/**: node, query_resource
     - **links://{project_id}/**: link, query_resource
     - **drawings://{project_id}/**: drawing, query_resource
     - **sessions://console/**: console, query_resource
     - **sessions://ssh/**: ssh, query_resource
-    - **topology://{project_id}**: get_topology, query_resource
+    - **diagrams://{project_id}/topology**: export_topology_diagram, query_resource
 
     Returns:
         JSON with matching tools and their metadata

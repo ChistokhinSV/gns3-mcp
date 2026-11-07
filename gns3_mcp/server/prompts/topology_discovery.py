@@ -56,10 +56,10 @@ Explore all network devices and hosts in the project:
 **Using MCP Resources (recommended):**
 ```
 # List all nodes with basic info
-Resource: projects://{{project_id}}/nodes/
+Resource: nodes://{{project_id}}/
 
 # Get detailed node information
-Resource: projects://{{project_id}}/nodes/{{node_id}}
+Resource: nodes://{{project_id}}/{{node_id}}
 ```
 
 **Node Information Includes:**
@@ -82,7 +82,7 @@ Map all network connections between devices:
 **Using MCP Resources (recommended):**
 ```
 # List all links with connection details
-Resource: projects://{{project_id}}/links/
+Resource: links://{{project_id}}/
 ```
 
 **Link Information Includes:**
@@ -126,7 +126,7 @@ Explore visual annotations in the topology:
 
 **Using MCP Resources:**
 ```
-Resource: projects://{{project_id}}/drawings/
+Resource: drawings://{{project_id}}/
 ```
 
 **Drawing Types:**
@@ -161,8 +161,8 @@ Resource: diagrams://{{project_id}}/topology
 Use the `export_topology_diagram` tool below to save files to disk for human viewing.
 
 **When to Skip Visualization:**
-- If you only need connectivity information → Use `links://` resource
-- If you only need node status → Use `nodes://` resource
+- If you only need connectivity information → Use `links://<project_id>/` resource
+- If you only need node status → Use `nodes://<project_id>/` resource
 - If you only need device types → Use template resources
 - If you cannot process images → Use text-based resources only
 
@@ -287,11 +287,12 @@ Once you've discovered the topology:
 **MCP Resources (browsing state):**
 - `projects://` - List all projects
 - `projects://{id}` - Project details
-- `projects://{id}/nodes/` - All nodes
-- `projects://{id}/nodes/{id}` - Specific node details
-- `projects://{id}/links/` - All links
-- `projects://{id}/templates/` - Available templates
-- `projects://{id}/drawings/` - Visual annotations
+- `projects://<project_id>/topology_report` - Nodes, links and status in one view
+- `nodes://<project_id>/` - All nodes
+- `nodes://<project_id>/<node_id>` - Specific node details
+- `links://<project_id>/` - All links
+- `templates://` - Available templates
+- `drawings://<project_id>/` - Visual annotations
 
 **Tools (actions):**
 - `project(action="open", name=...)` - Open a project

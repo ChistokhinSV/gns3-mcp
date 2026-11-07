@@ -550,7 +550,7 @@ This workflow automates creation of a complete {topology_type} lab topology.
 ## Prerequisites
 
 - GNS3 server running and authenticated
-- Template "{template_name}" available (check with resource `projects://{{id}}/templates/`)
+- Template "{template_name}" available (check with resource `templates://`)
 - Sufficient system resources for {total_devices} nodes
 
 ## Step 1: Create Project
@@ -596,7 +596,7 @@ Start all nodes in the project:
 
 ```python
 # Get all nodes and start them
-# (Use resource projects://{{id}}/nodes/ to list, then node(action="set", state_action="start") for each)
+# (Use resource nodes://<project_id>/ to list, then node(action="set", state_action="start") for each)
 ```
 
 ## Step 6: Verify Topology

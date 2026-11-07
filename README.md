@@ -619,6 +619,8 @@ docker-compose up -d
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 | `GNS3_USE_HTTPS` | No | `false` | Use HTTPS for GNS3 |
 | `GNS3_VERIFY_SSL` | No | `true` | Verify SSL certs |
+| `GNS3_NODE_CREATE_TIMEOUT` | No | `180` | Seconds `node create` waits for GNS3 (first use of a template with big images is slow) |
+| `GNS3_NODE_CREATE_RECOVERY_WAIT` | No | `60` | Seconds to keep looking for the node after that timeout, then name and place it |
 
 See [.env.example](.env.example) for complete list.
 

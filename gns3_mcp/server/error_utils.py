@@ -197,7 +197,7 @@ def drawing_not_found_error(drawing_id: str, project_id: str, available_ids: Lis
         error=f"Drawing '{drawing_id}' not found in project",
         error_code=ErrorCode.DRAWING_NOT_FOUND.value,
         details=f"Available drawing IDs: {', '.join(available_ids) if available_ids else 'none'}",
-        suggested_action="Use list_drawings() or resource projects://{id}/drawings/ to see available drawings",
+        suggested_action='Use drawing(action="list") or query_resource("drawings://<project_id>/") to see available drawings',
         context={
             "project_id": project_id,
             "drawing_id": drawing_id,
@@ -225,7 +225,7 @@ def snapshot_not_found_error(
         error=f"Snapshot '{snapshot_name}' not found in project",
         error_code=ErrorCode.SNAPSHOT_NOT_FOUND.value,
         details=f"Available snapshots: {', '.join(available_snapshots) if available_snapshots else 'none'}",
-        suggested_action="Use resource projects://{id}/snapshots/ to see available snapshots",
+        suggested_action="Check the snapshot name in the GNS3 GUI (Edit > Manage snapshots)",
         context={
             "project_id": project_id,
             "snapshot_name": snapshot_name,

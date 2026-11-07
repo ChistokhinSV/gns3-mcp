@@ -483,3 +483,54 @@ class TestEdgeCases:
 
         # Should return empty dict, not raise exception
         assert result == {}
+
+
+# ===== GM-98: timeouts carry a message =====
+
+
+class TestTimeoutMessages:
+    """httpx timeouts have an empty message; tools report str(e)"""
+
+    @staticmethod
+    def _client(exc_type):
+        from gns3_client import _ExplainTimeouts
+
+        def handler(request):
+            raise exc_type("", request=request)
+
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, read=12.0),
+            transport=_ExplainTimeouts(httpx.MockTransport(handler)),
+        )
+
+    @pytest.mark.asyncio
+    async def test_read_timeout_names_call_and_cause(self):
+        async with self._client(httpx.ReadTimeout) as http:
+            with pytest.raises(httpx.ReadTimeout) as exc:
+                await http.get("http://gns3/v3/projects")
+
+        assert "did not answer within 12s (GET /v3/projects)" in str(exc.value)
+        assert "disk images" in str(exc.value)
+
+    @pytest.mark.asyncio
+    async def test_connect_timeout_points_at_reachability(self):
+        async with self._client(httpx.ConnectTimeout) as http:
+            with pytest.raises(httpx.ConnectTimeout) as exc:
+                await http.get("http://gns3/v3/projects")
+
+        assert "did not accept a connection within 30s" in str(exc.value)
+
+    @pytest.mark.asyncio
+    async def test_create_node_passes_its_own_timeout(self, authenticated_client):
+        seen = {}
+
+        def handler(request):
+            seen.update(request.extensions["timeout"])
+            return httpx.Response(201, json={"node_id": "n-1"})
+
+        authenticated_client.client = httpx.AsyncClient(
+            timeout=30.0, transport=httpx.MockTransport(handler)
+        )
+        await authenticated_client.create_node_from_template("p-1", "t-1", {}, timeout=180)
+
+        assert seen["read"] == 180

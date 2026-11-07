@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.56.5 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.56.6 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.56.5 - project_docs update confirms what was stored
+**Latest Release:** v0.56.6 - slow node create recovered, topology_report via query_resource
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.56.5)
+### Recent Changes (v0.26.0 - v0.56.6)
+
+**v0.56.6** - `node create` survives slow first use of big-image templates: 180 s timeout, then polls for the late node and names/places it; `TIMEOUT` error says do not re-create (GM-98). httpx timeouts get a message (`_ExplainTimeouts` transport in gns3_client.py). `query_resource` routes `topology_report` + `diagrams://` (GM-99); `ResourceManager.ROUTES` is the one routing table, `test_resource_uris.py` ties it to `@mcp.resource` and to URIs in client texts
 
 **v0.56.5** - `project_docs` update returns `previous_length` + `stored_length` (read back after write) and a warning on mismatch (GM-96)
 

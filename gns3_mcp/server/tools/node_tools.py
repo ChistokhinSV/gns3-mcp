@@ -359,7 +359,7 @@ def _http_error_detail(e: Exception) -> str:
                 return str(data["message"])
         except Exception:
             pass
-    return str(e)
+    return str(e) or type(e).__name__
 
 
 async def _set_single_node_impl(
@@ -822,6 +822,147 @@ async def set_node_impl(
     return result.to_json()
 
 
+# GM-98: the first time a template is used GNS3 reads (and checksums) its disk images; with
+# multi-GB images the create request takes minutes and blocks the server meanwhile.
+DEFAULT_NODE_CREATE_TIMEOUT = 180.0  # env GNS3_NODE_CREATE_TIMEOUT
+DEFAULT_NODE_CREATE_RECOVERY_WAIT = 60.0  # env GNS3_NODE_CREATE_RECOVERY_WAIT
+_LATE_NODE_POLL_INTERVAL = 5.0
+
+# Renaming these needs no stop/start
+_STATELESS_NODE_TYPES = {
+    "ethernet_switch",
+    "ethernet_hub",
+    "atm_switch",
+    "frame_relay_switch",
+    "cloud",
+    "nat",
+}
+
+
+def _env_seconds(name: str, default: float) -> float:
+    try:
+        value = float(os.getenv(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _create_may_still_finish(e: Exception) -> bool:
+    """True if we gave up on the create request but GNS3 may still complete it"""
+    if isinstance(e, httpx.ConnectTimeout | httpx.PoolTimeout):
+        return False  # never sent
+    if isinstance(e, httpx.TimeoutException):
+        return True
+    # A gateway in front of GNS3 gave up first; GNS3 itself keeps going
+    response = getattr(e, "response", None)
+    return (
+        isinstance(e, httpx.HTTPStatusError)
+        and response is not None
+        and response.status_code in (502, 504)
+    )
+
+
+async def _find_late_nodes(
+    gns3: "IGns3Client", project_id: str, template_id: str, known_ids: set, wait: float
+) -> List[Dict[str, Any]]:
+    """Poll for nodes of this template that were not there before the create request"""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + wait
+    while True:
+        try:
+            nodes = await gns3.get_nodes(project_id)
+        except Exception as e:  # server still busy - keep waiting
+            logger.debug(f"Waiting for late node, node list failed: {_http_error_detail(e)}")
+        else:
+            new = [
+                n
+                for n in nodes
+                if n.get("node_id") not in known_ids and n.get("template_id") in (template_id, None)
+            ]
+            if new:
+                return new
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            return []
+        await asyncio.sleep(min(_LATE_NODE_POLL_INTERVAL, remaining))
+
+
+def _late_create_error(
+    e: Exception,
+    template_name: str,
+    node_name: str | None,
+    x: int,
+    y: int,
+    late: List[Dict[str, Any]],
+    waited: float,
+) -> str:
+    """Create timed out and no single new node turned up"""
+    set_args = f"name='{node_name}', x={x}, y={y}" if node_name else f"x={x}, y={y}"
+    if late:
+        error = (
+            f"Creating a node from '{template_name}' timed out and {len(late)} new nodes "
+            "from that template appeared; cannot tell which one belongs to this request"
+        )
+        action = (
+            "Check node(action='list'), delete extra nodes, then name and place the one you keep "
+            f"with node(action='set', node_name='<node>', {set_args})"
+        )
+    else:
+        error = f"GNS3 has not finished creating the node from '{template_name}'"
+        action = (
+            "Do not call create again: GNS3 is most likely still working (reading large disk "
+            "images on first use) and a second create adds a second node. Wait a few minutes, "
+            "check node(action='list'), then name and place the new node with "
+            f"node(action='set', node_name='<new node>', {set_args})"
+        )
+    return create_error_response(
+        error=error,
+        error_code=ErrorCode.TIMEOUT.value,
+        details=_http_error_detail(e),
+        suggested_action=action,
+        context={
+            "template_name": template_name,
+            "node_name": node_name,
+            "x": x,
+            "y": y,
+            "waited_after_timeout_seconds": waited,
+            "new_nodes": [n.get("name") for n in late],
+        },
+    )
+
+
+async def _apply_name_and_position(
+    gns3: "IGns3Client", project_id: str, node: Dict[str, Any], fix: Dict[str, Any]
+) -> Dict[str, Any]:
+    """PUT name/x/y the template endpoint did not apply; renaming needs a stopped node"""
+    node_id = node["node_id"]
+    status = node.get("status", "stopped")
+    needs_stop = (
+        "name" in fix
+        and node.get("node_type", "") not in _STATELESS_NODE_TYPES
+        and status != "stopped"
+    )
+    if needs_stop:
+        await gns3.stop_node(project_id, node_id)
+        for _ in range(5):
+            await asyncio.sleep(1)
+            nodes = await gns3.get_nodes(project_id)
+            current = next((n for n in nodes if n["node_id"] == node_id), None)
+            if current and current["status"] == "stopped":
+                break
+
+    await gns3.update_node(project_id, node_id, fix)
+
+    if needs_stop:
+        await gns3.start_node(project_id, node_id)
+        status = "started"
+
+    node = {**node, **fix, "status": status}
+    if "name" in fix and isinstance(node.get("label"), dict):
+        node["label"] = {**node["label"], "text": fix["name"]}
+    return node
+
+
 async def create_node_impl(
     gns3: "IGns3Client",
     current_project_id: str,
@@ -862,63 +1003,66 @@ async def create_node_impl(
             )
 
         # TemplateUsage accepts only x/y/name/compute_id - overrides are applied below
-        payload = {"x": x, "y": y, "compute_id": compute_id}
-        if node_name:
-            payload["name"] = node_name.strip()  # Strip whitespace
+        requested_name = node_name.strip() if node_name else None
+        payload: Dict[str, Any] = {"x": x, "y": y, "compute_id": compute_id}
+        if requested_name:
+            payload["name"] = requested_name
 
-        result = await gns3.create_node_from_template(
-            current_project_id, template["template_id"], payload
-        )
+        # Nodes that exist now: a node of this template that appears after a timed-out
+        # create is the one we asked for (GM-98)
+        known_ids = {n["node_id"] for n in await gns3.get_nodes(current_project_id)}
+        create_timeout = _env_seconds("GNS3_NODE_CREATE_TIMEOUT", DEFAULT_NODE_CREATE_TIMEOUT)
+        warnings: List[str] = []
+        try:
+            result = await gns3.create_node_from_template(
+                current_project_id, template["template_id"], payload, timeout=create_timeout
+            )
+        except Exception as e:
+            if not _create_may_still_finish(e):
+                raise
+            wait = _env_seconds("GNS3_NODE_CREATE_RECOVERY_WAIT", DEFAULT_NODE_CREATE_RECOVERY_WAIT)
+            logger.warning(
+                f"Create from '{template_name}' got no answer within {create_timeout:g}s, "
+                f"waiting up to {wait:g}s for the node to appear"
+            )
+            late = await _find_late_nodes(
+                gns3, current_project_id, template["template_id"], known_ids, wait
+            )
+            if len(late) != 1:
+                return _late_create_error(e, template_name, node_name, x, y, late, wait)
+            result = late[0]
+            warnings.append(
+                f"GNS3 took longer than {create_timeout:g}s to create the node (busy, e.g. "
+                "reading large disk images on first use of the template); the node appeared "
+                "afterwards and was named and placed as requested"
+            )
 
-        # Workaround: If custom name was provided but API ignored it, rename the node
-        if node_name:
-            requested_name = node_name.strip()
-            actual_name = result.get("name", "")
-
-            if actual_name != requested_name:
-                # Node was created with wrong name, rename it
-                node_id = result["node_id"]
-                node_status = result.get("status", "stopped")
-                node_type = result.get("node_type", "")
-
-                # Stateless devices can be renamed without stopping
-                STATELESS_DEVICES = {
-                    "ethernet_switch",
-                    "ethernet_hub",
-                    "atm_switch",
-                    "frame_relay_switch",
-                    "cloud",
-                    "nat",
-                }
-
-                # Check if we need to stop the node first
-                needs_stop = node_type not in STATELESS_DEVICES and node_status != "stopped"
-
-                if needs_stop:
-                    # Stop node before renaming
-                    await gns3.stop_node(current_project_id, node_id)
-
-                    # Wait for node to stop
-                    for _ in range(5):
-                        await asyncio.sleep(1)
-                        nodes = await gns3.get_nodes(current_project_id)
-                        current_node = next((n for n in nodes if n["node_id"] == node_id), None)
-                        if current_node and current_node["status"] == "stopped":
-                            break
-
-                # Now rename the node
-                await gns3.update_node(current_project_id, node_id, {"name": requested_name})
-
-                # Restart if we stopped it
-                if needs_stop:
-                    await gns3.start_node(current_project_id, node_id)
-                    node_status = "started"  # Update status in result
-
-                # Update result with corrected name
-                result["name"] = requested_name
-                result["status"] = node_status
-                if "label" in result:
-                    result["label"]["text"] = requested_name
+        # The template endpoint ignores 'name' (and x/y may be missing on a late node)
+        fix: Dict[str, Any] = {}
+        if requested_name and result.get("name") != requested_name:
+            fix["name"] = requested_name
+        if "x" in result and (result.get("x"), result.get("y")) != (x, y):
+            fix.update(x=x, y=y)
+        if fix:
+            try:
+                result = await _apply_name_and_position(gns3, current_project_id, result, fix)
+            except Exception as e:
+                return create_error_response(
+                    error=(
+                        f"Node '{result.get('name')}' created, but name/position were not applied"
+                    ),
+                    error_code=ErrorCode.OPERATION_FAILED.value,
+                    details=_http_error_detail(e),
+                    suggested_action=(
+                        f"Retry with node(action='set', node_name='{result.get('name')}', ...)"
+                    ),
+                    context={
+                        "node_id": result.get("node_id"),
+                        "node_name": result.get("name"),
+                        "not_applied": fix,
+                        "warnings": warnings,
+                    },
+                )
 
         unapplied: Dict[str, Dict[str, Any]] = {}
         if properties:
@@ -968,6 +1112,8 @@ async def create_node_impl(
         }
         if properties:
             response["applied_properties"] = [k for k in properties if k not in unapplied]
+        if warnings:
+            response["warnings"] = warnings
         if unapplied:
             response["message"] = "Node created, but some properties were not applied"
             response["unapplied_properties"] = unapplied
@@ -981,14 +1127,14 @@ async def create_node_impl(
         return create_error_response(
             error=f"Failed to create node from template '{template_name}'",
             error_code=ErrorCode.OPERATION_FAILED.value,
-            details=str(e),
+            details=_http_error_detail(e),
             suggested_action="Verify template exists, GNS3 server is accessible, and position coordinates are valid",
             context={
                 "template_name": template_name,
                 "x": x,
                 "y": y,
                 "node_name": node_name,
-                "exception": str(e),
+                "exception": type(e).__name__,
             },
         )
 

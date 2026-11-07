@@ -5,6 +5,37 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.56.6] - 2026-11-07 - Slow Node Create and topology_report
+
+### Fixed
+- **`node create` reported failure for templates with big disk images, yet the node appeared**
+  (GM-98). The first use of a template makes GNS3 read its images (minutes for a 9 GB Windows
+  disk); the 30 s HTTP timeout fired, the tool answered `OPERATION_FAILED` with an empty reason,
+  and the node showed up later with the template's default name, because the rename after create
+  never ran. Now:
+  - create waits up to 180 s (`GNS3_NODE_CREATE_TIMEOUT`);
+  - after a timeout (or a 502/504 from a gateway) it keeps looking for a new node of that template
+    for up to 60 s (`GNS3_NODE_CREATE_RECOVERY_WAIT`), then names and places it and returns success
+    with a `warnings` entry;
+  - if no node turns up, the error is `TIMEOUT` and says not to create again (that adds a second
+    node) and how to name the node once it appears; two new nodes are reported, not guessed.
+- **Timeouts no longer give empty errors** in any tool: the GNS3 client re-raises httpx timeouts
+  with the call, the limit and the likely cause ("did not answer within 30s (GET /v3/...)").
+- **`query_resource("projects://<id>/topology_report")` was rejected** (GM-99) although server
+  instructions, the skill and prompts recommend it; `diagrams://<id>/topology` too. Both resources
+  existed only as MCP resources. Routing now comes from one table (`ResourceManager.ROUTES`) that
+  also feeds the `supported_patterns` hint.
+- Client texts named resource URIs that never existed (`projects://<id>/nodes/`, `/links/`,
+  `/drawings/`, `/snapshots/`, `gns3://proxy/registry`, `topology://`); they now use the real ones.
+
+### Removed
+- `ResourceManager.list_resources()`: unused, and it listed the wrong URIs above.
+
+### Tests
+- `tests/unit/test_resource_uris.py`: every `@mcp.resource` URI is routed, every route is
+  registered, and every resource URI in instructions, skill, prompts and server strings parses.
+- Node create timeout cases (late node, none, two, gateway 504, real error) and timeout messages.
+
 ## [0.56.5] - 2026-11-03 - project_docs Confirms What Was Stored
 
 ### Changed

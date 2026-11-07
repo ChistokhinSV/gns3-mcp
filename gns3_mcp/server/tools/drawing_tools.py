@@ -307,7 +307,7 @@ async def delete_drawing_impl(gns3: "IGns3Client", current_project_id: str, draw
             error=f"Failed to delete drawing '{drawing_id}'",
             error_code=ErrorCode.OPERATION_FAILED.value,
             details=str(e),
-            suggested_action="Verify drawing ID exists using list_drawings() or resource projects://{id}/drawings/",
+            suggested_action='Verify drawing ID exists with drawing(action="list")',
             context={
                 "drawing_id": drawing_id,
                 "project_id": current_project_id,

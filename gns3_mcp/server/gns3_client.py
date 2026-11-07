@@ -16,6 +16,52 @@ from interfaces import IGns3Client
 logger = logging.getLogger(__name__)
 
 
+def timeout_message(exc: httpx.TimeoutException, request: httpx.Request) -> str:
+    """Readable text for an httpx timeout (they carry an empty message)"""
+    limits = request.extensions.get("timeout") or {}
+
+    def seconds(kind: str) -> str:
+        value = limits.get(kind)
+        return f"{value:g}s" if isinstance(value, int | float) else "the timeout"
+
+    call = f"{request.method} {request.url.path}"
+    if isinstance(exc, httpx.ConnectTimeout):
+        return (
+            f"GNS3 server did not accept a connection within {seconds('connect')} ({call}); "
+            "check that it is running and reachable"
+        )
+    if isinstance(exc, httpx.PoolTimeout):
+        return (
+            f"No free connection to the GNS3 server within {seconds('pool')} ({call}); "
+            "earlier requests are still waiting for the server"
+        )
+    return (
+        f"GNS3 server did not answer within {seconds('read')} ({call}). It is probably busy, "
+        "e.g. reading or checksumming large disk images the first time a template is used; "
+        "retry in a few minutes"
+    )
+
+
+class _ExplainTimeouts(httpx.AsyncBaseTransport):
+    """Re-raise httpx timeouts with a message (GM-98)
+
+    httpx raises ReadTimeout('') and tools report str(e), so clients got an empty error
+    while GNS3 was busy. Same exception type, so `except httpx.TimeoutException` still works.
+    """
+
+    def __init__(self, inner: httpx.AsyncBaseTransport):
+        self._inner = inner
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        try:
+            return await self._inner.handle_async_request(request)
+        except httpx.TimeoutException as e:
+            raise type(e)(timeout_message(e, request), request=request) from e
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
 class GNS3Client(IGns3Client):
     """Async client for GNS3 v3 API"""
 
@@ -48,7 +94,11 @@ class GNS3Client(IGns3Client):
         self.connection_error: str | None = None
         self.last_auth_attempt: datetime | None = None
         # Support HTTPS with self-signed certificates (CWE-319 fix)
-        self.client = httpx.AsyncClient(timeout=30.0, verify=verify_ssl)
+        self.client = httpx.AsyncClient(
+            timeout=30.0,
+            verify=verify_ssl,
+            transport=_ExplainTimeouts(httpx.AsyncHTTPTransport(verify=verify_ssl)),
+        )
 
     async def authenticate(
         self, retry: bool = False, retry_interval: int = 30, max_retries: int | None = None
@@ -369,13 +419,22 @@ class GNS3Client(IGns3Client):
         return response.json()
 
     async def create_node_from_template(
-        self, project_id: str, template_id: str, payload: Dict[str, Any]
+        self,
+        project_id: str,
+        template_id: str,
+        payload: Dict[str, Any],
+        timeout: float | None = None,
     ) -> Dict[str, Any]:
-        """POST /v3/projects/{id}/templates/{template_id} - create node from template"""
+        """POST /v3/projects/{id}/templates/{template_id} - create node from template
+
+        timeout: read timeout for this request in seconds (None = client default)
+        """
+        extra: Dict[str, Any] = {} if timeout is None else {"timeout": timeout}
         response = await self.client.post(
             f"{self.base_url}/v3/projects/{project_id}/templates/{template_id}",
             headers=self._headers(),
             json=payload,
+            **extra,
         )
         response.raise_for_status()
         return response.json()

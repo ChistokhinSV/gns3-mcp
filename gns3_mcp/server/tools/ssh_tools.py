@@ -93,7 +93,7 @@ async def _resolve_proxy_url(proxy: str) -> str:
                 raise ValueError(
                     f"Proxy '{proxy}' not found in registry. "
                     f"Available proxies: {available_ids}. "
-                    f"Use gns3://proxy/registry resource to list all proxies."
+                    f'Use query_resource("proxies://") to list all proxies.'
                 )
             else:
                 raise ValueError(f"Failed to fetch proxy registry: HTTP {response.status_code}")
@@ -177,7 +177,7 @@ async def configure_ssh_impl(
     - Proxy routing: Use 'proxy' parameter to route through specific proxy
     - Default: proxy="host" routes through main proxy on GNS3 host:8022
     - Lab proxy: proxy="<proxy_id>" routes through discovered lab proxy
-    - Discovery: Use gns3://proxy/registry resource to list available proxies
+    - Discovery: query_resource("proxies://") lists available proxies
 
     Session Timeout (v0.27.0):
     - Default: 4 hours (14400 seconds)
@@ -206,7 +206,7 @@ async def configure_ssh_impl(
 
     3. For isolated networks, use lab proxy:
        # First, discover lab proxies
-       proxies = get_proxy_registry()  # gns3://proxy/registry
+       proxies = query_resource("proxies://")
 
        # Then configure SSH through lab proxy
        configure_ssh('A-CLIENT', {
@@ -235,7 +235,7 @@ async def configure_ssh_impl(
             {
                 "error": "Proxy resolution failed",
                 "details": str(e),
-                "suggestion": "Check gns3://proxy/registry for available proxies",
+                "suggestion": 'Check query_resource("proxies://") for available proxies',
             },
             indent=2,
         )

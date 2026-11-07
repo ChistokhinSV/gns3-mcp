@@ -634,7 +634,7 @@ async def get_proxy_impl(app: "IAppContext", proxy_id: str) -> str:
                     error=f"Proxy not found: {proxy_id}",
                     error_code=ErrorCode.PROXY_NOT_FOUND,
                     details="The specified proxy_id does not exist in the registry",
-                    suggested_action="Check available proxies with gns3://proxies resource",
+                    suggested_action='Check available proxies with query_resource("proxies://")',
                     context={
                         "proxy_id": proxy_id,
                         "available_proxies": [p.get("proxy_id") for p in proxies],

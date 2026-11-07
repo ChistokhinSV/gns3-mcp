@@ -117,6 +117,151 @@ class TestNodeCreateProperties:
         assert "image not found" in result["details"]
 
 
+# ===== GM-98: create from a template with big images times out =====
+
+
+def _windows_node(**overrides):
+    node = {
+        "node_id": "n-9",
+        "name": "Windows10-1",
+        "node_type": "qemu",
+        "status": "stopped",
+        "template_id": "t-win",
+        "x": 0,
+        "y": 0,
+        "label": {"text": "Windows10-1"},
+    }
+    return {**node, **overrides}
+
+
+def _gns3_slow_create(*nodes_after):
+    """POST times out; node list is empty before it and `nodes_after` on every poll"""
+    import httpx
+
+    gns3 = AsyncMock()
+    gns3.get_templates.return_value = [{"name": "Windows10", "template_id": "t-win"}]
+    gns3.create_node_from_template.side_effect = httpx.ReadTimeout("GNS3 server did not answer")
+    polls = iter([[]])
+    gns3.get_nodes.side_effect = lambda project_id: next(polls, list(nodes_after))
+    return gns3
+
+
+@pytest.fixture
+def fast_recovery(monkeypatch):
+    from tools import node_tools
+
+    monkeypatch.setattr(node_tools, "_LATE_NODE_POLL_INTERVAL", 0.01)
+    monkeypatch.setenv("GNS3_NODE_CREATE_RECOVERY_WAIT", "0.05")
+
+
+class TestNodeCreateTimeout:
+    async def _create(self, gns3):
+        return json.loads(
+            await create_node_impl(gns3, "p-1", "Windows10", -290, 210, "ADMIN-PC", "local")
+        )
+
+    @pytest.mark.asyncio
+    async def test_late_node_is_named_and_placed(self, fast_recovery):
+        gns3 = _gns3_slow_create(_windows_node())
+
+        result = await self._create(gns3)
+
+        gns3.update_node.assert_awaited_once_with(
+            "p-1", "n-9", {"name": "ADMIN-PC", "x": -290, "y": 210}
+        )
+        assert result["node"]["name"] == "ADMIN-PC"
+        assert "took longer than 180s" in result["warnings"][0]
+
+    @pytest.mark.asyncio
+    async def test_create_uses_long_timeout(self, fast_recovery, monkeypatch):
+        monkeypatch.setenv("GNS3_NODE_CREATE_TIMEOUT", "600")
+        gns3 = _gns3_slow_create(_windows_node())
+
+        await self._create(gns3)
+
+        assert gns3.create_node_from_template.call_args.kwargs["timeout"] == 600
+
+    @pytest.mark.asyncio
+    async def test_no_node_yet_says_do_not_retry(self, fast_recovery):
+        gns3 = _gns3_slow_create()
+
+        result = await self._create(gns3)
+
+        assert result["error_code"] == "TIMEOUT"
+        assert result["details"] == "GNS3 server did not answer"
+        assert "Do not call create again" in result["suggested_action"]
+        assert "name='ADMIN-PC', x=-290, y=210" in result["suggested_action"]
+        gns3.update_node.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_two_new_nodes_are_not_guessed(self, fast_recovery):
+        gns3 = _gns3_slow_create(_windows_node(), _windows_node(node_id="n-10", name="Windows10-2"))
+
+        result = await self._create(gns3)
+
+        assert result["error_code"] == "TIMEOUT"
+        assert result["context"]["new_nodes"] == ["Windows10-1", "Windows10-2"]
+        gns3.update_node.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_gateway_timeout_is_treated_as_late(self, fast_recovery):
+        import httpx
+
+        gns3 = _gns3_slow_create(_windows_node())
+        request = httpx.Request("POST", "http://gns3/v3/projects/p-1/templates/t-win")
+        gns3.create_node_from_template.side_effect = httpx.HTTPStatusError(
+            "504", request=request, response=httpx.Response(504, request=request)
+        )
+
+        result = await self._create(gns3)
+
+        assert result["node"]["name"] == "ADMIN-PC"
+
+    @pytest.mark.asyncio
+    async def test_connect_timeout_is_not_waited_for(self, fast_recovery):
+        import httpx
+
+        gns3 = _gns3_slow_create(_windows_node())
+        gns3.create_node_from_template.side_effect = httpx.ConnectTimeout("no connection")
+
+        result = await self._create(gns3)
+
+        assert result["error_code"] == "OPERATION_FAILED"
+        assert result["details"] == "no connection"
+        assert gns3.get_nodes.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_real_error_is_not_retried(self, fast_recovery):
+        import httpx
+
+        gns3 = _gns3_slow_create(_windows_node())
+        request = httpx.Request("POST", "http://gns3/v3/projects/p-1/templates/t-win")
+        gns3.create_node_from_template.side_effect = httpx.HTTPStatusError(
+            "409",
+            request=request,
+            response=httpx.Response(409, json={"message": "Image missing"}, request=request),
+        )
+
+        result = await self._create(gns3)
+
+        assert result["error_code"] == "OPERATION_FAILED"
+        assert result["details"] == "Image missing"
+        assert gns3.get_nodes.call_count == 1  # only the snapshot before the POST
+
+    @pytest.mark.asyncio
+    async def test_fast_create_places_node_only_when_needed(self):
+        gns3 = AsyncMock()
+        gns3.get_templates.return_value = [{"name": "Windows10", "template_id": "t-win"}]
+        gns3.get_nodes.return_value = []
+        gns3.create_node_from_template.return_value = _windows_node(x=-290, y=210)
+
+        result = await self._create(gns3)
+
+        # name ignored by the template endpoint -> renamed; x/y already right -> not sent
+        gns3.update_node.assert_awaited_once_with("p-1", "n-9", {"name": "ADMIN-PC"})
+        assert "warnings" not in result
+
+
 class TestNodeSetProperties:
     @pytest.mark.asyncio
     async def test_set_disk_cdrom_options_nested_for_qemu(self):

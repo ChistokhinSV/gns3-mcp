@@ -159,9 +159,16 @@ class IGns3Client(ABC):
 
     @abstractmethod
     async def create_node_from_template(
-        self, project_id: str, template_id: str, payload: Dict[str, Any]
+        self,
+        project_id: str,
+        template_id: str,
+        payload: Dict[str, Any],
+        timeout: float | None = None,
     ) -> Dict[str, Any]:
-        """POST /v3/projects/{id}/templates/{template_id} - create node from template"""
+        """POST /v3/projects/{id}/templates/{template_id} - create node from template
+
+        timeout: read timeout for this request in seconds (None = client default)
+        """
         pass
 
     # Drawing operations
@@ -465,7 +472,7 @@ class IResourceManager(ABC):
         """Parse resource URI and extract handler name and parameters
 
         Args:
-            uri: Resource URI (e.g., projects://abc123/nodes/)
+            uri: Resource URI (e.g., nodes://abc123/)
 
         Returns:
             Tuple of (handler_name, parameters_dict) or (None, None) if no match
@@ -481,15 +488,6 @@ class IResourceManager(ABC):
 
         Returns:
             JSON string with resource data or error
-        """
-        pass
-
-    @abstractmethod
-    async def list_resources(self) -> List[Dict[str, Any]]:
-        """List all available resources
-
-        Returns:
-            List of resource metadata dicts
         """
         pass
 
@@ -537,6 +535,11 @@ class IResourceManager(ABC):
     @abstractmethod
     async def get_topology_report(self, project_id: str) -> str:
         """Get unified topology report with nodes, links, and statistics"""
+        pass
+
+    @abstractmethod
+    async def get_topology_diagram(self, project_id: str) -> str:
+        """SVG topology diagram (diagrams://{project_id}/topology)"""
         pass
 
     @abstractmethod
