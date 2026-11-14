@@ -5,6 +5,31 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.58.0] - 2026-11-14 - One-Command Agent Setup and Install Page
+
+### Added
+- **`uvx gns3-mcp configure <agent>`** (GM-102): asks for the GNS3 host, port, user and password
+  (hidden), checks the login, saves the settings in `~/.gns3-mcp/.env` and registers the `gns3`
+  server with the agent. Agents: `claude` (Claude Code, through its CLI), `claude-desktop`,
+  `cursor`, `vscode` (GitHub Copilot, both harnesses; Copilot CLI too), `windsurf` (Devin
+  Desktop), `cline`, `kiro`, `opencode`, `codex`, `gemini`.
+  - Agent configs get one `gns3` entry running `uvx gns3-mcp@<version>`, no secrets. Other
+    servers and keys stay; each file gets a one-time `*.gns3-mcp-backup`; running it again
+    updates the same entry. Files with comments are never rewritten - the entry is printed.
+  - A short instructions file or marked block goes into the agent's rules (`~/.claude/rules`,
+    `AGENTS.md`, `GEMINI.md`, Kiro steering, ...); `--no-instructions` skips it.
+  - `--project` writes the project's files in the current folder; `--dry-run` shows the plan;
+    `--yes` with `--host/--port/--user` and `GNS3_PASSWORD` runs without prompts (for agents);
+    `--instructions` prints a manual setup guide for every agent.
+- **Install page** https://chistokhinsv.github.io/gns3-mcp (GitHub Pages from `site/`): short
+  intro, install steps, and `install.md` with steps an agent follows when asked to "install the
+  GNS3 MCP server from" the page.
+
+### Changed
+- README: Installation follows the feature list and starts with "let your agent install it" and
+  the configure command; per-client manual setup moved below the tool list. The stale version
+  line is a PyPI badge now.
+
 ## [0.57.0] - 2026-11-14 - Project Delete, Node Delete with Patterns
 
 ### Added

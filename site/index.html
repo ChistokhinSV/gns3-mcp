@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GNS3 MCP Server</title>
+<meta name="description" content="Let AI agents build, wire, configure and troubleshoot GNS3 network labs. One command connects Claude Code, Cursor, VS Code, Codex and other agents.">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="alternate" type="text/markdown" href="install.md" title="Install steps for AI agents">
+<style>
+  :root {
+    --bg: #fbfaf7;
+    --surface: #ffffff;
+    --text: #1d2124;
+    --muted: #5d666d;
+    --line: #e3e1dc;
+    --accent: #2f7d4f;
+    --code-bg: #f1f0ec;
+    --code-text: #1d2124;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181b;
+      --surface: #1b2024;
+      --text: #e6e8e9;
+      --muted: #9aa3a9;
+      --line: #2c3338;
+      --accent: #6cc58f;
+      --code-bg: #0f1215;
+      --code-text: #e6e8e9;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
+  header { display: flex; gap: 20px; align-items: center; margin-bottom: 8px; }
+  header img { width: 88px; height: 88px; flex: none; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0; }
+  .tagline { color: var(--muted); margin: 4px 0 0; }
+  h2 { font-size: 1.25rem; margin: 44px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 24px 0 8px; }
+  a { color: var(--accent); }
+  ul { padding-left: 1.2em; }
+  li { margin: 2px 0; }
+  code { font: 0.9em ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .cmd { position: relative; margin: 4px 0 14px; }
+  .os { margin-top: 10px; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    color: var(--code-text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 64px 12px 14px;
+    overflow-x: auto;
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  pre code { background: none; padding: 0; }
+  .copy {
+    position: absolute; top: 8px; right: 8px;
+    font: 12px system-ui, sans-serif; color: var(--muted);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+    padding: 3px 8px; cursor: pointer;
+  }
+  .copy:hover { color: var(--text); }
+  ol.steps { padding-left: 1.4em; }
+  ol.steps > li { margin-bottom: 18px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .ask {
+    background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+    border-radius: 8px; padding: 14px 80px 14px 16px; margin: 12px 0; position: relative;
+  }
+  footer { margin-top: 56px; color: var(--muted); font-size: 0.9rem; }
+  @media (max-width: 520px) {
+    header { flex-direction: column; align-items: flex-start; gap: 12px; }
+    header img { width: 64px; height: 64px; }
+    h1 { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icon.png" alt="GNS3 MCP icon: a gecko climbing a network graph">
+    <div>
+      <h1>GNS3 MCP Server</h1>
+      <p class="tagline">Let AI agents build, wire, configure and troubleshoot your GNS3 network labs.</p>
+    </div>
+  </header>
+
+  <p>An <a href="https://modelcontextprotocol.io/">MCP</a> server for GNS3 3.x. Your agent gets tools to:</p>
+  <ul>
+    <li>open and create projects, add nodes from templates, set RAM, CPUs, disks and adapters</li>
+    <li>cable nodes together and start, stop or restart them, one by one or by pattern</li>
+    <li>type into device consoles and run commands over SSH (Netmiko, 200+ device types)</li>
+    <li>read the topology, the project notes and live GNS3 events; draw and export diagrams</li>
+  </ul>
+  <p>You need a GNS3 3.x server (the GNS3 VM or gns3server) and <a href="https://docs.astral.sh/uv/getting-started/installation/">uv</a>.</p>
+
+  <h2 id="install">Install</h2>
+  <h3 id="ask-your-agent">Let your agent do it</h3>
+  <p>Paste this into Claude Code, Codex, Cursor or any other agent that can run commands:</p>
+  <div class="ask">Install the GNS3 MCP server from https://chistokhinsv.github.io/gns3-mcp</div>
+  <p>It follows the <a href="#for-agents">steps for agents</a> below, asks you for the GNS3 server details, and runs the setup. You can type the password into your own terminal instead of giving it to the agent.</p>
+
+  <h3 id="yourself">Or install it yourself</h3>
+  <ol class="steps">
+    <li>
+      <strong>Install uv</strong> if <code>uvx --version</code> does not work, then open a new terminal.
+      <div class="os">Windows</div>
+      <div class="cmd"><pre><code>powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"</code></pre></div>
+      <div class="os">macOS / Linux</div>
+      <div class="cmd"><pre><code>curl -LsSf https://astral.sh/uv/install.sh | sh</code></pre></div>
+    </li>
+    <li>
+      <strong>Connect your agent.</strong> Run this with your agent's name from the table below. It asks for the GNS3 host, port, user and password, checks the login, and sets the agent up:
+      <div class="cmd"><pre><code>uvx gns3-mcp configure claude</code></pre></div>
+      <table>
+        <tr><th>Name</th><th>Agent</th></tr>
+        <tr><td><code>claude</code></td><td>Claude Code</td></tr>
+        <tr><td><code>claude-desktop</code></td><td>Claude Desktop</td></tr>
+        <tr><td><code>cursor</code></td><td>Cursor</td></tr>
+        <tr><td><code>vscode</code></td><td>GitHub Copilot in VS Code</td></tr>
+        <tr><td><code>windsurf</code></td><td>Windsurf (Devin Desktop)</td></tr>
+        <tr><td><code>cline</code></td><td>Cline</td></tr>
+        <tr><td><code>kiro</code></td><td>Kiro</td></tr>
+        <tr><td><code>opencode</code></td><td>OpenCode</td></tr>
+        <tr><td><code>codex</code></td><td>OpenAI Codex</td></tr>
+        <tr><td><code>gemini</code></td><td>Gemini CLI</td></tr>
+      </table>
+      <p><strong>Agent not listed, or you prefer to edit the config yourself?</strong> This prints the ready-made config and instructions for every agent, with the file paths for your computer:</p>
+      <div class="cmd"><pre><code>uvx gns3-mcp configure --instructions</code></pre></div>
+    </li>
+    <li>
+      <strong>Restart the agent</strong> and ask it: <em>"List my GNS3 projects"</em>.
+    </li>
+  </ol>
+
+  <h3>What it changes</h3>
+  <ul>
+    <li><code>~/.gns3-mcp/.env</code> keeps the GNS3 settings. Agent configs hold no passwords.</li>
+    <li>The agent's MCP config gets one entry, <code>gns3</code>. Your other servers stay, and a backup of the file is kept.</li>
+    <li>The agent's rules file gets a short marked block that tells it to use the GNS3 tools. Skip it with <code>--no-instructions</code>.</li>
+  </ul>
+  <p>Useful options: <code>--project</code> writes the config into the current folder instead of the user-wide one, and <code>--dry-run</code> shows the changes first.</p>
+
+  <h2 id="other">Other ways</h2>
+  <ul>
+    <li><strong>Claude plugin</strong> for Claude Code and Cowork, which adds a lab skill too: <code>/plugin marketplace add ChistokhinSV/gns3-mcp</code>, then <code>/plugin install gns3-lab@gns3-mcp</code>.</li>
+    <li><strong>Claude Desktop extension</strong>: download <code>mcp-server.mcpb</code> from the <a href="https://github.com/ChistokhinSV/gns3-mcp/releases/latest">latest release</a> and double-click it.</li>
+    <li><strong>Shared HTTP server</strong>: <a href="https://hub.docker.com/r/chistokhinsv/gns3-mcp">Docker image</a> or Windows service; see the <a href="https://github.com/ChistokhinSV/gns3-mcp#readme">README</a>.</li>
+  </ul>
+
+  <h2 id="for-agents">Instructions for AI agents</h2>
+  <p>If you are an AI agent installing this server for the user, follow <a href="install.md">install.md</a>. In short:</p>
+  <ol>
+    <li>Pick your name from the table above, or ask the user. If you are not listed, run <code>uvx gns3-mcp configure --instructions</code> and follow the guide it prints.</li>
+    <li>Check <code>uvx --version</code>. If uv is missing, ask the user before installing it.</li>
+    <li>Ask the user for the GNS3 host, the port (80 on the GNS3 VM, 3080 for gns3server) and the username.</li>
+    <li>Ask the user to run <code>uvx gns3-mcp configure &lt;name&gt;</code> in their own terminal, which keeps the password out of the chat. If they ask you to run it, pass the password only in the <code>GNS3_PASSWORD</code> environment variable, add <code>--host --port --user --yes</code>, and never repeat the password.</li>
+    <li>Check that the output says <code>login check: OK</code>, then tell the user to restart the agent.</li>
+  </ol>
+
+  <footer>
+    <a href="https://github.com/ChistokhinSV/gns3-mcp">GitHub</a> ·
+    <a href="https://pypi.org/project/gns3-mcp/">PyPI</a> ·
+    <a href="https://hub.docker.com/r/chistokhinsv/gns3-mcp">Docker Hub</a> ·
+    <a href="https://github.com/ChistokhinSV/gns3-mcp/blob/master/CHANGELOG.md">Changelog</a> ·
+    MIT license
+  </footer>
+</main>
+<script>
+  for (const box of document.querySelectorAll('.cmd, .ask')) {
+    const text = (box.querySelector('code') || box).innerText;
+    const button = document.createElement('button');
+    button.className = 'copy';
+    button.type = 'button';
+    button.textContent = 'Copy';
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = 'Copied';
+      } catch {
+        button.textContent = 'Select and copy';
+      }
+      setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+    });
+    box.appendChild(button);
+  }
+</script>
+</body>
+</html>

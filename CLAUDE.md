@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.57.0 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.58.0 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.57.0 - project delete, node delete with patterns (both dry run unless confirm=True)
+**Latest Release:** v0.58.0 - `uvx gns3-mcp configure <agent>`, install page on GitHub Pages
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.57.0)
+### Recent Changes (v0.26.0 - v0.58.0)
+
+**v0.58.0** - `gns3_mcp/configure.py` (GM-102): `gns3-mcp configure <agent>` (dispatched from cli.py) for 10 agents; settings in `~/.gns3-mcp/.env`, one `gns3` entry per agent MCP file (managed keys only, one-time `*.gns3-mcp-backup`, JSONC read but never rewritten when it has comments), rules file/marked block, `--project/--dry-run/--yes/--instructions`. Agent paths table = `AGENTS` (checked 2026-11-14 + Ansible Studio's tested table). `site/` (index.html + install.md for agents) deployed by `.github/workflows/pages.yml` to https://chistokhinsv.github.io/gns3-mcp; `site/icon.png` copied by the workflow (gitignored). README: install first
 
 **v0.57.0** - `project(action="delete", name=, confirm=)` (GM-101): exact name only, dry run (id/status/path/node_count) unless `confirm=True`, clears current project if deleted. `node delete` resolves names like `set` (GM-100): pattern without `confirm=True` = dry run returning `matched_nodes`; JSON array deletes at once (unknown names skipped); batch result per node. Exact-name node delete unchanged. Rule: destructive bulk/irreversible actions take `confirm`, default is a dry run
 

@@ -79,6 +79,14 @@ def test_instructions():
     assert _stale_calls((SERVER / "instructions.md").read_text(encoding="utf-8")) == []
 
 
+def test_agent_instructions_written_by_configure():
+    """The rules block `gns3-mcp configure` puts in agents' rules files (GM-102)"""
+    from gns3_mcp.configure import INSTRUCTIONS
+
+    assert _stale_calls(INSTRUCTIONS) == []
+    assert 'project(action="list")' in INSTRUCTIONS
+
+
 DEVICE_TYPES = ("cisco_ios", "linux", "mikrotik_routeros", "juniper_junos", "arista_eos", "other")
 
 PROMPT_CASES = (

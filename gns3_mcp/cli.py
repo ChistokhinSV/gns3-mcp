@@ -58,13 +58,23 @@ def main():
 
     Loads configuration from .env file and command-line arguments,
     then starts the MCP server with the specified transport mode.
+    `gns3-mcp configure ...` registers the server with an AI agent instead (GM-102).
     """
+    if len(sys.argv) > 1 and sys.argv[1] == "configure":
+        from gns3_mcp.configure import main as configure_main
+
+        configure_main(sys.argv[2:])
+        return
+
     # Parse arguments first to get optional --env-file
     parser = argparse.ArgumentParser(
         description="GNS3 MCP Server - Network lab automation with AI agent integration",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Register with an AI agent (asks for the GNS3 settings): see `gns3-mcp configure --help`
+  gns3-mcp configure claude
+
   # STDIO mode (default, for Claude Desktop/Code)
   gns3-mcp
 

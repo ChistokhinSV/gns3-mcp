@@ -73,3 +73,6 @@ GNS3-MCP-HTTP.xml
 DOWNLOAD_TEMP/
 DOWNLOAD_TEMP*/
 
+
+# GitHub Pages: copied from plugin/assets by .github/workflows/pages.yml
+site/icon.png

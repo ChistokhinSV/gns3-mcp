@@ -4,10 +4,11 @@
 
 Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS3 projects, nodes, and device consoles through Claude Desktop or any MCP-compatible client.
 
-**Version**: 0.56.5 · Requires GNS3 server v3.x (v3 API) · See [CHANGELOG.md](CHANGELOG.md)
+[![PyPI](https://img.shields.io/pypi/v/gns3-mcp)](https://pypi.org/project/gns3-mcp/) · Requires GNS3 server v3.x (v3 API) · [Install page](https://chistokhinsv.github.io/gns3-mcp) · [CHANGELOG.md](CHANGELOG.md)
 
 ## Features
 
+- **One-command setup**: `uvx gns3-mcp configure <agent>` for Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Cline, Kiro, OpenCode, Codex and Gemini CLI - or ask your agent to install it from the [install page](https://chistokhinsv.github.io/gns3-mcp)
 - **Claude plugin**: one install for Claude Code and Cowork - the server plus a skill with lab workflows
 - **15 Tools**: CRUD-style tools with an `action` parameter (`project(action="open")`, `node(action="create")`, ...)
 - **25 Resources**: Read-only data (projects, nodes, links, templates, sessions, proxies, topology report)
@@ -23,7 +24,94 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
 - **Tool Discovery**: `search_tools()` with category/capability/resource filtering; `query_resource()` reads any resource from clients without resource support
 - **Security**: required API key on every HTTP/SSE entry point (`/health` open for probes), service privilege isolation, HTTPS to GNS3
 
-### Tools
+## Installation
+
+Needs a GNS3 3.x server and [uv](https://docs.astral.sh/uv/getting-started/installation/). Step-by-step page: **https://chistokhinsv.github.io/gns3-mcp**
+
+### Let your agent install it
+
+Paste this into Claude Code, Codex, Cursor or any agent that can run commands:
+
+> Install the GNS3 MCP server from https://chistokhinsv.github.io/gns3-mcp
+
+The agent follows the [install steps for agents](https://chistokhinsv.github.io/gns3-mcp/install.md), asks you for the GNS3 server details and runs `configure`. You can type the password into your own terminal instead of giving it to the agent.
+
+### Or run one command yourself
+
+```bash
+uvx gns3-mcp configure claude
+```
+
+Use your agent's name: `claude` (Claude Code), `claude-desktop`, `cursor`, `vscode` (GitHub Copilot), `windsurf` (Devin Desktop), `cline`, `kiro`, `opencode`, `codex` or `gemini`. The command:
+
+- asks for the GNS3 host, port, user and password and checks the login;
+- saves them in `~/.gns3-mcp/.env`, so agent configs hold no passwords;
+- adds the `gns3` server to the agent's MCP config (other servers stay; a backup of each file is kept);
+- adds a short instructions file or block to the agent's rules, telling it to use the GNS3 tools.
+
+Restart the agent afterwards and ask it to list your GNS3 projects. Running it again updates the same entries.
+
+**Agent not listed, or you prefer to edit the config yourself?** This prints the ready-made config and instructions for every agent, with the file paths for your computer:
+
+```bash
+uvx gns3-mcp configure --instructions
+```
+
+| Option | Effect |
+|---|---|
+| `--project` | write the project's config files in the current folder instead of the user-wide config |
+| `--dry-run` | show what would change, write nothing |
+| `--yes` | no prompts: `--host`, `--port`, `--user`, and `GNS3_PASSWORD` from the environment |
+| `--no-instructions` | leave the agent's rules alone |
+
+### Other ways
+
+| You use | Install | Platforms |
+|---|---|---|
+| Claude Code or Cowork, with the lab skill | [Claude plugin](#claude-plugin-claude-code-and-cowork) | Windows, macOS, Linux (needs uv) |
+| Claude Desktop, without a terminal | [`.mcpb` extension](#claude-desktop-mcpb) - double-click | Windows, macOS |
+| Your own config files or `pip install` | [Manual setup](#manual-setup) | Windows, macOS, Linux |
+| A shared HTTP server | [Docker](#docker-deployment) or the [Windows service](#advanced-setup) | any |
+
+### Claude plugin (Claude Code and Cowork)
+
+The plugin installs the `gns3` MCP server (started locally with `uvx`) together with the `gns3-lab-automation` skill, which teaches Claude the lab workflows. Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) on `PATH`.
+
+```bash
+# In Claude Code
+/plugin marketplace add ChistokhinSV/gns3-mcp
+/plugin install gns3-lab@gns3-mcp
+```
+
+- **Claude Code** asks for GNS3 host, port, username and password when the plugin is enabled (the password goes to the system credential store).
+- **Cowork** (desktop app): **Customize > Plugins > Add > Add marketplace** → `ChistokhinSV/gns3-mcp`, add **GNS3 Lab**. Cowork does not ask for settings, so put them in `~/.gns3-mcp/.env`:
+  ```bash
+  GNS3_HOST=192.168.1.20
+  GNS3_PORT=80
+  GNS3_USER=admin
+  GNS3_PASSWORD=your-password
+  ```
+- Chat on claude.ai doesn't start local servers - on Claude Desktop use the `.mcpb` below.
+
+Empty plugin settings fall back to environment variables, then `./.env`, then `~/.gns3-mcp/.env` (or `GNS3_MCP_ENV_FILE`). Details: [plugin/README.md](plugin/README.md).
+
+### Claude Desktop (.mcpb)
+
+The `.mcpb` is an [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) (manifest 0.4, uv runtime): it holds only the source, and Claude Desktop installs the Python dependencies with its own uv on first start (allow ~30 s). Windows and macOS.
+
+1. Download `mcp-server.mcpb` from [Releases](https://github.com/ChistokhinSV/gns3-mcp/releases), or build it: `just build` (creates `mcp-server\mcp-server.mcpb`)
+2. **Install**: double-click it, drag it into Claude Desktop, or **Settings > Extensions > Advanced settings > Install Extension…**
+3. **Enter credentials** when the installer asks: GNS3 host, GNS3 port, username, password.
+   Change them later in Settings > Extensions > GNS3 Lab Controller. The password is passed to the server as an environment variable, never on the command line.
+4. **Check logs** if issues occur:
+   ```
+   Windows: %APPDATA%\Claude\logs\mcp-server-GNS3 Lab Controller.log
+   macOS:   ~/Library/Logs/Claude/mcp-server-GNS3 Lab Controller.log
+   ```
+
+> The Claude directory no longer lists `.mcpb` extensions; install from the file. For Claude Code and Cowork use the plugin instead.
+
+## Tools
 
 | Tool | Actions / purpose |
 |------|-------------------|
@@ -57,38 +145,11 @@ console(operations=[{"type": "send_and_wait", "node_name": "ops1",
                      "wait_pattern": "login:", "timeout": 180}])  # wait-only, sends nothing
 ```
 
-## Installation
+## Manual setup
 
-| You use | Install | Platforms |
-|---|---|---|
-| Claude Code or Cowork | [Claude plugin](#claude-plugin-claude-code-and-cowork) - server + skill, one install | Windows, macOS, Linux (needs uv) |
-| Claude Desktop chat | [`.mcpb` extension](#claude-desktop-mcpb) - double-click | Windows, macOS |
-| Claude Code without the plugin, Cursor, Windsurf | `uvx gns3-mcp` / `pip install gns3-mcp` (below) | Windows, macOS, Linux |
-| A shared HTTP server | [Docker](#docker-deployment) or the [Windows service](#advanced-setup) | any |
+`uvx gns3-mcp configure --instructions` prints these steps with the paths for your computer. The sections below show them per client.
 
-### Claude plugin (Claude Code and Cowork)
-
-The plugin installs the `gns3` MCP server (started locally with `uvx`) together with the `gns3-lab-automation` skill, which teaches Claude the lab workflows. Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) on `PATH`.
-
-```bash
-# In Claude Code
-/plugin marketplace add ChistokhinSV/gns3-mcp
-/plugin install gns3-lab@gns3-mcp
-```
-
-- **Claude Code** asks for GNS3 host, port, username and password when the plugin is enabled (the password goes to the system credential store).
-- **Cowork** (desktop app): **Customize > Plugins > Add > Add marketplace** → `ChistokhinSV/gns3-mcp`, add **GNS3 Lab**. Cowork does not ask for settings, so put them in `~/.gns3-mcp/.env`:
-  ```bash
-  GNS3_HOST=192.168.1.20
-  GNS3_PORT=80
-  GNS3_USER=admin
-  GNS3_PASSWORD=your-password
-  ```
-- Chat on claude.ai doesn't start local servers - on Claude Desktop use the `.mcpb` below.
-
-Empty plugin settings fall back to environment variables, then `./.env`, then `~/.gns3-mcp/.env` (or `GNS3_MCP_ENV_FILE`). Details: [plugin/README.md](plugin/README.md).
-
-### Quick Start (Claude Code without the plugin)
+### Claude Code without the plugin
 
 **Prerequisites:**
 - GNS3 server running and accessible
@@ -200,22 +261,6 @@ claude mcp get gns3-mcp
 | `GNS3_PASSWORD` | Yes | GNS3 password | `your-password` |
 
 </details>
-
-### Claude Desktop (.mcpb)
-
-The `.mcpb` is an [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) (manifest 0.4, uv runtime): it holds only the source, and Claude Desktop installs the Python dependencies with its own uv on first start (allow ~30 s). Windows and macOS.
-
-1. Download `mcp-server.mcpb` from [Releases](https://github.com/ChistokhinSV/gns3-mcp/releases), or build it: `just build` (creates `mcp-server\mcp-server.mcpb`)
-2. **Install**: double-click it, drag it into Claude Desktop, or **Settings > Extensions > Advanced settings > Install Extension…**
-3. **Enter credentials** when the installer asks: GNS3 host, GNS3 port, username, password.
-   Change them later in Settings > Extensions > GNS3 Lab Controller. The password is passed to the server as an environment variable, never on the command line.
-4. **Check logs** if issues occur:
-   ```
-   Windows: %APPDATA%\Claude\logs\mcp-server-GNS3 Lab Controller.log
-   macOS:   ~/Library/Logs/Claude/mcp-server-GNS3 Lab Controller.log
-   ```
-
-> The Claude directory no longer lists `.mcpb` extensions; install from the file. For Claude Code and Cowork use the plugin instead.
 
 <details>
 <summary><b>Cursor & Windsurf (JSON Configuration)</b></summary>
