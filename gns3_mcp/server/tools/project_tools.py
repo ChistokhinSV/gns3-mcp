@@ -272,7 +272,10 @@ async def delete_project_impl(
     try:
         await gns3.delete_project(project_id)
     except Exception as e:
-        return _delete_error(name, e, ErrorCode.OPERATION_FAILED.value, project_id), None
+        error = _delete_error(
+            name, e, ErrorCode.OPERATION_FAILED.value, project_id, project.get("path")
+        )
+        return error, None
 
     result = {
         "message": f"Project '{name}' deleted",
@@ -282,11 +285,43 @@ async def delete_project_impl(
     return json.dumps(result, indent=2), project_id
 
 
-def _delete_error(name: str, e: Exception, error_code: str, project_id: str | None = None) -> str:
+# GM-104: deleting a project fails with "[Errno 13] Permission denied" on GNS3 3.0.x / 2.2.x when
+# - a deleted node's folder was left at mode 0200 (its deletion raced a checksum write;
+#   gns3-server PR #2876), or
+# - Docker containers left root-owned files in their node folders (issue #2764, PR #2874).
+# Both are fixed in GNS3 3.1. The MCP has no file access on the GNS3 server, so it says how:
+# give everything back to the project folder's owner, then add the owner's missing permissions.
+# `chown -R` does not follow symbolic links (coreutils forces -P), so container links that point
+# at absolute paths cannot reach files outside the project.
+_PERMISSION_DENIED = ("permission denied", "errno 13")
+
+
+def _delete_error(
+    name: str,
+    e: Exception,
+    error_code: str,
+    project_id: str | None = None,
+    project_path: str | None = None,
+) -> str:
+    details = _http_error_detail(e)
+    context: dict[str, str | None] = {"project_name": name, "project_id": project_id}
+    suggested = "Check that GNS3 is reachable and see its server log"
+    if any(marker in details.lower() for marker in _PERMISSION_DENIED):
+        target = f"'{project_path}'" if project_path else "<project directory from details>"
+        fix = f"sudo chown -Rh --reference={target} {target} && sudo chmod -R u+rwX {target}"
+        context["fix_command"] = fix
+        suggested = (
+            "GNS3 cannot remove something inside the project folder. GNS3 3.0.x and 2.2.x leave "
+            "a deleted node's folder at mode 0200 (gns3-server PR #2876), and Docker nodes leave "
+            "root-owned files (PR #2874); both are fixed in GNS3 3.1. On the GNS3 server run "
+            f"`{fix}` to give everything back to the project folder's owner, then delete the "
+            "project again. GNS3 stops at the first such file: files before it may already be "
+            "gone, and the project stays listed until a delete succeeds."
+        )
     return create_error_response(
         error=f"Failed to delete project '{name}'",
         error_code=error_code,
-        details=_http_error_detail(e),
-        suggested_action="Check that GNS3 is reachable and see its server log",
-        context={"project_name": name, "project_id": project_id},
+        details=details,
+        suggested_action=suggested,
+        context=context,
     )

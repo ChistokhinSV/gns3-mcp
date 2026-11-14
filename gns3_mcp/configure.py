@@ -797,13 +797,29 @@ def save_settings(path: Path, settings: Settings) -> None:
 # ---------------------------------------------------------------------------------------------
 
 
-def manual_guide(env: Env) -> str:
+def manual_guide(env: Env, settings_done: str | None = None) -> str:
+    """The manual setup guide; `settings_done` replaces step 1 when configure saved them"""
     launch = Launch("uvx", (f"{PACKAGE}@{__version__}",))
     fence = "```"
 
     def rel(path: Path) -> str:
         return path.relative_to(env.cwd).as_posix()
 
+    settings = (
+        [settings_done, ""]
+        if settings_done
+        else [
+            "Put them in `~/.gns3-mcp/.env`; the server reads it, so agent configs need no secrets:",
+            "",
+            f"{fence}ini",
+            "GNS3_HOST=192.168.1.20",
+            "GNS3_PORT=80",
+            "GNS3_USER=admin",
+            "GNS3_PASSWORD=your-password",
+            fence,
+            "",
+        ]
+    )
     lines = [
         "# GNS3 MCP server: manual setup",
         "",
@@ -812,15 +828,7 @@ def manual_guide(env: Env) -> str:
         "",
         "## 1. GNS3 settings",
         "",
-        "Put them in `~/.gns3-mcp/.env`; the server reads it, so agent configs need no secrets:",
-        "",
-        f"{fence}ini",
-        "GNS3_HOST=192.168.1.20",
-        "GNS3_PORT=80",
-        "GNS3_USER=admin",
-        "GNS3_PASSWORD=your-password",
-        fence,
-        "",
+        *settings,
         "## 2. Register the server",
         "",
         "A stdio MCP server named `gns3` started with `uvx gns3-mcp@<version>`. Most agents take:",
@@ -888,11 +896,14 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Agents: {", ".join(AGENTS)}
+        {MANUAL} (99 in the list): any other agent - saves the settings, prints the guide
 
 Examples:
+  uvx gns3-mcp configure                        # pick the agent from a list
   uvx gns3-mcp configure claude                 # asks for host, port, user, password
   uvx gns3-mcp configure cursor codex --project # project files in the current folder
-  uvx gns3-mcp configure --instructions         # manual setup guide for every agent
+  uvx gns3-mcp configure manual                 # settings + manual guide for other agents
+  uvx gns3-mcp configure --instructions         # only the manual guide, no questions
   GNS3_PASSWORD=... uvx gns3-mcp configure claude --host 192.168.1.20 --yes
 
 Settings go to ~/.gns3-mcp/.env (GNS3_MCP_ENV_FILE to change); agent configs hold no secrets.
@@ -936,12 +947,22 @@ def _ask(label: str, default: str) -> str:
     return input(f"{label}{shown}: ").strip()
 
 
+# Not an agent: saves the settings like the others, then prints the manual setup guide
+MANUAL = "manual"
+MANUAL_NUMBER = 99
+
+
 def _pick_agent() -> list[str]:
     keys = list(AGENTS)
     print("Which agent?")
     for i, key in enumerate(keys, 1):
         print(f"  {i:2}. {key:15} {AGENTS[key].title}")
+    print(
+        f"  {MANUAL_NUMBER:2}. {MANUAL:15} Manual installation: any other agent (prints the setup guide)"
+    )
     answer = input("Number or name: ").strip()
+    if answer == str(MANUAL_NUMBER):
+        return [MANUAL]
     if answer.isdigit() and 1 <= int(answer) <= len(keys):
         return [keys[int(answer) - 1]]
     return [answer]
@@ -996,12 +1017,13 @@ def _configure(args: argparse.Namespace, env: Env, written: list[str]) -> int:
     interactive = not args.yes and sys.stdin.isatty()
     agents = args.agents or (_pick_agent() if interactive else [])
     agents = [ALIASES.get(a, a) for a in agents]
+    known = [*AGENTS, MANUAL]
     if not agents:
-        print(f"Name an agent: {', '.join(AGENTS)} (or --instructions)", file=sys.stderr)
+        print(f"Name an agent: {', '.join(known)} (or --instructions)", file=sys.stderr)
         return 2
-    unknown = [a for a in agents if a not in AGENTS]
+    unknown = [a for a in agents if a not in known]
     if unknown:
-        print(f"Unknown agent {', '.join(unknown)}; known: {', '.join(AGENTS)}", file=sys.stderr)
+        print(f"Unknown agent {', '.join(unknown)}; known: {', '.join(known)}", file=sys.stderr)
         return 2
 
     from dotenv import dotenv_values
@@ -1041,6 +1063,11 @@ def _configure(args: argparse.Namespace, env: Env, written: list[str]) -> int:
 
     failed = False
     for key in agents:
+        if key == MANUAL:
+            done = "would save" if args.dry_run else "saved"
+            print()
+            print(manual_guide(env, f"Done: `gns3-mcp configure` {done} them in `{env_file}`."))
+            continue
         agent = AGENTS[key]
         print(f"{agent.title} ({'project ' + str(env.cwd) if args.project else 'user-wide'})")
         for step in plan_agent(agent, env, args.project, not args.no_instructions):

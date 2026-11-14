@@ -313,6 +313,59 @@ class TestRun:
         assert "[mcp_servers.gns3]" in guide
 
 
+class TestManual:
+    @pytest.fixture
+    def setup(self, env, monkeypatch, tmp_path):
+        env_file = tmp_path / "gns3.env"
+        monkeypatch.setenv("GNS3_MCP_ENV_FILE", str(env_file))
+        monkeypatch.setenv("GNS3_PASSWORD", "pw")
+        monkeypatch.setattr(configure.shutil, "which", lambda name: None)
+        return env, env_file
+
+    def test_manual_saves_settings_then_prints_the_guide(self, setup, capsys):
+        env, env_file = setup
+
+        assert configure.run(["manual", "--host", "h", "--yes", "--skip-check"], env) == 0
+
+        out = capsys.readouterr().out
+        assert "GNS3_HOST='h'" in env_file.read_text()
+        assert "# GNS3 MCP server: manual setup" in out
+        assert f"saved them in `{env_file}`" in out
+        assert "GNS3_PASSWORD=your-password" not in out  # step 1 is done, not a template
+        assert not (env.home / ".gemini").exists()  # no agent config written
+
+    def test_manual_dry_run_saves_nothing(self, setup, capsys):
+        env, env_file = setup
+
+        argv = ["manual", "--host", "h", "--yes", "--skip-check", "--dry-run"]
+        assert configure.run(argv, env) == 0
+
+        assert not env_file.exists()
+        assert "would save them in" in capsys.readouterr().out
+
+    def test_picker_offers_99_for_manual(self, monkeypatch, capsys):
+        monkeypatch.setattr("builtins.input", lambda prompt: "99")
+
+        assert configure._pick_agent() == ["manual"]
+        assert "99. manual" in capsys.readouterr().out
+
+    def test_picker_numbers_and_names(self, monkeypatch):
+        answers = iter(["1", "codex"])
+        monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+
+        assert configure._pick_agent() == [list(AGENTS)[0]]
+        assert configure._pick_agent() == ["codex"]
+
+    def test_unknown_agent_message_lists_manual(self, setup, capsys):
+        env, _ = setup
+        assert configure.run(["notepad", "--yes"], env) == 2
+        assert "manual" in capsys.readouterr().err
+
+    def test_instructions_flag_still_prints_only_the_template(self, env, capsys):
+        assert configure.run(["--instructions"], env) == 0
+        assert "GNS3_PASSWORD=your-password" in capsys.readouterr().out
+
+
 class _Tty:
     """stdin that looks like a terminal, so run() prompts"""
 

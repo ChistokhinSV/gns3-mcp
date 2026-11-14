@@ -42,7 +42,7 @@ The agent follows the [install steps for agents](https://chistokhinsv.github.io/
 uvx gns3-mcp configure claude
 ```
 
-Use your agent's name: `claude` (Claude Code), `claude-desktop`, `cursor`, `vscode` (GitHub Copilot), `windsurf` (Devin Desktop), `cline`, `kiro`, `opencode`, `codex` or `gemini`. The command:
+Use your agent's name: `claude` (Claude Code), `claude-desktop`, `cursor`, `vscode` (GitHub Copilot), `windsurf` (Devin Desktop), `cline`, `kiro`, `opencode`, `codex` or `gemini`. Without a name it shows a numbered list; `99` (`manual`) is for any other agent: it saves the settings and prints the setup guide. The command:
 
 - asks for the GNS3 host, port, user and password and checks the login;
 - saves them in `~/.gns3-mcp/.env`, so agent configs hold no passwords;

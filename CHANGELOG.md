@@ -5,6 +5,24 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.59.0] - 2026-11-14 - Manual Installation in configure
+
+### Added
+- **`99. manual` in the `gns3-mcp configure` agent list** (GM-105), also `configure manual`: for
+  agents not in the list. It asks and checks the GNS3 settings and saves them in
+  `~/.gns3-mcp/.env` like for any agent, then prints the manual setup guide with step 1 marked
+  done. `--instructions` still prints the guide alone, without questions.
+
+### Fixed
+- **`project delete` failing with "Permission denied" now says why and how to fix it** (GM-104).
+  Two GNS3 bugs (3.0.x and 2.2.x; fixed in GNS3 3.1) leave files that GNS3 itself cannot remove:
+  a deleted node's folder at mode 0200 (its deletion races a checksum write; gns3-server PR
+  #2876) and root-owned files in Docker node folders (PR #2874). The error now explains this and
+  carries `context.fix_command`, a command to run on the GNS3 server that gives the project's
+  files back to their owner (`sudo chown -Rh --reference=<dir> <dir> && sudo chmod -R u+rwX
+  <dir>`), after which the delete succeeds. The MCP cannot do it itself: it has no file access on
+  the GNS3 server. Other delete errors keep the generic hint.
+
 ## [0.58.1] - 2026-11-14 - Cancel configure Cleanly
 
 ### Fixed

@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.58.1 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.59.0 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.58.1 - configure: Ctrl-C cancels cleanly
+**Latest Release:** v0.59.0 - configure: `99. manual` for agents not in the list; project delete explains GNS3 permission bugs
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.58.1)
+### Recent Changes (v0.26.0 - v0.59.0)
+
+**v0.59.0** - `configure` picker `99. manual` / `configure manual` (GM-105): `MANUAL` pseudo-agent saves settings like any agent, then prints `manual_guide(env, settings_done=...)` with step 1 done; `--instructions` unchanged (print-only). `project delete` "Permission denied" (GM-104): GNS3 3.0.x bugs (0200 node folders, PR #2876; root-owned Docker files, PR #2874; both fixed in 3.1) explained, `context.fix_command` = `chown -Rh --reference` + `chmod -R u+rwX` on the project dir (`_delete_error` in project_tools.py)
 
 **v0.58.1** - `configure.run()` catches KeyboardInterrupt/EOFError (GM-103): "Cancelled; nothing was written." or the files already written, exit 130; Windows late KeyboardInterrupt after EOFError absorbed (`_absorb_late_interrupt`); `_write_text` removes its tmp file in `finally`
 

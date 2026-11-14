@@ -500,7 +500,31 @@ class TestProjectDelete:
         result, deleted = await delete_project_impl(gns3, "lab", confirm=True)
 
         assert json.loads(result)["details"] == "Project is locked"
+        assert "chmod" not in json.loads(result)["suggested_action"]
         assert deleted is None
+
+    @pytest.mark.asyncio
+    async def test_permission_denied_explains_the_gns3_bug_and_the_fix(self):
+        """GM-104: a node folder left at mode 0200 by GNS3 3.0.x blocks project delete"""
+        gns3 = _projects_gns3(_LAB)
+        response = MagicMock()
+        response.json.return_value = {
+            "message": "Cannot delete project directory /opt/gns3/projects/p: "
+            "[Errno 13] Permission denied: '7c5d8c1f'"
+        }
+        error = RuntimeError("Server error '500 Internal Server Error'")
+        error.response = response
+        gns3.delete_project.side_effect = error
+
+        result = json.loads((await delete_project_impl(gns3, "lab", confirm=True))[0])
+
+        path = "'/opt/gns3/projects/p'"
+        fix = f"sudo chown -Rh --reference={path} {path} && sudo chmod -R u+rwX {path}"
+        assert result["context"]["fix_command"] == fix
+        assert fix in result["suggested_action"]
+        assert "PR #2876" in result["suggested_action"]  # 0200 node folders
+        assert "PR #2874" in result["suggested_action"]  # root-owned Docker files
+        assert "Permission denied" in result["details"]
 
 
 # ===== GM-88: link batch port names =====
