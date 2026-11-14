@@ -4,10 +4,10 @@
       "command": "uv",
       "args": ["run", "--locked", "--project", "${CLAUDE_PLUGIN_ROOT}", "gns3-mcp"],
       "env": {
-        "GNS3_HOST": "${user_config.gns3_host}",
-        "GNS3_PORT": "${user_config.gns3_port}",
-        "GNS3_USER": "${user_config.gns3_user}",
-        "GNS3_PASSWORD": "${user_config.gns3_password}"
+        "CLAUDE_PLUGIN_OPTION_GNS3_HOST": "${user_config.gns3_host}",
+        "CLAUDE_PLUGIN_OPTION_GNS3_PORT": "${user_config.gns3_port}",
+        "CLAUDE_PLUGIN_OPTION_GNS3_USER": "${user_config.gns3_user}",
+        "CLAUDE_PLUGIN_OPTION_GNS3_PASSWORD": "${user_config.gns3_password}"
       }
     }
   }

@@ -5,6 +5,15 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.59.4] - 2026-11-14 - Plugin Option Env Names
+
+### Changed
+- **The plugin hands its settings to the server as `CLAUDE_PLUGIN_OPTION_GNS3_*`** (GM-107),
+  the env names Anthropic's plugin directory accepts (it flagged `GNS3_*` in `.mcp.json`).
+  The server reads them since 0.59.3. Side effect: a `GNS3_*` value from your shell is no
+  longer blanked by an empty plugin field - empty fields now fall back to the shell, then
+  `./.env`, then `~/.gns3-mcp/.env`, as the plugin README always said.
+
 ## [0.59.3] - 2026-11-14 - Server Reads Plugin Options
 
 ### Added

@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.59.3 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.59.4 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.59.3 - server reads `CLAUDE_PLUGIN_OPTION_GNS3_*` (plugin option env names)
+**Latest Release:** v0.59.4 - plugin passes settings as `CLAUDE_PLUGIN_OPTION_GNS3_*` (directory env names)
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.59.3)
+### Recent Changes (v0.26.0 - v0.59.4)
+
+**v0.59.4** - `plugin/.mcp.json` env = `CLAUDE_PLUGIN_OPTION_GNS3_*` (GM-107; test_packaging enforces `CLAUDE_PLUGIN_OPTION_<KEY>` for every `${user_config.KEY}`). MCPB manifest keeps `GNS3_*`
 
 **v0.59.3** - `cli.load_config_env` maps `CLAUDE_PLUGIN_OPTION_GNS3_{HOST,PORT,USER,PASSWORD}` -> `GNS3_*` (non-empty wins over inherited env, empty dropped) (GM-107). Plugin `.mcp.json` switches to those names in 0.59.4, after CI locked the plugin to 0.59.3 (two-step so the plugin never passes names its locked server ignores)
 

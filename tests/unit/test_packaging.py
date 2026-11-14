@@ -167,6 +167,12 @@ def test_plugin_runs_matching_server_version():
     # Cowork ignores a server whose referenced options have no default
     for name in re.findall(r"\$\{user_config\.(\w+)\}", mcp):
         assert "default" in plugin["userConfig"][name], name
+    # GM-107: the directory accepts only CLAUDE_PLUGIN_OPTION_<KEY> names for options, and the
+    # server maps them to GNS3_* (cli.load_config_env)
+    env = json.loads(mcp)["mcpServers"]["gns3"]["env"]
+    for name, value in env.items():
+        key = re.fullmatch(r"\$\{user_config\.(\w+)\}", value).group(1)
+        assert name == f"CLAUDE_PLUGIN_OPTION_{key.upper()}", name
 
 
 def test_plugin_server_is_locked_for_the_directory():
