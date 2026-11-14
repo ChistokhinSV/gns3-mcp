@@ -154,7 +154,8 @@ def test_plugin_server_is_locked_for_the_directory():
     plugin = json.loads((plugin_dir / ".claude-plugin" / "plugin.json").read_text())
     server = json.loads((plugin_dir / ".mcp.json").read_text())["mcpServers"]["gns3"]
     project = tomllib.loads((plugin_dir / "pyproject.toml").read_text(encoding="utf-8"))
-    lock = (plugin_dir / "uv.lock").read_text(encoding="utf-8")
+    # Windows checkouts can turn the lock's line endings into CRLF
+    lock = (plugin_dir / "uv.lock").read_text(encoding="utf-8").replace("\r\n", "\n")
 
     assert server["command"] == "uv"
     assert server["args"] == ["run", "--locked", "--project", "${CLAUDE_PLUGIN_ROOT}", "gns3-mcp"]

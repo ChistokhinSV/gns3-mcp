@@ -86,7 +86,9 @@ def plugin_problems():
         problems.append("plugin/pyproject.toml version differs from plugin.json")
     if get_plugin_server_pin() != version:
         problems.append("plugin/pyproject.toml gns3-mcp pin differs from plugin.json")
-    if f'name = "gns3-mcp"\nversion = "{version}"' not in lock.read_text(encoding="utf-8"):
+    # Windows checkouts can turn the lock's line endings into CRLF
+    lock_text = lock.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if f'name = "gns3-mcp"\nversion = "{version}"' not in lock_text:
         problems.append(f"plugin/uv.lock does not lock gns3-mcp {version}")
     mcp = Path("plugin/.mcp.json").read_text(encoding="utf-8")
     if '"--locked"' not in mcp or "${CLAUDE_PLUGIN_ROOT}" not in mcp:

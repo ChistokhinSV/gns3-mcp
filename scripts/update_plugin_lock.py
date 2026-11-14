@@ -69,7 +69,8 @@ def main() -> int:
     lock(args.wait)
 
     lock_file = PLUGIN / "uv.lock"
-    if f'name = "gns3-mcp"\nversion = "{args.version}"' not in lock_file.read_text("utf-8"):
+    lock_text = lock_file.read_text("utf-8").replace("\r\n", "\n")  # CRLF on Windows checkouts
+    if f'name = "gns3-mcp"\nversion = "{args.version}"' not in lock_text:
         raise SystemExit(f"uv.lock does not lock gns3-mcp {args.version}")
     size = lock_file.stat().st_size
     print(f"[OK] plugin locked to gns3-mcp {args.version} (uv.lock {size // 1024} KiB)")
