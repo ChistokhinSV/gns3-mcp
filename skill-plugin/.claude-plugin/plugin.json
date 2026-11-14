@@ -1,0 +1,23 @@
+{
+  "name": "gns3-lab-guide",
+  "displayName": "GNS3 Lab Guide",
+  "version": "0.60.0",
+  "description": "Lab workflows for GNS3 network labs: building topologies, wiring links, configuring devices over consoles and SSH, and troubleshooting. Works with the gns3-mcp server, which you set up once with `uvx gns3-mcp configure`.",
+  "author": {
+    "name": "Sergei Chistokhin",
+    "url": "https://github.com/ChistokhinSV"
+  },
+  "homepage": "https://github.com/ChistokhinSV/gns3-mcp",
+  "repository": "https://github.com/ChistokhinSV/gns3-mcp",
+  "documentationUrl": "https://chistokhinsv.github.io/gns3-mcp",
+  "supportUrl": "https://github.com/ChistokhinSV/gns3-mcp/issues",
+  "license": "MIT",
+  "icon": "./assets/icon.png",
+  "keywords": [
+    "gns3",
+    "network",
+    "lab",
+    "automation",
+    "skill"
+  ]
+}

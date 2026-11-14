@@ -99,6 +99,8 @@ The plugin installs the `gns3` MCP server (started locally with `uv run --locked
 
 Empty plugin settings fall back to environment variables, then `./.env`, then `~/.gns3-mcp/.env` (or `GNS3_MCP_ENV_FILE`). Details: [plugin/README.md](plugin/README.md).
 
+**Skill only:** [skill-plugin/](skill-plugin/README.md) (**GNS3 Lab Guide**) is the same skill without the server. It is the version for Anthropic's plugin directory, which takes no local MCP server from community publishers. With it, set the server up once with `uvx gns3-mcp configure claude`, then `claude plugin install gns3-lab-guide --marketplace ChistokhinSV/gns3-mcp`. Install one of the two plugins, not both (the skill would load twice).
+
 ### Claude Desktop (.mcpb)
 
 The `.mcpb` is an [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) (manifest 0.4, uv runtime): it holds only the source, and Claude Desktop installs the Python dependencies with its own uv on first start (allow ~30 s). Windows and macOS.
@@ -721,6 +723,7 @@ For more details, see [docs/DOCKER_HUB.md](docs/DOCKER_HUB.md).
 
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
 - **[plugin/](plugin/README.md)** - Claude plugin for Claude Code and Cowork: server + `gns3-lab-automation` skill
+- **[skill-plugin/](skill-plugin/README.md)** - skill-only plugin (GNS3 Lab Guide) for Anthropic's plugin directory
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - SSH proxy deployment instructions
 - **[PORTABLE_SETUP.md](PORTABLE_SETUP.md)** - Windows service setup
 - **[ERROR_CODES.md](ERROR_CODES.md)** - Error codes returned by tools

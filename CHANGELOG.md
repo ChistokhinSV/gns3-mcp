@@ -5,6 +5,25 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.60.0] - 2026-11-14 - Skill-Only Plugin
+
+### Added
+- **`skill-plugin/` - GNS3 Lab Guide** (`gns3-lab-guide`, GM-107), a second Claude plugin with
+  only the `gns3-lab-automation` skill and the icon. Anthropic's plugin directory accepts a
+  local MCP server, and files other than Markdown, text, JSON, YAML and images, only from
+  Verified organisations, so it refused the full GNS3 Lab plugin. The skill-only plugin is the
+  one submitted there. Both are in this repository's marketplace
+  (`claude plugin install gns3-lab-guide --marketplace ChistokhinSV/gns3-mcp`). Install one of
+  the two, not both.
+- **The skill tells Claude what to do when the `gns3` tools are missing**: reconnect with `/mcp`
+  if the GNS3 Lab plugin is installed (its first start can time out once), otherwise ask the
+  user to run `uvx gns3-mcp configure claude`, and not to reach the GNS3 API in other ways.
+- `scripts/sync_skill_plugin.py` copies the skill and icon from `plugin/` to `skill-plugin/`
+  (`--check` reports differences). A packaging test fails when they differ, when
+  `skill-plugin/` holds a file type the directory refuses or a server, or when its version is
+  not the package version. `just bump` and `check_version.py` include its `plugin.json`;
+  `just validate-plugin` checks the sync and validates both plugins.
+
 ## [0.59.4] - 2026-11-14 - Plugin Option Env Names
 
 ### Changed

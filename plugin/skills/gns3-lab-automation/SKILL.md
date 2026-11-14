@@ -7,6 +7,20 @@ description: Build, wire, configure and troubleshoot GNS3 network labs through t
 
 The `gns3` MCP server drives a GNS3 v3 server. Every call goes through its tools; never call the GNS3 REST API with curl - the server handles JWT auth.
 
+## If the gns3 tools are missing
+
+The tools come from the `gns3` MCP server (PyPI package `gns3-mcp`), which runs on the user's computer. It needs [uv](https://docs.astral.sh/uv/getting-started/installation/) and a GNS3 3.x server the computer can reach.
+
+- **The GNS3 Lab plugin is installed but the tools are not there:** its first start installs packages and can time out once. Ask the user to reconnect the `gns3` server with `/mcp`.
+- **Otherwise the server is not set up yet.** Ask the user to run this in a terminal and then restart Claude Code; it asks for the GNS3 host, port, user and password, checks the login and registers the server:
+
+  ```bash
+  uvx gns3-mcp configure claude
+  ```
+
+  For another agent, use its name instead of `claude` (`uvx gns3-mcp configure --help` lists them). Full steps, also for agents that set it up themselves: https://chistokhinsv.github.io/gns3-mcp/install.md
+- Until the tools are there, explain lab steps but do not reach the GNS3 API in other ways.
+
 ## Tools at a glance
 
 | Tool | Use it for |

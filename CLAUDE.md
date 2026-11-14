@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.59.4 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.60.0 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.59.4 - plugin passes settings as `CLAUDE_PLUGIN_OPTION_GNS3_*` (directory env names)
+**Latest Release:** v0.60.0 - skill-only plugin `skill-plugin/` (gns3-lab-guide) for Anthropic's directory
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.59.4)
+### Recent Changes (v0.26.0 - v0.60.0)
+
+**v0.60.0** - `skill-plugin/` = second plugin `gns3-lab-guide` (GM-107): skill + icon only, version = package (`just bump` + check_version). Directory refused `plugin/`: local MCP server and non-Markdown/JSON/YAML/image files only from Verified orgs. `scripts/sync_skill_plugin.py` copies `skills/` + `assets/icon.png` from `plugin/` (`--check`); test_packaging enforces sync, allowed file types, no server, version. SKILL.md got "If the gns3 tools are missing" (reconnect `/mcp` or `uvx gns3-mcp configure claude`). Also listed in our marketplace (install line; README says install one of the two, else the skill loads twice)
 
 **v0.59.4** - `plugin/.mcp.json` env = `CLAUDE_PLUGIN_OPTION_GNS3_*` (GM-107; test_packaging enforces `CLAUDE_PLUGIN_OPTION_<KEY>` for every `${user_config.KEY}`). MCPB manifest keeps `GNS3_*`
 
@@ -261,7 +263,8 @@ All linting configuration centralized in [pyproject.toml](pyproject.toml):
 │   ├── .claude-plugin/plugin.json
 │   ├── .mcp.json                # uv run --locked --project ${CLAUDE_PLUGIN_ROOT} gns3-mcp, userConfig env
 │   └── skills/gns3-lab-automation/   # SKILL.md + references/devices.md
-├── .claude-plugin/marketplace.json  # repo is a plugin marketplace
+├── skill-plugin/                # gns3-lab-guide: skill only, for Anthropic's directory (synced from plugin/)
+├── .claude-plugin/marketplace.json  # repo is a plugin marketplace (gns3-lab + gns3-lab-guide)
 ├── scripts/                     # bump/check version, prepare_mcpb.py, smoke_test_mcpb.py
 ├── tests/
 │   ├── test_mcp_console.py      # Console manager tests
@@ -456,7 +459,7 @@ claude mcp add --transport stdio gns3-mcp --scope user -- `
 The skill lives in the plugin (v0.56.0): `plugin/skills/gns3-lab-automation/SKILL.md`, device notes in `references/devices.md`.
 1. Use only current tool calls (`node(action=...)`, `link(action="batch")`, `console(operations=[...])`, ...)
 2. Keep SKILL.md short; put detail in `references/` and mention each file from SKILL.md
-3. `just validate-plugin` (runs `claude plugin validate` on `plugin/` and the repo marketplace)
+3. Edit the skill in `plugin/` only, then `python scripts/sync_skill_plugin.py` (copies it to `skill-plugin/`); `just validate-plugin` checks the sync and validates both plugins and the marketplace
 4. `just bump ...` does NOT touch the plugin: after the PyPI publish, the `plugin-lock` job of the release workflow runs `scripts/update_plugin_lock.py X` (plugin.json + plugin/pyproject.toml version, `uv lock`) and pushes a `chore(plugin): lock gns3-mcp X` commit. Anthropic's directory accepts no PyPI version as a pin (GM-107). Never `uv run` at the repo root; `uv lock --directory plugin` is safe
 5. Plugin = local stdio server (Claude Code + Cowork on the user's machine, not chat). Cowork does not prompt for `userConfig`; all options default to "" and the server falls back to env / `./.env` / `~/.gns3-mcp/.env`
 

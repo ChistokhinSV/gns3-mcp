@@ -197,3 +197,31 @@ def test_plugin_server_is_locked_for_the_directory():
     package = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     as_key = lambda v: tuple(int(p) for p in v.split("."))  # noqa: E731
     assert as_key(version) <= as_key(package["project"]["version"])
+
+
+# What Anthropic's directory accepts from organisations that are not Verified
+DIRECTORY_FILE_TYPES = {".md", ".txt", ".json", ".yaml", ".yml", ".png", ".jpg", ".jpeg"}
+DIRECTORY_FILE_TYPES |= {".gif", ".webp", ".ico"}
+
+
+def test_skill_plugin_is_what_the_directory_accepts():
+    """GM-107: the directory refuses a local MCP server and any file other than Markdown, text,
+    JSON, YAML or images from unverified organisations. It lists skill-plugin/ (gns3-lab-guide):
+    the same skill and icon as plugin/, nothing that runs, same version as the package."""
+    skill_dir = ROOT / "skill-plugin"
+    files = [p for p in skill_dir.rglob("*") if p.is_file()]
+    assert files
+    assert [p for p in files if p.suffix.lower() not in DIRECTORY_FILE_TYPES] == []
+    assert not (skill_dir / ".mcp.json").exists()
+    manifest = json.loads((skill_dir / ".claude-plugin" / "plugin.json").read_text())
+    assert not {"mcpServers", "userConfig", "hooks"} & manifest.keys()
+    package = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert manifest["version"] == package["project"]["version"]
+
+    spec = importlib.util.spec_from_file_location(
+        "sync_skill_plugin", ROOT / "scripts" / "sync_skill_plugin.py"
+    )
+    sync = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sync)
+    # Fix with: python scripts/sync_skill_plugin.py
+    assert sync.differences() == []

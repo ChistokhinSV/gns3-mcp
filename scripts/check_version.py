@@ -5,6 +5,7 @@ Checks that version matches in:
 - gns3_mcp/__init__.py
 - pyproject.toml
 - mcp-server/manifest.json
+- skill-plugin/.claude-plugin/plugin.json (skill-only plugin for Anthropic's directory)
 
 and that the Claude plugin is consistent in itself (plugin.json = plugin/pyproject.toml =
 gns3-mcp locked in plugin/uv.lock) and not ahead of the package. The plugin may be one
@@ -56,6 +57,14 @@ def get_plugin_version():
 
     data = json.loads(plugin.read_text(encoding='utf-8'))
     return data.get("version")
+
+
+def get_skill_plugin_version():
+    """Version of the skill-only plugin (skill-plugin/), which moves with the package"""
+    manifest = Path("skill-plugin/.claude-plugin/plugin.json")
+    if not manifest.exists():
+        return None
+    return json.loads(manifest.read_text(encoding="utf-8")).get("version")
 
 
 def get_plugin_server_pin():
@@ -111,6 +120,7 @@ def main():
         "gns3_mcp/__init__.py": get_init_version(),
         "pyproject.toml": get_pyproject_version(),
         "mcp-server/manifest.json": get_manifest_version(),
+        "skill-plugin/.claude-plugin/plugin.json": get_skill_plugin_version(),
     }
 
     # Display versions

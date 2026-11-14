@@ -80,9 +80,11 @@ build:
 validate-manifest:
     powershell -Command "cd mcp-server; npx @anthropic-ai/mcpb@{{MCPB_CLI}} validate manifest.json"
 
-# Validate the Claude plugin and the repository marketplace
+# Validate both Claude plugins and the repository marketplace
 validate-plugin:
+    python scripts/sync_skill_plugin.py --check
     claude plugin validate ./plugin
+    claude plugin validate ./skill-plugin
     claude plugin validate .
 
 # Check version consistency across files

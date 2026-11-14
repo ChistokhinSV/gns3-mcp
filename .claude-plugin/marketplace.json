@@ -11,7 +11,12 @@
     {
       "name": "gns3-lab",
       "source": "./plugin",
-      "description": "GNS3 lab automation: the gns3-mcp server (local, via uvx) plus a skill with lab workflows"
+      "description": "GNS3 lab automation: the gns3-mcp server (runs locally with uv) plus a skill with lab workflows"
+    },
+    {
+      "name": "gns3-lab-guide",
+      "source": "./skill-plugin",
+      "description": "The GNS3 lab skill only, for a gns3-mcp server set up with `uvx gns3-mcp configure`. Install this or gns3-lab, not both"
     }
   ]
 }

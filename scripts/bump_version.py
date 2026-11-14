@@ -5,6 +5,7 @@ Increments semantic version (MAJOR.MINOR.PATCH) and updates:
 - gns3_mcp/__init__.py (source of truth)
 - pyproject.toml
 - mcp-server/manifest.json
+- skill-plugin/.claude-plugin/plugin.json (skill-only plugin for Anthropic's directory)
 
 The Claude plugin (plugin/) is locked to the published release by CI after the PyPI
 upload: scripts/update_plugin_lock.py (GM-107).
@@ -125,18 +126,29 @@ def update_manifest_json(new_version: str) -> None:
 # scripts/update_plugin_lock.py after publishing and commits the plugin update.
 
 
+def update_skill_plugin(new_version: str) -> None:
+    """Update the skill-only plugin's version (it has no lock, so it moves with the package)"""
+    manifest = Path("skill-plugin/.claude-plugin/plugin.json")
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    data["version"] = new_version
+    manifest.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print("[OK] Updated skill-plugin/.claude-plugin/plugin.json")
+
+
 def verify_consistency() -> bool:
     """Verify the package version files are consistent"""
     from check_version import (
         get_init_version,
         get_manifest_version,
         get_pyproject_version,
+        get_skill_plugin_version,
     )
 
     versions = {
         "gns3_mcp/__init__.py": get_init_version(),
         "pyproject.toml": get_pyproject_version(),
         "mcp-server/manifest.json": get_manifest_version(),
+        "skill-plugin/.claude-plugin/plugin.json": get_skill_plugin_version(),
     }
 
     if len(set(versions.values())) == 1:
@@ -187,6 +199,7 @@ def main():
         print("  - gns3_mcp/__init__.py")
         print("  - pyproject.toml")
         print("  - mcp-server/manifest.json")
+        print("  - skill-plugin/.claude-plugin/plugin.json")
         print("\nRun without --dry-run to apply changes")
         return 0
 
@@ -196,6 +209,7 @@ def main():
         update_init_py(new_version_str)
         update_pyproject_toml(new_version_str)
         update_manifest_json(new_version_str)
+        update_skill_plugin(new_version_str)
     except Exception as e:
         print(f"\n[ERROR] Failed to update files: {e}")
         return 1
