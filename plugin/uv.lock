@@ -502,18 +502,18 @@ server = [
 
 [[package]]
 name = "gns3-lab-plugin"
-version = "0.59.4"
+version = "0.60.0"
 source = { virtual = "." }
 dependencies = [
     { name = "gns3-mcp" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "gns3-mcp", specifier = "==0.59.4" }]
+requires-dist = [{ name = "gns3-mcp", specifier = "==0.60.0" }]
 
 [[package]]
 name = "gns3-mcp"
-version = "0.59.4"
+version = "0.60.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cairosvg" },
@@ -526,9 +526,9 @@ dependencies = [
     { name = "tabulate" },
     { name = "telnetlib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bf/b5/440894497c1d31d364343a13dc8e2aef8ad0f0b011db8f942b26cb53d679/gns3_mcp-0.59.4.tar.gz", hash = "sha256:6acd2d3dd8336568d7e968db68351b5926d222d77adce632c18d8eb781aec5a8", size = 185339, upload-time = "2026-11-14T19:32:15.837Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1b/80/8dc7b6725bab3f40dff6af00067db916c447ff65eae13655d0fbf4af8344/gns3_mcp-0.60.0.tar.gz", hash = "sha256:a31acc51100a933774c7589177e8367eed952f37e000a51f884d7d8520602cef", size = 185778, upload-time = "2026-11-14T20:04:41.185Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/29/bf7b922538fabff8404a1d2d122bbc98e61777e86c9178038def3fe79aab/gns3_mcp-0.59.4-py3-none-any.whl", hash = "sha256:baf17feb852a8673611c47320a20b1bf68326fde81f94a91060d7bb5d742bccf", size = 191591, upload-time = "2026-11-14T19:32:14.733Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/42/f4560c0ed25c9b446753be44b1e7154d11a1c0caffcfe5c713e88558033d/gns3_mcp-0.60.0-py3-none-any.whl", hash = "sha256:79352fefff9428b60e30fd17bc4b2f1deb8e72ac647b95db4a25e694941d3097", size = 191752, upload-time = "2026-11-14T20:04:39.942Z" },
 ]
 
 [[package]]
