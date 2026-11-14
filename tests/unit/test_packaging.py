@@ -64,6 +64,28 @@ def test_precedence_env_then_cwd_then_user(clean_env, monkeypatch):
     assert os.environ["GNS3_PASSWORD"] == "user"
 
 
+def test_plugin_options_win_and_empty_ones_fall_back(clean_env, monkeypatch):
+    """GM-107: the plugin hands its settings over as CLAUDE_PLUGIN_OPTION_<KEY>"""
+    _, user_env = clean_env
+    user_env.write_text("GNS3_USER=from-file\nGNS3_PASSWORD=from-file\n")
+    monkeypatch.setenv("GNS3_HOST", "from-shell")
+    monkeypatch.setenv("GNS3_PORT", "8080")
+    monkeypatch.setenv("CLAUDE_PLUGIN_OPTION_GNS3_HOST", "lab.example")  # filled in: wins
+    monkeypatch.setenv("CLAUDE_PLUGIN_OPTION_GNS3_PORT", "")  # empty: shell value stays
+    monkeypatch.setenv("CLAUDE_PLUGIN_OPTION_GNS3_USER", "")  # empty: file value applies
+    monkeypatch.setenv("CLAUDE_PLUGIN_OPTION_GNS3_PASSWORD", "secret")
+
+    load_config_env()
+
+    import os
+
+    assert os.environ["GNS3_HOST"] == "lab.example"
+    assert os.environ["GNS3_PORT"] == "8080"
+    assert os.environ["GNS3_USER"] == "from-file"
+    assert os.environ["GNS3_PASSWORD"] == "secret"
+    assert not any(k.startswith("CLAUDE_PLUGIN_OPTION_GNS3_") for k in os.environ)
+
+
 def test_missing_explicit_env_file_exits(clean_env):
     cwd, _ = clean_env
     with pytest.raises(SystemExit):

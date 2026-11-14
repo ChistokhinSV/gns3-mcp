@@ -30,13 +30,27 @@ def user_env_file() -> Path:
     return Path(os.getenv("GNS3_MCP_ENV_FILE") or Path.home() / ".gns3-mcp" / ".env")
 
 
+# Claude plugin options, handed over as CLAUDE_PLUGIN_OPTION_<KEY> (userConfig gns3_host ->
+# CLAUDE_PLUGIN_OPTION_GNS3_HOST): the only env names Anthropic's plugin directory accepts in a
+# plugin's .mcp.json (GM-107). Older plugin versions pass GNS3_* directly; both work.
+PLUGIN_OPTION_PREFIX = "CLAUDE_PLUGIN_OPTION_"
+PLUGIN_OPTION_VARS = ("GNS3_HOST", "GNS3_PORT", "GNS3_USER", "GNS3_PASSWORD")
+
+
 def load_config_env(env_file: Path | None = None) -> None:
-    """Load settings: process env > --env-file (or ./.env) > user-level .env.
+    """Load settings: plugin options > process env > --env-file (or ./.env) > user-level .env.
 
     Empty values count as unset. The Claude plugin passes "" for options nobody
     filled in - Cowork never prompts for them - and the .env files must still
     be able to supply those settings. load_dotenv never overrides a set variable.
     """
+    # A plugin option the user filled in wins over the inherited environment; an empty one
+    # is dropped, so GNS3_* from the shell or the .env files still apply
+    for key in PLUGIN_OPTION_VARS:
+        value = os.environ.pop(PLUGIN_OPTION_PREFIX + key, "")
+        if value:
+            os.environ[key] = value
+
     for key in CONFIG_ENV_VARS:
         if os.environ.get(key) == "":
             del os.environ[key]

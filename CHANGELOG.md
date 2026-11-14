@@ -5,6 +5,15 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.59.3] - 2026-11-14 - Server Reads Plugin Options
+
+### Added
+- **The server reads `CLAUDE_PLUGIN_OPTION_GNS3_HOST`, `_PORT`, `_USER` and `_PASSWORD`**
+  (GM-107), the env names Anthropic's plugin directory accepts for plugin settings. A filled-in
+  option wins over the inherited `GNS3_*`; an empty one is ignored, so `GNS3_*` from the shell,
+  `./.env` and `~/.gns3-mcp/.env` still apply. `GNS3_*` keeps working everywhere. The plugin's
+  `.mcp.json` switches to the new names in the next release, once the plugin runs this server.
+
 ## [0.59.2] - 2026-11-14 - Plugin Locked with uv.lock
 
 ### Changed

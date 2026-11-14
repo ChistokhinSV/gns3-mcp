@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.59.2 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.59.3 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.59.2 - plugin runs a uv.lock-pinned environment (`uv run --locked`); CI locks it after each PyPI release
+**Latest Release:** v0.59.3 - server reads `CLAUDE_PLUGIN_OPTION_GNS3_*` (plugin option env names)
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.59.2)
+### Recent Changes (v0.26.0 - v0.59.3)
+
+**v0.59.3** - `cli.load_config_env` maps `CLAUDE_PLUGIN_OPTION_GNS3_{HOST,PORT,USER,PASSWORD}` -> `GNS3_*` (non-empty wins over inherited env, empty dropped) (GM-107). Plugin `.mcp.json` switches to those names in 0.59.4, after CI locked the plugin to 0.59.3 (two-step so the plugin never passes names its locked server ignores)
 
 **v0.59.2** - Plugin = uv project (GM-107): `plugin/pyproject.toml` (Python >=3.12,<3.14, `gns3-mcp==X`, `package = false`) + `plugin/uv.lock` (87 pkgs, 168 KiB < 256 KiB directory limit), `.mcp.json` `uv run --locked --project ${CLAUDE_PLUGIN_ROOT} gns3-mcp`. Directory refuses PyPI versions as pins. Release workflow job `plugin-lock` (after build-windows) runs `scripts/update_plugin_lock.py X --wait 600` and pushes `chore(plugin): lock gns3-mcp X` to master; `just bump` skips the plugin; check_version allows plugin <= package. First plugin start (~30 s install) can hit Claude Code's 30 s MCP timeout once
 
