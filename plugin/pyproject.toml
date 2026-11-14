@@ -8,10 +8,10 @@
 
 [project]
 name = "gns3-lab-plugin"
-version = "0.59.1"
+version = "0.59.2"
 description = "Runtime environment of the GNS3 Lab Claude plugin: the gns3-mcp server, locked"
 requires-python = ">=3.12,<3.14"
-dependencies = ["gns3-mcp==0.59.1"]
+dependencies = ["gns3-mcp==0.59.2"]
 
 [tool.uv]
 package = false
