@@ -71,6 +71,7 @@ from tools.node_tools import (
 from tools.project_tools import (
     close_project_impl,
     create_project_impl,
+    delete_project_impl,
     open_project_impl,
 )
 from tools.resource_tools import (
@@ -910,13 +911,20 @@ async def notification(
 async def project(
     ctx: Context,
     action: Annotated[
-        Literal["list", "open", "create", "close"], "Action: 'list', 'open', 'create', or 'close'"
+        Literal["list", "open", "create", "close", "delete"],
+        "Action: 'list', 'open', 'create', 'close', or 'delete'",
     ],
-    name: Annotated[str | None, "Project name (required for 'open' and 'create')"] = None,
+    name: Annotated[
+        str | None, "Project name, exact (required for 'open', 'create' and 'delete')"
+    ] = None,
     path: Annotated[str | None, "Optional project directory path (for 'create')"] = None,
     format: Annotated[
         str, "Output format: 'table' (default) or 'json' (for 'list' action)"
     ] = "table",
+    confirm: Annotated[
+        bool,
+        "'delete': True deletes the project; False (default) only describes what would be deleted",
+    ] = False,
 ) -> str:
     """Manage GNS3 projects
 
@@ -927,12 +935,16 @@ async def project(
         - open: Open a project by name
         - create: Create a new project and auto-open it
         - close: Close the currently opened project
+        - delete: Delete a project by exact name with all its nodes, disks and files
+          (WARNING: cannot be undone). Without confirm=True it is a dry run that deletes
+          nothing and returns the project's id, status and path
 
     Args:
         action: Project action to perform
-        name: Project name (required for open/create)
+        name: Project name (required for open/create/delete)
         path: Optional project directory path (create only)
         format: Output format for 'list' action
+        confirm: Required (True) for 'delete' to actually delete
 
     Returns:
         JSON with ProjectInfo for created project, or list of projects
@@ -951,6 +963,10 @@ async def project(
 
         # Close current project
         >>> project(action="close")
+
+        # Delete a project (dry run first, then confirm)
+        >>> project(action="delete", name="Test Lab")
+        >>> project(action="delete", name="Test Lab", confirm=True)
     """
     app: IAppContext = ctx.request_context.lifespan_context
 
@@ -977,6 +993,14 @@ async def project(
         result, _ = await close_project_impl(app.gns3, app.current_project_id)
         # Close always clears current_project_id (returns None)
         app.current_project_id = None
+        return result
+
+    elif action == "delete":
+        if not name:
+            raise ValueError("name parameter is required for 'delete' action")
+        result, deleted_id = await delete_project_impl(app.gns3, name, confirm)
+        if deleted_id and deleted_id == app.current_project_id:
+            app.current_project_id = None
         return result
 
 
@@ -1036,6 +1060,11 @@ async def node(
     parallel: Annotated[
         bool, "Execute operations concurrently (default: True for start/stop/suspend)"
     ] = True,
+    confirm: Annotated[
+        bool,
+        "'delete' with a wildcard pattern: True deletes every match; False (default) only "
+        "lists the matches",
+    ] = False,
 ) -> str:
     """Manage GNS3 nodes (CRUD operations)
 
@@ -1045,7 +1074,7 @@ async def node(
     Actions:
         - list: List nodes in a project
         - create: Create new node from template at specified coordinates
-        - delete: Delete node from project (WARNING: destructive, cannot be undone)
+        - delete: Delete node(s) from project (WARNING: destructive, cannot be undone)
         - set: Configure node properties and/or control state (supports wildcards/bulk)
 
     Wildcard Patterns (for 'set' and 'delete'):
@@ -1055,6 +1084,12 @@ async def node(
         - Suffix match: "*-Core" (matches Router-Core, Switch-Core)
         - Character class: "R[123]" (matches R1, R2, R3)
         - JSON array: '["Router1", "Router2", "Switch1"]'
+
+    Delete safety:
+        - A pattern delete without confirm=True deletes nothing and returns
+          'matched_nodes' (dry run); repeat with confirm=True to delete them
+        - A single name or a JSON array of names deletes at once
+        - Several nodes return a BatchOperationResult; names not in the project are skipped
 
     Validation Rules:
         - name parameter requires node to be stopped
@@ -1081,8 +1116,11 @@ async def node(
         >>> node(action="create", template_name="Ubuntu Cloud Guest", x=0, y=0, node_name="ops1",
         ...      ram=12288, cpus=6, adapters=2, hda_disk_image="ops1.qcow2", cdrom_image="seed.iso")
 
-        # Delete node
+        # Delete nodes
         >>> node(action="delete", node_name="Router1")
+        >>> node(action="delete", node_name='["R1", "R2"]')
+        >>> node(action="delete", node_name="*")                  # lists matches only
+        >>> node(action="delete", node_name="*", confirm=True)    # deletes every node
 
         # Start all nodes
         >>> node(action="set", node_name="*", state_action="start")
@@ -1160,7 +1198,7 @@ async def node(
             return error
 
         return await delete_node_impl(
-            app.gns3, app.current_project_id, app.ssh_proxy_mapping, node_name
+            app.gns3, app.current_project_id, app.ssh_proxy_mapping, node_name, confirm
         )
 
     elif action == "set":
@@ -2031,8 +2069,8 @@ TOOL_REGISTRY = {
         "categories": ["project", "management"],
         "capabilities": ["CRUD", "idempotent"],
         "resources": ["projects://"],
-        "description": "Manage GNS3 projects (list, open, create, close)",
-        "actions": ["list", "open", "create", "close"],
+        "description": "Manage GNS3 projects (list, open, create, close, delete)",
+        "actions": ["list", "open", "create", "close", "delete"],
     },
     "node": {
         "categories": ["node", "topology"],

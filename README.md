@@ -28,8 +28,8 @@ Model Context Protocol (MCP) server for GNS3 network lab automation. Control GNS
 | Tool | Actions / purpose |
 |------|-------------------|
 | `gns3_connection` | `check`, `retry`, `reconnect` |
-| `project` | `list`, `open`, `create`, `close` |
-| `node` | `list`, `create`, `delete`, `set` (properties and start/stop/suspend/reload/restart) |
+| `project` | `list`, `open`, `create`, `close`, `delete` (needs `confirm=True`) |
+| `node` | `list`, `create`, `delete` (pattern deletes need `confirm=True`), `set` (properties and start/stop/suspend/reload/restart) |
 | `link` | `list`, `batch` (connect / disconnect) |
 | `drawing` | `list`, `create`, `update`, `delete`, `batch` |
 | `console` | batch of `send`, `send_and_wait`, `read`, `keystroke` |

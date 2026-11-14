@@ -1,6 +1,6 @@
 """Project management tools for GNS3 MCP Server
 
-Provides tools for listing and opening GNS3 projects.
+Provides tools for listing, opening, creating, closing and deleting GNS3 projects.
 """
 
 import json
@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from error_utils import create_error_response, project_not_found_error
 from models import ErrorCode, ProjectInfo
+from tools.node_tools import _http_error_detail
 
 if TYPE_CHECKING:
     from interfaces import IGns3Client
@@ -212,3 +213,80 @@ async def close_project_impl(
             context={"project_id": current_project_id, "exception": str(e)},
         )
         return (error_response, None)
+
+
+async def delete_project_impl(
+    gns3: "IGns3Client", name: str, confirm: bool = False
+) -> tuple[str, str | None]:
+    """Delete a project by exact name (GM-101)
+
+    GNS3 removes the project directory with every node disk, and nothing can bring it back,
+    so without confirm=True this is a dry run that only describes the project. Patterns are
+    not supported on purpose: one call deletes at most one named project.
+
+    Returns:
+        Tuple of (JSON dry run / confirmation / error, project_id if it was deleted else None)
+    """
+    try:
+        projects = await gns3.get_projects()
+    except Exception as e:
+        return _delete_error(name, e, ErrorCode.GNS3_API_ERROR.value), None
+
+    matches = [p for p in projects if p["name"] == name]
+    if not matches:
+        return project_not_found_error(name), None
+    if len(matches) > 1:
+        return (
+            create_error_response(
+                error=f"{len(matches)} projects are named '{name}'",
+                error_code=ErrorCode.INVALID_PARAMETER.value,
+                details="Project IDs: " + ", ".join(p["project_id"] for p in matches),
+                suggested_action="Rename or delete the extra projects in the GNS3 GUI first",
+                context={"project_name": name},
+            ),
+            None,
+        )
+    project = matches[0]
+    project_id = project["project_id"]
+
+    if not confirm:
+        preview = {
+            "dry_run": True,
+            "project_name": name,
+            "project_id": project_id,
+            "status": project.get("status"),
+            "path": project.get("path"),
+            "message": (
+                f"Project '{name}' would be deleted with all its nodes, disks and files; "
+                "nothing deleted. Repeat with confirm=True to delete it."
+            ),
+        }
+        # GNS3 only knows the nodes of an opened project; a closed one would list none
+        if project.get("status") == "opened":
+            try:
+                preview["node_count"] = len(await gns3.get_nodes(project_id))
+            except Exception:  # the preview stays useful without the count
+                pass
+        return json.dumps(preview, indent=2), None
+
+    try:
+        await gns3.delete_project(project_id)
+    except Exception as e:
+        return _delete_error(name, e, ErrorCode.OPERATION_FAILED.value, project_id), None
+
+    result = {
+        "message": f"Project '{name}' deleted",
+        "project_id": project_id,
+        "project_name": name,
+    }
+    return json.dumps(result, indent=2), project_id
+
+
+def _delete_error(name: str, e: Exception, error_code: str, project_id: str | None = None) -> str:
+    return create_error_response(
+        error=f"Failed to delete project '{name}'",
+        error_code=error_code,
+        details=_http_error_detail(e),
+        suggested_action="Check that GNS3 is reachable and see its server log",
+        context={"project_name": name, "project_id": project_id},
+    )

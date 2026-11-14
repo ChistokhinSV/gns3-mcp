@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.56.6 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.57.0 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.56.6 - slow node create recovered, topology_report via query_resource
+**Latest Release:** v0.57.0 - project delete, node delete with patterns (both dry run unless confirm=True)
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.56.6)
+### Recent Changes (v0.26.0 - v0.57.0)
+
+**v0.57.0** - `project(action="delete", name=, confirm=)` (GM-101): exact name only, dry run (id/status/path/node_count) unless `confirm=True`, clears current project if deleted. `node delete` resolves names like `set` (GM-100): pattern without `confirm=True` = dry run returning `matched_nodes`; JSON array deletes at once (unknown names skipped); batch result per node. Exact-name node delete unchanged. Rule: destructive bulk/irreversible actions take `confirm`, default is a dry run
 
 **v0.56.6** - `node create` survives slow first use of big-image templates: 180 s timeout, then polls for the late node and names/places it; `TIMEOUT` error says do not re-create (GM-98). httpx timeouts get a message (`_ExplainTimeouts` transport in gns3_client.py). `query_resource` routes `topology_report` + `diagrams://` (GM-99); `ResourceManager.ROUTES` is the one routing table, `test_resource_uris.py` ties it to `@mcp.resource` and to URIs in client texts
 

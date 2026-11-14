@@ -16,7 +16,7 @@ Automation for GNS3 v3 network labs: projects, nodes, links, device consoles (te
 
 | Tool | Actions / operations |
 |---|---|
-| `project` | `list`, `open`, `create` (auto-opens), `close` |
+| `project` | `list`, `open`, `create` (auto-opens), `close`, `delete` (dry run unless `confirm=True`) |
 | `node` | `list`, `create` (from template), `delete`, `set` (properties; `state_action` start/stop/suspend/reload/restart) |
 | `link` | `list`, `batch` of `connect` / `disconnect` (all validated before any change) |
 | `console` | batch of `send`, `send_and_wait`, `read`, `keystroke` |
@@ -44,6 +44,7 @@ node(action="set", node_name="*", state_action="start")        # all nodes, in p
 
 - Hardware params apply on `create` and `set` (most need the node stopped). Disk slots: `hda` boot, `hdb` second, `hdc` via `properties`, `hdd` fourth.
 - Patterns for `set`/`delete`: `*`, `R*`, `*-Core`, `R[123]`, JSON array `'["R1","R2"]'`. Several nodes return a batch result with `succeeded_items` / `failed_items`.
+- `delete` with a pattern deletes nothing and returns `matched_nodes`; repeat with `confirm=True` to delete them. A name or a JSON array of names deletes at once.
 - Switch `ports` can change only while no links are attached.
 - First use of a template with big disk images (Windows, multi-GB qcow2) can keep GNS3 busy for minutes. `create` waits up to 180 s, then looks for the node and names and places it. A `TIMEOUT` error means the node may still appear: do not create again; check `node(action="list")` later and fix name/position with `node(action="set")`.
 

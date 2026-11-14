@@ -1198,53 +1198,125 @@ async def _cleanup_ssh_sessions_for_node(ssh_proxy_mapping: Dict[str, str], node
             logger.warning(f"SSH session cleanup failed for node {node_name}: {e}")
 
 
+def _json_name_list(node_spec: str) -> List[Any] | None:
+    """Names from a JSON array spec ('["R1","R2"]'), or None if the spec is not one"""
+    try:
+        parsed = json.loads(node_spec)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return parsed if isinstance(parsed, list) else None
+
+
+def _is_node_pattern(node_spec: str) -> bool:
+    """True for a wildcard / character-class spec ('*', 'R*', 'R[123]'), not a JSON array"""
+    return _json_name_list(node_spec) is None and ("*" in node_spec or "[" in node_spec)
+
+
 async def delete_node_impl(
     gns3: "IGns3Client",
     current_project_id: str,
     ssh_proxy_mapping: Dict[str, str],
     node_name: str,
+    confirm: bool = False,
 ) -> str:
-    """Delete a node from the current project
+    """Delete one or more nodes from the current project
 
-    Also cleans up SSH sessions on all registered proxies.
-
-    Args:
-        node_name: Name of the node to delete
+    node_name is resolved like in set_node_impl: exact name, wildcard pattern or JSON array.
+    A pattern can match more than the caller expects (GM-100), so pattern deletes only list
+    the matches unless confirm=True. Exact names and JSON arrays name every node explicitly
+    and delete at once. Also cleans up SSH sessions on all registered proxies.
 
     Returns:
-        JSON confirmation message
+        Exact name: JSON confirmation message
+        Pattern without confirm: JSON preview with matched_nodes, nothing deleted
+        Pattern with confirm / JSON array: BatchOperationResult JSON
     """
     try:
         nodes = await gns3.get_nodes(current_project_id)
-        node = next((n for n in nodes if n["name"] == node_name), None)
-
-        if not node:
-            available_nodes = [n["name"] for n in nodes]
-            return node_not_found_error(
-                node_name=node_name,
-                project_id=current_project_id,
-                available_nodes=available_nodes,
-            )
-
-        await gns3.delete_node(current_project_id, node["node_id"])
-
-        # Clean up SSH sessions on all registered proxies (v0.34.0)
-        await _cleanup_ssh_sessions_for_node(ssh_proxy_mapping, node_name)
-
-        return json.dumps({"message": f"Node '{node_name}' deleted successfully"}, indent=2)
-
     except Exception as e:
         return create_error_response(
             error=f"Failed to delete node '{node_name}'",
             error_code=ErrorCode.OPERATION_FAILED.value,
-            details=str(e),
-            suggested_action="Verify the node exists, stop it if running, and check GNS3 server is accessible",
-            context={
-                "node_name": node_name,
-                "project_id": current_project_id,
-                "exception": str(e),
-            },
+            details=_http_error_detail(e),
+            suggested_action="Check GNS3 server is accessible",
+            context={"node_name": node_name, "project_id": current_project_id},
         )
+
+    requested = _json_name_list(node_name)
+    is_pattern = _is_node_pattern(node_name)
+    # dict.fromkeys: drop duplicates ('["R1","R1"]' would fail on the second delete)
+    resolved = list(dict.fromkeys(resolve_node_names(node_name, nodes)))
+
+    if not resolved:
+        return node_not_found_error(
+            node_name=node_name,
+            project_id=current_project_id,
+            available_nodes=[n["name"] for n in nodes],
+        )
+
+    if requested is None and not is_pattern:
+        return await _delete_single_node(
+            gns3, current_project_id, ssh_proxy_mapping, nodes, node_name
+        )
+
+    if is_pattern and not confirm:
+        return json.dumps(
+            {
+                "dry_run": True,
+                "pattern": node_name,
+                "matched_nodes": resolved,
+                "message": (
+                    f"Pattern '{node_name}' matches {len(resolved)} node(s); nothing deleted. "
+                    "Repeat with confirm=True to delete them all, or pass the names to delete "
+                    "as a JSON array."
+                ),
+            },
+            indent=2,
+        )
+
+    result = BatchOperationResult("delete_node")
+    by_name = {n["name"]: n for n in nodes}
+
+    if requested is not None:
+        for name in dict.fromkeys(str(r) for r in requested):
+            if name not in by_name:
+                result.add_skip(name, "not found in project")
+
+    for name in resolved:
+        try:
+            await gns3.delete_node(current_project_id, by_name[name]["node_id"])
+        except Exception as e:
+            result.add_failure(name, _http_error_detail(e), suggestion="Check GNS3 server logs")
+            continue
+        await _cleanup_ssh_sessions_for_node(ssh_proxy_mapping, name)
+        result.add_success(name)
+
+    return result.to_json()
+
+
+async def _delete_single_node(
+    gns3: "IGns3Client",
+    current_project_id: str,
+    ssh_proxy_mapping: Dict[str, str],
+    nodes: List[Dict[str, Any]],
+    node_name: str,
+) -> str:
+    node = next(n for n in nodes if n["name"] == node_name)
+    try:
+        await gns3.delete_node(current_project_id, node["node_id"])
+    except Exception as e:
+        return create_error_response(
+            error=f"Failed to delete node '{node_name}'",
+            error_code=ErrorCode.OPERATION_FAILED.value,
+            details=_http_error_detail(e),
+            suggested_action="Check the node state and GNS3 server logs",
+            context={"node_name": node_name, "project_id": current_project_id},
+        )
+
+    # Clean up SSH sessions on all registered proxies (v0.34.0)
+    await _cleanup_ssh_sessions_for_node(ssh_proxy_mapping, node_name)
+
+    return json.dumps({"message": f"Node '{node_name}' deleted successfully"}, indent=2)
 
 
 async def get_node_file_impl(

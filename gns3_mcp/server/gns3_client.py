@@ -256,6 +256,13 @@ class GNS3Client(IGns3Client):
             return {}
         return response.json()
 
+    async def delete_project(self, project_id: str) -> None:
+        """DELETE /v3/projects/{id} - delete a project and its files (GNS3 answers 204)"""
+        response = await self.client.delete(
+            f"{self.base_url}/v3/projects/{project_id}", headers=self._headers()
+        )
+        response.raise_for_status()
+
     async def get_snapshots(self, project_id: str) -> List[Dict[str, Any]]:
         """GET /v3/projects/{id}/snapshots - list all snapshots for a project
 

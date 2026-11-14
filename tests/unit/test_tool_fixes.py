@@ -7,9 +7,15 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from tools import console_tools
+from tools import console_tools, node_tools
 from tools.link_tools import set_connection_impl
-from tools.node_tools import _set_single_node_impl, create_node_impl, set_node_impl
+from tools.node_tools import (
+    _set_single_node_impl,
+    create_node_impl,
+    delete_node_impl,
+    set_node_impl,
+)
+from tools.project_tools import delete_project_impl
 
 # ===== GM-86: node create/set properties =====
 
@@ -340,6 +346,161 @@ class TestNodeSetProperties:
         )
 
         assert result["details"] == "The image 'x.qcow2' is missing"
+
+
+# ===== GM-100: node delete with patterns =====
+
+
+@pytest.fixture
+def delete_gns3(monkeypatch):
+    """GNS3 mock with four nodes; SSH session cleanup (HTTP to the proxy) stubbed out"""
+    monkeypatch.setattr(node_tools, "_cleanup_ssh_sessions_for_node", AsyncMock())
+    gns3 = AsyncMock()
+    gns3.get_nodes.return_value = [
+        {"node_id": f"id-{name}", "name": name} for name in ("nat", "sw", "afs-ubuntu", "afs-rocky")
+    ]
+    return gns3
+
+
+def _deleted_ids(gns3):
+    return [c.args[1] for c in gns3.delete_node.call_args_list]
+
+
+class TestNodeDeletePatterns:
+    @pytest.mark.asyncio
+    async def test_pattern_without_confirm_only_lists_matches(self, delete_gns3):
+        result = json.loads(await delete_node_impl(delete_gns3, "p-1", {}, "*"))
+
+        assert result["dry_run"] is True
+        assert result["matched_nodes"] == ["nat", "sw", "afs-ubuntu", "afs-rocky"]
+        delete_gns3.delete_node.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_pattern_with_confirm_deletes_matches(self, delete_gns3):
+        result = json.loads(await delete_node_impl(delete_gns3, "p-1", {}, "afs-*", confirm=True))
+
+        assert result["status"] == "success"
+        assert [i["item"] for i in result["succeeded_items"]] == ["afs-ubuntu", "afs-rocky"]
+        assert _deleted_ids(delete_gns3) == ["id-afs-ubuntu", "id-afs-rocky"]
+
+    @pytest.mark.asyncio
+    async def test_json_array_deletes_without_confirm_and_skips_unknown(self, delete_gns3):
+        spec = '["sw", "nope", "sw"]'
+
+        result = json.loads(await delete_node_impl(delete_gns3, "p-1", {}, spec))
+
+        assert _deleted_ids(delete_gns3) == ["id-sw"]
+        assert result["skipped_items"] == [{"item": "nope", "reason": "not found in project"}]
+
+    @pytest.mark.asyncio
+    async def test_batch_reports_per_node_failure(self, delete_gns3):
+        response = MagicMock()
+        response.json.return_value = {"message": "Node is locked"}
+        error = RuntimeError("Client error '409 Conflict'")
+        error.response = response
+        delete_gns3.delete_node.side_effect = [None, error]
+
+        result = json.loads(await delete_node_impl(delete_gns3, "p-1", {}, '["nat", "sw"]'))
+
+        assert result["status"] == "partial_success"
+        assert result["failed_items"][0]["item"] == "sw"
+        assert result["failed_items"][0]["error"] == "Node is locked"
+
+    @pytest.mark.asyncio
+    async def test_exact_name_unchanged(self, delete_gns3):
+        result = json.loads(await delete_node_impl(delete_gns3, "p-1", {}, "sw"))
+
+        assert result == {"message": "Node 'sw' deleted successfully"}
+        assert _deleted_ids(delete_gns3) == ["id-sw"]
+
+    @pytest.mark.asyncio
+    async def test_no_match_lists_available_nodes(self, delete_gns3):
+        result = json.loads(await delete_node_impl(delete_gns3, "p-1", {}, "R*", confirm=True))
+
+        assert result["error_code"] == "NODE_NOT_FOUND"
+        delete_gns3.delete_node.assert_not_called()
+
+
+# ===== GM-101: project delete =====
+
+
+def _projects_gns3(*projects):
+    gns3 = AsyncMock()
+    gns3.get_projects.return_value = list(projects)
+    gns3.get_nodes.return_value = [{"name": "R1"}, {"name": "R2"}]
+    return gns3
+
+
+_LAB = {"project_id": "p-lab", "name": "lab", "status": "opened", "path": "/opt/gns3/projects/p"}
+
+
+class TestProjectDelete:
+    @pytest.mark.asyncio
+    async def test_without_confirm_is_dry_run(self):
+        gns3 = _projects_gns3(_LAB)
+
+        result, deleted = await delete_project_impl(gns3, "lab")
+
+        preview = json.loads(result)
+        assert preview["dry_run"] is True
+        assert preview["project_id"] == "p-lab"
+        assert preview["node_count"] == 2
+        assert deleted is None
+        gns3.delete_project.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_closed_project_preview_has_no_node_count(self):
+        """GNS3 lists no nodes for a closed project; a count of 0 would mislead"""
+        gns3 = _projects_gns3({**_LAB, "status": "closed"})
+
+        result, _ = await delete_project_impl(gns3, "lab")
+
+        assert "node_count" not in json.loads(result)
+        gns3.get_nodes.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_confirm_deletes_and_returns_id(self):
+        gns3 = _projects_gns3(_LAB)
+
+        result, deleted = await delete_project_impl(gns3, "lab", confirm=True)
+
+        gns3.delete_project.assert_awaited_once_with("p-lab")
+        assert deleted == "p-lab"
+        assert json.loads(result)["message"] == "Project 'lab' deleted"
+
+    @pytest.mark.asyncio
+    async def test_exact_name_only(self):
+        gns3 = _projects_gns3(_LAB)
+
+        result, deleted = await delete_project_impl(gns3, "*", confirm=True)
+
+        assert json.loads(result)["error_code"] == "PROJECT_NOT_FOUND"
+        assert deleted is None
+        gns3.delete_project.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_duplicate_names_refused(self):
+        gns3 = _projects_gns3(_LAB, {**_LAB, "project_id": "p-other"})
+
+        result, deleted = await delete_project_impl(gns3, "lab", confirm=True)
+
+        assert "p-other" in json.loads(result)["details"]
+        assert deleted is None
+        gns3.delete_project.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_gns3_error_reason_surfaces(self):
+        gns3 = _projects_gns3(_LAB)
+        response = MagicMock()
+        response.json.return_value = {"message": "Project is locked"}
+        error = RuntimeError("Client error '409 Conflict'")
+        error.response = response
+        gns3.delete_project.side_effect = error
+
+        result, deleted = await delete_project_impl(gns3, "lab", confirm=True)
+
+        assert json.loads(result)["details"] == "Project is locked"
+        assert deleted is None
 
 
 # ===== GM-88: link batch port names =====

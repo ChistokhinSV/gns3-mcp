@@ -11,7 +11,7 @@ The `gns3` MCP server drives a GNS3 v3 server. Every call goes through its tools
 
 | Tool | Use it for |
 |---|---|
-| `project` | `list`, `open` (by name), `create` (auto-opens), `close` |
+| `project` | `list`, `open` (by name), `create` (auto-opens), `close`, `delete` (dry run unless `confirm=True`) |
 | `node` | `list`, `create` from a template, `delete`, `set` (properties and start/stop/suspend/reload/restart; wildcards) |
 | `link` | `list`, `batch` connect/disconnect (validated before anything changes) |
 | `console` | batch of `send`, `send_and_wait`, `read`, `keystroke` on telnet consoles |
@@ -92,6 +92,17 @@ node(action="set", node_name='["R1","R2"]', state_action="restart", parallel=Fal
 ```
 
 Patterns: `*`, `Prefix*`, `*-Suffix`, `R[123]`, JSON array.
+
+### Remove nodes
+
+```python
+node(action="delete", node_name="R1")
+node(action="delete", node_name='["R1","R2"]')            # explicit names: deleted at once
+node(action="delete", node_name="afs-*")                  # pattern: lists matches, deletes nothing
+node(action="delete", node_name="afs-*", confirm=True)    # pattern: deletes every match
+```
+
+Check `matched_nodes` from the dry run before repeating with `confirm=True`.
 
 ## Configure devices over the console
 

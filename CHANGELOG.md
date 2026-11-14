@@ -5,6 +5,26 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.57.0] - 2026-11-14 - Project Delete, Node Delete with Patterns
+
+### Added
+- **`project(action="delete", name=...)`** (GM-101): deletes a project by exact name through
+  `DELETE /v3/projects/{id}`, with all its nodes, disks and files. Without `confirm=True` it is a
+  dry run that deletes nothing and returns the project's id, status, path and (for an opened
+  project) node count. Patterns are not accepted; two projects with the same name are refused.
+  Deleting the current project clears the server's current project. Before this, a project made
+  with `project(action="create")` could only be emptied and closed through the tools.
+
+### Fixed
+- **`node delete` rejected the wildcard patterns its description promised** (GM-100):
+  `node(action="delete", node_name="*")` failed with `NODE_NOT_FOUND` ("Node '*' not found").
+  `delete` now resolves names like `set` does - exact name, pattern (`*`, `R*`, `*-Core`,
+  `R[123]`) or JSON array - and returns a batch result with per-node success and failure.
+  - A pattern can match more than meant, so a pattern delete is a dry run unless the new
+    `confirm=True` is given: it deletes nothing and returns `matched_nodes`.
+  - A JSON array names every node and deletes at once; names not in the project are reported as
+    skipped. A single name behaves as before.
+
 ## [0.56.6] - 2026-11-07 - Slow Node Create and topology_report
 
 ### Fixed

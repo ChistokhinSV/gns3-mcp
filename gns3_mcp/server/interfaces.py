@@ -68,6 +68,11 @@ class IGns3Client(ABC):
         pass
 
     @abstractmethod
+    async def delete_project(self, project_id: str) -> None:
+        """DELETE /v3/projects/{id} - delete a project and its files"""
+        pass
+
+    @abstractmethod
     async def get_snapshots(self, project_id: str) -> List[Dict[str, Any]]:
         """GET /v3/projects/{id}/snapshots - list all snapshots for a project"""
         pass
