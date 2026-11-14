@@ -5,7 +5,9 @@ Increments semantic version (MAJOR.MINOR.PATCH) and updates:
 - gns3_mcp/__init__.py (source of truth)
 - pyproject.toml
 - mcp-server/manifest.json
-- plugin/.claude-plugin/plugin.json, plugin/.mcp.json (gns3-mcp== pin)
+
+The Claude plugin (plugin/) is locked to the published release by CI after the PyPI
+upload: scripts/update_plugin_lock.py (GM-107).
 
 Usage:
     python scripts/bump_version.py patch  # 0.43.0 -> 0.43.1
@@ -118,34 +120,16 @@ def update_manifest_json(new_version: str) -> None:
     print(f"[OK] Updated mcp-server/manifest.json")
 
 
-def update_plugin(new_version: str) -> None:
-    """Update plugin.json version and the gns3-mcp== pin in plugin/.mcp.json.
-
-    The plugin starts `uvx gns3-mcp==<version>`, so each plugin release runs the
-    server released with it. `==` is the exact-pin form the Anthropic plugin
-    directory's checker names for uvx (GM-107); `@` pins are rewritten too.
-    """
-    plugin_file = Path("plugin/.claude-plugin/plugin.json")
-    plugin = json.loads(plugin_file.read_text(encoding="utf-8"))
-    plugin["version"] = new_version
-    plugin_file.write_text(json.dumps(plugin, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-
-    mcp_file = Path("plugin/.mcp.json")
-    content = mcp_file.read_text(encoding="utf-8")
-    mcp_file.write_text(
-        re.sub(r'"gns3-mcp(?:@|==)[^"]+"', f'"gns3-mcp=={new_version}"', content),
-        encoding="utf-8",
-    )
-    print(f"[OK] Updated plugin/.claude-plugin/plugin.json and plugin/.mcp.json")
+# The Claude plugin is not bumped here (GM-107): its uv.lock pins gns3-mcp by hash and can
+# only be made once PyPI serves the release, so the release workflow runs
+# scripts/update_plugin_lock.py after publishing and commits the plugin update.
 
 
 def verify_consistency() -> bool:
-    """Verify all version files are consistent"""
+    """Verify the package version files are consistent"""
     from check_version import (
         get_init_version,
         get_manifest_version,
-        get_plugin_server_pin,
-        get_plugin_version,
         get_pyproject_version,
     )
 
@@ -153,8 +137,6 @@ def verify_consistency() -> bool:
         "gns3_mcp/__init__.py": get_init_version(),
         "pyproject.toml": get_pyproject_version(),
         "mcp-server/manifest.json": get_manifest_version(),
-        "plugin/.claude-plugin/plugin.json": get_plugin_version(),
-        "plugin/.mcp.json (gns3-mcp==)": get_plugin_server_pin(),
     }
 
     if len(set(versions.values())) == 1:
@@ -205,7 +187,6 @@ def main():
         print("  - gns3_mcp/__init__.py")
         print("  - pyproject.toml")
         print("  - mcp-server/manifest.json")
-        print("  - plugin/.claude-plugin/plugin.json, plugin/.mcp.json")
         print("\nRun without --dry-run to apply changes")
         return 0
 
@@ -215,7 +196,6 @@ def main():
         update_init_py(new_version_str)
         update_pyproject_toml(new_version_str)
         update_manifest_json(new_version_str)
-        update_plugin(new_version_str)
     except Exception as e:
         print(f"\n[ERROR] Failed to update files: {e}")
         return 1

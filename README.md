@@ -75,7 +75,7 @@ uvx gns3-mcp configure --instructions
 
 ### Claude plugin (Claude Code and Cowork)
 
-The plugin installs the `gns3` MCP server (started locally with `uvx`) together with the `gns3-lab-automation` skill, which teaches Claude the lab workflows. Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) on `PATH`.
+The plugin installs the `gns3` MCP server (started locally with `uv run --locked`; `plugin/uv.lock` pins the server and every dependency by hash) together with the `gns3-lab-automation` skill, which teaches Claude the lab workflows. Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) on `PATH`.
 
 ```bash
 # In Claude Code in a terminal

@@ -5,7 +5,10 @@ Checks that version matches in:
 - gns3_mcp/__init__.py
 - pyproject.toml
 - mcp-server/manifest.json
-- plugin/.claude-plugin/plugin.json and the gns3-mcp== pin in plugin/.mcp.json
+
+and that the Claude plugin is consistent in itself (plugin.json = plugin/pyproject.toml =
+gns3-mcp locked in plugin/uv.lock) and not ahead of the package. The plugin may be one
+release behind: CI locks it after the PyPI upload (scripts/update_plugin_lock.py, GM-107).
 """
 import json
 import re
@@ -56,13 +59,43 @@ def get_plugin_version():
 
 
 def get_plugin_server_pin():
-    """Get the gns3-mcp version the plugin starts (uvx gns3-mcp==X in plugin/.mcp.json)"""
-    mcp_json = Path("plugin/.mcp.json")
-    if not mcp_json.exists():
+    """The gns3-mcp version the plugin's uv project depends on (plugin/pyproject.toml)"""
+    project = Path("plugin/pyproject.toml")
+    if not project.exists():
         return None
 
-    match = re.search(r'"gns3-mcp==([^"]+)"', mcp_json.read_text(encoding='utf-8'))
+    match = re.search(r'"gns3-mcp==([^"]+)"', project.read_text(encoding='utf-8'))
     return match.group(1) if match else None
+
+
+def plugin_problems():
+    """What is inconsistent inside the plugin (GM-107), as a list of messages.
+
+    The plugin runs `uv run --locked` on its own uv project: plugin.json, the project's
+    version, its gns3-mcp pin and the gns3-mcp locked in uv.lock must all agree.
+    """
+    problems = []
+    version = get_plugin_version()
+    project = Path("plugin/pyproject.toml")
+    lock = Path("plugin/uv.lock")
+    if not project.exists() or not lock.exists():
+        return ["plugin/pyproject.toml or plugin/uv.lock missing"]
+    text = project.read_text(encoding="utf-8")
+    project_version = re.search(r'(?m)^version = "([^"]+)"', text)
+    if not project_version or project_version.group(1) != version:
+        problems.append("plugin/pyproject.toml version differs from plugin.json")
+    if get_plugin_server_pin() != version:
+        problems.append("plugin/pyproject.toml gns3-mcp pin differs from plugin.json")
+    if f'name = "gns3-mcp"\nversion = "{version}"' not in lock.read_text(encoding="utf-8"):
+        problems.append(f"plugin/uv.lock does not lock gns3-mcp {version}")
+    mcp = Path("plugin/.mcp.json").read_text(encoding="utf-8")
+    if '"--locked"' not in mcp or "${CLAUDE_PLUGIN_ROOT}" not in mcp:
+        problems.append("plugin/.mcp.json does not start the server with uv run --locked")
+    return problems
+
+
+def _key(version):
+    return tuple(int(part) for part in version.split("."))
 
 
 def main():
@@ -76,8 +109,6 @@ def main():
         "gns3_mcp/__init__.py": get_init_version(),
         "pyproject.toml": get_pyproject_version(),
         "mcp-server/manifest.json": get_manifest_version(),
-        "plugin/.claude-plugin/plugin.json": get_plugin_version(),
-        "plugin/.mcp.json (gns3-mcp==)": get_plugin_server_pin(),
     }
 
     # Display versions
@@ -114,6 +145,20 @@ def main():
 
     current_version = unique_versions.pop()
     print(f"[OK] All versions match: {current_version}")
+
+    # The plugin is locked to a *published* release by CI after the PyPI upload, so between
+    # `just bump` and that commit it is one release behind; ahead of the package is wrong.
+    plugin_version = get_plugin_version()
+    problems = plugin_problems()
+    if plugin_version and _key(plugin_version) > _key(current_version):
+        problems.append(f"plugin {plugin_version} is ahead of the package {current_version}")
+    if problems:
+        print("[ERROR] Plugin:")
+        for problem in problems:
+            print(f"  - {problem}")
+        sys.exit(1)
+    note = "" if plugin_version == current_version else " (CI locks the new release after publish)"
+    print(f"[OK] Plugin locked to gns3-mcp {plugin_version}{note}")
     print()
     print("=" * 70)
 

@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.59.1 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.59.2 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.59.1 - plugin ready for Anthropic's directory (`==` pin, disclosure, desktop install steps)
+**Latest Release:** v0.59.2 - plugin runs a uv.lock-pinned environment (`uv run --locked`); CI locks it after each PyPI release
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.59.1)
+### Recent Changes (v0.26.0 - v0.59.2)
+
+**v0.59.2** - Plugin = uv project (GM-107): `plugin/pyproject.toml` (Python >=3.12,<3.14, `gns3-mcp==X`, `package = false`) + `plugin/uv.lock` (87 pkgs, 168 KiB < 256 KiB directory limit), `.mcp.json` `uv run --locked --project ${CLAUDE_PLUGIN_ROOT} gns3-mcp`. Directory refuses PyPI versions as pins. Release workflow job `plugin-lock` (after build-windows) runs `scripts/update_plugin_lock.py X --wait 600` and pushes `chore(plugin): lock gns3-mcp X` to master; `just bump` skips the plugin; check_version allows plugin <= package. First plugin start (~30 s install) can hit Claude Code's 30 s MCP timeout once
 
 **v0.59.1** - Plugin directory prep (GM-107): `plugin/.mcp.json` pins `uvx gns3-mcp==X` (bump/check scripts + test_packaging); plugin README "What it runs and contacts" + not-affiliated-with-GNS3 note; desktop app install = `claude plugin install gns3-lab --marketplace ChistokhinSV/gns3-mcp` in a terminal (desktop `/plugin ...` only opens the browser, which lists added marketplaces + Anthropic directory)
 
@@ -40,7 +42,7 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 **v0.56.1** - published 0.56.0 + Dockerfile/smoke-test release fixes
 
 **v0.56.0** - Claude plugin + MCPB uv runtime (GM-91, GM-92)
-- `plugin/` = Claude plugin `gns3-lab` (Claude Code + Cowork): `uvx gns3-mcp==<ver>` (was `@<ver>` before 0.59.1) + new `gns3-lab-automation` skill; repo is a marketplace (`.claude-plugin/marketplace.json`)
+- `plugin/` = Claude plugin `gns3-lab` (Claude Code + Cowork): uv project (`plugin/pyproject.toml` + `uv.lock`, started with `uv run --locked --project ${CLAUDE_PLUGIN_ROOT} gns3-mcp`; was `uvx gns3-mcp@<ver>` before 0.59.2) + new `gns3-lab-automation` skill; repo is a marketplace (`.claude-plugin/marketplace.json`)
 - Old `skill/` removed (pre-v0.47 tool names); skill now at `plugin/skills/gns3-lab-automation/`
 - MCPB manifest 0.4 `uv` type: no uv.exe/bootstrap, deps from generated `mcp-server/pyproject.toml`; CLI 2.1.2; password via env; platforms darwin/win32
 - Config chain: process env > --env-file/./.env > ~/.gns3-mcp/.env (`GNS3_MCP_ENV_FILE`); empty values = unset
@@ -253,7 +255,7 @@ All linting configuration centralized in [pyproject.toml](pyproject.toml):
 │   └── (generated) gns3_mcp/, pyproject.toml, mcp-server.mcpb
 ├── plugin/                      # Claude plugin (Claude Code + Cowork)
 │   ├── .claude-plugin/plugin.json
-│   ├── .mcp.json                # uvx gns3-mcp==<version> with userConfig env
+│   ├── .mcp.json                # uv run --locked --project ${CLAUDE_PLUGIN_ROOT} gns3-mcp, userConfig env
 │   └── skills/gns3-lab-automation/   # SKILL.md + references/devices.md
 ├── .claude-plugin/marketplace.json  # repo is a plugin marketplace
 ├── scripts/                     # bump/check version, prepare_mcpb.py, smoke_test_mcpb.py
@@ -451,7 +453,7 @@ The skill lives in the plugin (v0.56.0): `plugin/skills/gns3-lab-automation/SKIL
 1. Use only current tool calls (`node(action=...)`, `link(action="batch")`, `console(operations=[...])`, ...)
 2. Keep SKILL.md short; put detail in `references/` and mention each file from SKILL.md
 3. `just validate-plugin` (runs `claude plugin validate` on `plugin/` and the repo marketplace)
-4. `just bump ...` keeps `plugin.json` version and the `uvx gns3-mcp==X` pin in `plugin/.mcp.json` in sync (`==` is the Anthropic directory checker's exact-pin form)
+4. `just bump ...` does NOT touch the plugin: after the PyPI publish, the `plugin-lock` job of the release workflow runs `scripts/update_plugin_lock.py X` (plugin.json + plugin/pyproject.toml version, `uv lock`) and pushes a `chore(plugin): lock gns3-mcp X` commit. Anthropic's directory accepts no PyPI version as a pin (GM-107). Never `uv run` at the repo root; `uv lock --directory plugin` is safe
 5. Plugin = local stdio server (Claude Code + Cowork on the user's machine, not chat). Cowork does not prompt for `userConfig`; all options default to "" and the server falls back to env / `./.env` / `~/.gns3-mcp/.env`
 
 ### MCPB Bundle (Claude Desktop)

@@ -203,9 +203,44 @@ jobs:
 
             ### Platform
             - **Desktop Extension (.mcpb):** Claude Desktop on Windows and macOS. Uses the MCPB uv runtime: Claude Desktop installs the dependencies on first start.
-            - **Claude Code / Cowork plugin:** `/plugin marketplace add ${{ github.repository }}`, then `/plugin install gns3-lab@gns3-mcp`. Needs uv on the machine.
+            - **Claude Code / Cowork plugin:** `claude plugin install gns3-lab --marketplace ${{ github.repository }}` (terminal and desktop app). Needs uv on the machine. The plugin is locked to this release by a follow-up commit a few minutes after publishing.
             - **uv/pip and Docker:** Windows, Linux and macOS.
             - **Python:** 3.10-3.13
             - Built on: windows-latest runner
           draft: false
           prerelease: false
+
+  # GM-107: the Claude plugin is a uv project whose uv.lock pins gns3-mcp and every
+  # dependency by hash (Anthropic's plugin directory accepts no PyPI version as a pin).
+  # The lock can only be made once PyPI serves the release, so it is a follow-up commit.
+  plugin-lock:
+    needs: build-windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v7
+        with:
+          ref: master
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.3  # publishes exact tags only, no floating v10
+
+      - name: Lock the plugin to the published release
+        run: python3 scripts/update_plugin_lock.py "${GITHUB_REF_NAME#v}" --wait 600
+
+      - name: Commit and push the plugin update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add plugin/pyproject.toml plugin/uv.lock plugin/.claude-plugin/plugin.json
+          if git diff --cached --quiet; then
+            echo "Plugin already locked to ${GITHUB_REF_NAME#v}"
+            exit 0
+          fi
+          git commit -m "chore(plugin): lock gns3-mcp ${GITHUB_REF_NAME#v} (GM-107)"
+          # master may have moved while the release built
+          git pull --rebase origin master
+          git push origin HEAD:master

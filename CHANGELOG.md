@@ -5,6 +5,24 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.59.2] - 2026-11-14 - Plugin Locked with uv.lock
+
+### Changed
+- **The Claude plugin runs a locked environment** (GM-107). Anthropic's plugin directory refused
+  `uvx gns3-mcp==X`: a PyPI version is not a pin, because a release can gain files after
+  publishing. The plugin is now a uv project (`plugin/pyproject.toml` + `plugin/uv.lock`) that
+  pins gns3-mcp and all 87 dependencies by hash, started with
+  `uv run --locked --project ${CLAUDE_PLUGIN_ROOT} gns3-mcp`. The project is limited to
+  Python 3.12-3.13 (uv downloads it if needed), which keeps `uv.lock` at 168 KiB, under the
+  directory's 256 KiB file limit.
+- **Release flow**: `just bump` no longer touches the plugin. After the PyPI upload, the new
+  `plugin-lock` job of the release workflow runs `scripts/update_plugin_lock.py X` and pushes a
+  `chore(plugin): lock gns3-mcp X` commit, because the lock can only be made once PyPI serves
+  the release. `check_version.py` checks the plugin's own consistency and lets it trail the
+  package by that commit.
+- Plugin README: the first start installs the locked packages (about half a minute) and can
+  exceed Claude Code's 30 s connection timeout once; reconnect with `/mcp`.
+
 ## [0.59.1] - 2026-11-14 - Plugin Ready for Anthropic's Directory
 
 ### Fixed

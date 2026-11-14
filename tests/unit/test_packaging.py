@@ -142,8 +142,29 @@ def test_plugin_runs_matching_server_version():
     plugin = json.loads((ROOT / "plugin" / ".claude-plugin" / "plugin.json").read_text())
     mcp = (ROOT / "plugin" / ".mcp.json").read_text()
 
-    # `uvx gns3-mcp==X`: the exact-pin form the Anthropic directory's checker expects (GM-107)
-    assert re.search(r'"gns3-mcp==([^"]+)"', mcp).group(1) == plugin["version"]
     # Cowork ignores a server whose referenced options have no default
     for name in re.findall(r"\$\{user_config\.(\w+)\}", mcp):
         assert "default" in plugin["userConfig"][name], name
+
+
+def test_plugin_server_is_locked_for_the_directory():
+    """GM-107: Anthropic's plugin directory accepts no PyPI version as a pin. The plugin is a
+    uv project whose uv.lock pins gns3-mcp and every dependency by hash."""
+    plugin_dir = ROOT / "plugin"
+    plugin = json.loads((plugin_dir / ".claude-plugin" / "plugin.json").read_text())
+    server = json.loads((plugin_dir / ".mcp.json").read_text())["mcpServers"]["gns3"]
+    project = tomllib.loads((plugin_dir / "pyproject.toml").read_text(encoding="utf-8"))
+    lock = (plugin_dir / "uv.lock").read_text(encoding="utf-8")
+
+    assert server["command"] == "uv"
+    assert server["args"] == ["run", "--locked", "--project", "${CLAUDE_PLUGIN_ROOT}", "gns3-mcp"]
+    version = plugin["version"]
+    assert project["project"]["version"] == version
+    assert project["project"]["dependencies"] == [f"gns3-mcp=={version}"]
+    assert f'name = "gns3-mcp"\nversion = "{version}"' in lock
+    # Over 256 KiB the directory holds the file for a reviewer; Python 3.10/3.11 double it
+    assert (plugin_dir / "uv.lock").stat().st_size < 256 * 1024
+    # CI locks the plugin after the PyPI upload, so it may trail the package, never lead it
+    package = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    as_key = lambda v: tuple(int(p) for p in v.split("."))  # noqa: E731
+    assert as_key(version) <= as_key(package["project"]["version"])

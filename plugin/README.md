@@ -4,7 +4,7 @@ Lets Claude build, wire, configure and troubleshoot GNS3 network labs. The plugi
 bundles two things:
 
 - **The `gns3` MCP server** ([gns3-mcp](https://pypi.org/project/gns3-mcp/)), started on
-  your computer with `uvx`. It gives Claude 15 tools for projects, nodes, links, consoles,
+  your computer with `uv`. It gives Claude 15 tools for projects, nodes, links, consoles,
   SSH, drawings, notifications and topology export.
 - **The `gns3-lab-automation` skill**, which tells Claude how to use those tools: which
   calls to make for each step, the console first-access rule, timing, and troubleshooting.
@@ -22,7 +22,7 @@ Technologies; GNS3 is a trademark of its owners.
 
 ## Requirements
 
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) on your `PATH` (`uvx` downloads
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) on your `PATH` (`uv` installs
   the server and a matching Python on first start).
 - A GNS3 server v3.x that your computer can reach.
 
@@ -70,8 +70,12 @@ GNS3_PASSWORD=your-password
 
 ## What it runs and contacts
 
-- **On start**: `uvx` downloads the pinned `gns3-mcp` package and its dependencies from
-  PyPI (and a matching Python if needed), then runs the server locally over stdio.
+- **On start**: `uv run --locked` installs `gns3-mcp` and its dependencies from PyPI at the
+  exact versions and hashes in the plugin's `uv.lock` (plus Python 3.12 or 3.13 if the
+  machine has neither), into a `.venv` inside the plugin folder, then runs the server
+  locally over stdio. The first start takes about half a minute, which can exceed Claude
+  Code's 30-second connection timeout: if `/mcp` shows the `gns3` server failed, reconnect it
+  there (or start a new session) - later starts take under a second.
 - **Your GNS3 server**: the GNS3 v3 REST API (login, projects, nodes, links, drawings,
   notifications) and the telnet consoles of your lab devices, at the host and port you set.
 - **Your lab's SSH proxy**: only for the SSH, TFTP and HTTP tools - the gns3-ssh-proxy

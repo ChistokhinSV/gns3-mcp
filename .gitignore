@@ -76,3 +76,6 @@ DOWNLOAD_TEMP*/
 
 # GitHub Pages: copied from plugin/assets by .github/workflows/pages.yml
 site/icon.png
+
+# Claude plugin runtime env created by `uv run --project plugin` (GM-107)
+plugin/.venv/

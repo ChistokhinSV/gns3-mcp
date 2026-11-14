@@ -1,0 +1,17 @@
+# The plugin's own uv project (GM-107). Anthropic's plugin directory does not accept a PyPI
+# version as a pin, so uv.lock pins the gns3-mcp server and every dependency by hash, and
+# .mcp.json starts the server with `uv run --locked`. After each PyPI release the release
+# workflow runs scripts/update_plugin_lock.py, which sets the version here and re-locks.
+#
+# Python 3.12-3.13 only: wider ranges make uv lock some packages twice and push uv.lock over
+# the directory's 256 KiB file limit. uv downloads a matching Python when the machine has none.
+
+[project]
+name = "gns3-lab-plugin"
+version = "0.59.1"
+description = "Runtime environment of the GNS3 Lab Claude plugin: the gns3-mcp server, locked"
+requires-python = ">=3.12,<3.14"
+dependencies = ["gns3-mcp==0.59.1"]
+
+[tool.uv]
+package = false

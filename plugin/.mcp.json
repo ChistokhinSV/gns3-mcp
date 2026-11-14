@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "gns3": {
-      "command": "uvx",
-      "args": ["gns3-mcp==0.59.1"],
+      "command": "uv",
+      "args": ["run", "--locked", "--project", "${CLAUDE_PLUGIN_ROOT}", "gns3-mcp"],
       "env": {
         "GNS3_HOST": "${user_config.gns3_host}",
         "GNS3_PORT": "${user_config.gns3_port}",
