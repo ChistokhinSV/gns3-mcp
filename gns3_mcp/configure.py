@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -401,8 +402,12 @@ def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     _backup(path)
     tmp = path.with_name(path.name + ".gns3-mcp-tmp")
-    tmp.write_text(text, encoding="utf-8", newline="")
-    os.replace(tmp, path)
+    try:
+        tmp.write_text(text, encoding="utf-8", newline="")
+        os.replace(tmp, path)
+    finally:
+        # Ctrl-C between the two calls must not leave the temporary copy behind
+        tmp.unlink(missing_ok=True)
 
 
 def _read_text(path: Path) -> str:
@@ -948,10 +953,42 @@ def _print_step(step: Step) -> None:
         print(f"    {line}")
 
 
-def run(argv: list[str], env: Env | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    env = env or Env.current()
+CANCELLED = 130  # the shell's exit code for a process ended by Ctrl-C
 
+
+def _absorb_late_interrupt() -> None:
+    """On Windows, Ctrl-C at input() raises EOFError first and delivers KeyboardInterrupt a
+    moment later; wait for it here so it cannot surface as a traceback after the message."""
+    try:
+        time.sleep(0.2)
+    except KeyboardInterrupt:
+        pass
+
+
+def run(argv: list[str], env: Env | None = None) -> int:
+    """Configure; Ctrl-C (or Ctrl-D / Ctrl-Z+Enter at a prompt) cancels without a traceback"""
+    args = build_parser().parse_args(argv)
+    written: list[str] = []
+    try:
+        return _configure(args, env or Env.current(), written)
+    except (KeyboardInterrupt, EOFError) as e:
+        if isinstance(e, EOFError) and sys.platform == "win32":
+            _absorb_late_interrupt()
+        try:
+            print(file=sys.stderr)  # end the prompt line the user was typing on
+            if written:
+                print("Cancelled. Already written:", file=sys.stderr)
+                for item in written:
+                    print(f"  {item}", file=sys.stderr)
+            else:
+                print("Cancelled; nothing was written.", file=sys.stderr)
+        except KeyboardInterrupt:
+            pass
+        return CANCELLED
+
+
+def _configure(args: argparse.Namespace, env: Env, written: list[str]) -> int:
+    """The configure run; `written` collects each file changed, for the cancel message"""
     if args.instructions:
         print(manual_guide(env))
         return 0
@@ -999,6 +1036,7 @@ def run(argv: list[str], env: Env | None = None) -> int:
         print(f"  settings: would save {env_file}")
     else:
         save_settings(env_file, settings)
+        written.append(str(env_file))
         print(f"  settings: saved {env_file}")
 
     failed = False
@@ -1009,6 +1047,7 @@ def run(argv: list[str], env: Env | None = None) -> int:
             if step.apply and not args.dry_run:
                 try:
                     step.apply()
+                    written.append(step.target)
                 except (OSError, ConfigureError, subprocess.SubprocessError) as e:
                     step.action, step.note = "failed", str(e)
                     failed = True
@@ -1022,4 +1061,8 @@ def run(argv: list[str], env: Env | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> None:
-    sys.exit(run(sys.argv[1:] if argv is None else argv))
+    try:
+        code = run(sys.argv[1:] if argv is None else argv)
+    except KeyboardInterrupt:  # a second Ctrl-C while the cancel message prints
+        code = CANCELLED
+    sys.exit(code)

@@ -5,6 +5,15 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.58.1] - 2026-11-14 - Cancel configure Cleanly
+
+### Fixed
+- **Ctrl-C in `gns3-mcp configure` showed a Python traceback** (GM-103). Ctrl-C, or Ctrl-D /
+  Ctrl-Z+Enter at a prompt, now prints `Cancelled; nothing was written.` - or, when cancelled
+  midway, the files already written - and exits with code 130. On Windows, where Ctrl-C at a
+  prompt arrives as two exceptions, the late one is absorbed too. An interrupted write no longer
+  leaves a `*.gns3-mcp-tmp` file behind.
+
 ## [0.58.0] - 2026-11-14 - One-Command Agent Setup and Install Page
 
 ### Added

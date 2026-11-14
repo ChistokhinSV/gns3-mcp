@@ -313,6 +313,91 @@ class TestRun:
         assert "[mcp_servers.gns3]" in guide
 
 
+class _Tty:
+    """stdin that looks like a terminal, so run() prompts"""
+
+    def isatty(self):
+        return True
+
+
+class TestCancel:
+    @pytest.fixture
+    def interactive(self, env, monkeypatch, tmp_path):
+        env_file = tmp_path / "gns3.env"
+        monkeypatch.setenv("GNS3_MCP_ENV_FILE", str(env_file))
+        monkeypatch.delenv("GNS3_PASSWORD", raising=False)
+        monkeypatch.setattr(configure.sys, "stdin", _Tty())
+        monkeypatch.setattr(configure.shutil, "which", lambda name: None)
+        monkeypatch.setattr(configure, "_absorb_late_interrupt", lambda: None)
+        return env, env_file
+
+    @pytest.mark.parametrize("key", [KeyboardInterrupt, EOFError])
+    def test_cancel_at_a_prompt_writes_nothing_and_shows_no_traceback(
+        self, interactive, monkeypatch, capsys, key
+    ):
+        env, env_file = interactive
+
+        def press(*args):
+            raise key
+
+        monkeypatch.setattr(configure, "_ask", press)
+
+        assert configure.run(["gemini"], env) == configure.CANCELLED
+
+        err = capsys.readouterr().err
+        assert "Cancelled; nothing was written." in err
+        assert "Traceback" not in err
+        assert not env_file.exists()
+
+    def test_cancel_at_the_password_prompt(self, interactive, monkeypatch, capsys):
+        env, env_file = interactive
+        monkeypatch.setattr(configure, "_ask", lambda label, default: "")
+        monkeypatch.setattr(
+            configure.getpass, "getpass", lambda prompt: (_ for _ in ()).throw(KeyboardInterrupt)
+        )
+
+        assert configure.run(["gemini", "--host", "h"], env) == configure.CANCELLED
+        assert "nothing was written" in capsys.readouterr().err
+
+    def test_cancel_midway_lists_what_was_written(self, interactive, monkeypatch, capsys):
+        env, env_file = interactive
+        monkeypatch.setenv("GNS3_PASSWORD", "pw")
+
+        def interrupted(path, agent):
+            def apply():
+                raise KeyboardInterrupt
+
+            return configure.Step("instructions", str(path), "create", apply=apply)
+
+        monkeypatch.setattr(configure, "plan_rules", interrupted)
+
+        argv = ["gemini", "--host", "h", "--yes", "--skip-check"]
+        assert configure.run(argv, env) == configure.CANCELLED
+
+        err = capsys.readouterr().err
+        assert "Cancelled. Already written:" in err
+        assert str(env_file) in err
+        assert str(env.home / ".gemini" / "settings.json") in err
+
+    def test_interrupted_write_leaves_no_temporary_file(self, tmp_path, monkeypatch):
+        path = tmp_path / "mcp.json"
+
+        def interrupted_replace(src, dst):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(configure.os, "replace", interrupted_replace)
+
+        with pytest.raises(KeyboardInterrupt):
+            configure._write_text(path, "{}")
+        assert list(tmp_path.iterdir()) == []
+
+    def test_main_exits_with_cancel_code(self, monkeypatch):
+        monkeypatch.setattr(configure, "run", lambda argv: configure.CANCELLED)
+        with pytest.raises(SystemExit) as stop:
+            configure.main(["gemini"])
+        assert stop.value.code == 130
+
+
 def test_cli_dispatches_configure(monkeypatch):
     called = []
     monkeypatch.setattr("sys.argv", ["gns3-mcp", "configure", "--instructions"])
