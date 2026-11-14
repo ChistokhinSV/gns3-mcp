@@ -5,7 +5,7 @@ Increments semantic version (MAJOR.MINOR.PATCH) and updates:
 - gns3_mcp/__init__.py (source of truth)
 - pyproject.toml
 - mcp-server/manifest.json
-- plugin/.claude-plugin/plugin.json, plugin/.mcp.json (gns3-mcp@ pin)
+- plugin/.claude-plugin/plugin.json, plugin/.mcp.json (gns3-mcp== pin)
 
 Usage:
     python scripts/bump_version.py patch  # 0.43.0 -> 0.43.1
@@ -119,10 +119,11 @@ def update_manifest_json(new_version: str) -> None:
 
 
 def update_plugin(new_version: str) -> None:
-    """Update plugin.json version and the gns3-mcp@ pin in plugin/.mcp.json.
+    """Update plugin.json version and the gns3-mcp== pin in plugin/.mcp.json.
 
-    The plugin starts `uvx gns3-mcp@<version>`, so each plugin release runs the
-    server released with it.
+    The plugin starts `uvx gns3-mcp==<version>`, so each plugin release runs the
+    server released with it. `==` is the exact-pin form the Anthropic plugin
+    directory's checker names for uvx (GM-107); `@` pins are rewritten too.
     """
     plugin_file = Path("plugin/.claude-plugin/plugin.json")
     plugin = json.loads(plugin_file.read_text(encoding="utf-8"))
@@ -132,7 +133,8 @@ def update_plugin(new_version: str) -> None:
     mcp_file = Path("plugin/.mcp.json")
     content = mcp_file.read_text(encoding="utf-8")
     mcp_file.write_text(
-        re.sub(r'"gns3-mcp@[^"]+"', f'"gns3-mcp@{new_version}"', content), encoding="utf-8"
+        re.sub(r'"gns3-mcp(?:@|==)[^"]+"', f'"gns3-mcp=={new_version}"', content),
+        encoding="utf-8",
     )
     print(f"[OK] Updated plugin/.claude-plugin/plugin.json and plugin/.mcp.json")
 
@@ -152,7 +154,7 @@ def verify_consistency() -> bool:
         "pyproject.toml": get_pyproject_version(),
         "mcp-server/manifest.json": get_manifest_version(),
         "plugin/.claude-plugin/plugin.json": get_plugin_version(),
-        "plugin/.mcp.json (gns3-mcp@)": get_plugin_server_pin(),
+        "plugin/.mcp.json (gns3-mcp==)": get_plugin_server_pin(),
     }
 
     if len(set(versions.values())) == 1:

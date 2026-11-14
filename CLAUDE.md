@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.59.0 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.59.1 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.59.0 - configure: `99. manual` for agents not in the list; project delete explains GNS3 permission bugs
+**Latest Release:** v0.59.1 - plugin ready for Anthropic's directory (`==` pin, disclosure, desktop install steps)
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.59.0)
+### Recent Changes (v0.26.0 - v0.59.1)
+
+**v0.59.1** - Plugin directory prep (GM-107): `plugin/.mcp.json` pins `uvx gns3-mcp==X` (bump/check scripts + test_packaging); plugin README "What it runs and contacts" + not-affiliated-with-GNS3 note; desktop app install = `claude plugin install gns3-lab --marketplace ChistokhinSV/gns3-mcp` in a terminal (desktop `/plugin ...` only opens the browser, which lists added marketplaces + Anthropic directory)
 
 **v0.59.0** - `configure` picker `99. manual` / `configure manual` (GM-105): `MANUAL` pseudo-agent saves settings like any agent, then prints `manual_guide(env, settings_done=...)` with step 1 done; `--instructions` unchanged (print-only). `project delete` "Permission denied" (GM-104): GNS3 3.0.x bugs (0200 node folders, PR #2876; root-owned Docker files, PR #2874; both fixed in 3.1) explained, `context.fix_command` = `chown -Rh --reference` + `chmod -R u+rwX` on the project dir (`_delete_error` in project_tools.py)
 
@@ -38,7 +40,7 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 **v0.56.1** - published 0.56.0 + Dockerfile/smoke-test release fixes
 
 **v0.56.0** - Claude plugin + MCPB uv runtime (GM-91, GM-92)
-- `plugin/` = Claude plugin `gns3-lab` (Claude Code + Cowork): `uvx gns3-mcp@<ver>` + new `gns3-lab-automation` skill; repo is a marketplace (`.claude-plugin/marketplace.json`)
+- `plugin/` = Claude plugin `gns3-lab` (Claude Code + Cowork): `uvx gns3-mcp==<ver>` (was `@<ver>` before 0.59.1) + new `gns3-lab-automation` skill; repo is a marketplace (`.claude-plugin/marketplace.json`)
 - Old `skill/` removed (pre-v0.47 tool names); skill now at `plugin/skills/gns3-lab-automation/`
 - MCPB manifest 0.4 `uv` type: no uv.exe/bootstrap, deps from generated `mcp-server/pyproject.toml`; CLI 2.1.2; password via env; platforms darwin/win32
 - Config chain: process env > --env-file/./.env > ~/.gns3-mcp/.env (`GNS3_MCP_ENV_FILE`); empty values = unset
@@ -251,7 +253,7 @@ All linting configuration centralized in [pyproject.toml](pyproject.toml):
 │   └── (generated) gns3_mcp/, pyproject.toml, mcp-server.mcpb
 ├── plugin/                      # Claude plugin (Claude Code + Cowork)
 │   ├── .claude-plugin/plugin.json
-│   ├── .mcp.json                # uvx gns3-mcp@<version> with userConfig env
+│   ├── .mcp.json                # uvx gns3-mcp==<version> with userConfig env
 │   └── skills/gns3-lab-automation/   # SKILL.md + references/devices.md
 ├── .claude-plugin/marketplace.json  # repo is a plugin marketplace
 ├── scripts/                     # bump/check version, prepare_mcpb.py, smoke_test_mcpb.py
@@ -449,7 +451,7 @@ The skill lives in the plugin (v0.56.0): `plugin/skills/gns3-lab-automation/SKIL
 1. Use only current tool calls (`node(action=...)`, `link(action="batch")`, `console(operations=[...])`, ...)
 2. Keep SKILL.md short; put detail in `references/` and mention each file from SKILL.md
 3. `just validate-plugin` (runs `claude plugin validate` on `plugin/` and the repo marketplace)
-4. `just bump ...` keeps `plugin.json` version and the `uvx gns3-mcp@X` pin in `plugin/.mcp.json` in sync
+4. `just bump ...` keeps `plugin.json` version and the `uvx gns3-mcp==X` pin in `plugin/.mcp.json` in sync (`==` is the Anthropic directory checker's exact-pin form)
 5. Plugin = local stdio server (Claude Code + Cowork on the user's machine, not chat). Cowork does not prompt for `userConfig`; all options default to "" and the server falls back to env / `./.env` / `~/.gns3-mcp/.env`
 
 ### MCPB Bundle (Claude Desktop)

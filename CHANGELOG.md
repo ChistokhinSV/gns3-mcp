@@ -5,6 +5,23 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.59.1] - 2026-11-14 - Plugin Ready for Anthropic's Directory
+
+### Fixed
+- **Plugin install steps for the desktop app** (GM-107). In the Claude desktop app's Code
+  tab, `/plugin marketplace add ChistokhinSV/gns3-mcp` only opens the plugin browser, which
+  lists plugins from marketplaces already added - so gns3-lab was not found. The plugin
+  README, README and install page now give the one terminal command that adds the
+  marketplace and installs the plugin for the terminal and the desktop app:
+  `claude plugin install gns3-lab --marketplace ChistokhinSV/gns3-mcp`.
+
+### Changed
+- The plugin pins its server as `uvx gns3-mcp==<version>` (was `@<version>`), the exact-pin
+  form Anthropic's plugin directory checker names; `just bump` writes it.
+- Plugin README: a "What it runs and contacts" section (PyPI download at start, GNS3 API and
+  consoles, the lab's SSH proxy, nothing else) and a note that the plugin is a community
+  project, not made or endorsed by GNS3. Same note in README and on the install page.
+
 ## [0.59.0] - 2026-11-14 - Manual Installation in configure
 
 ### Added

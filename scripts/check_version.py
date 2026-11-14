@@ -5,7 +5,7 @@ Checks that version matches in:
 - gns3_mcp/__init__.py
 - pyproject.toml
 - mcp-server/manifest.json
-- plugin/.claude-plugin/plugin.json and the gns3-mcp@ pin in plugin/.mcp.json
+- plugin/.claude-plugin/plugin.json and the gns3-mcp== pin in plugin/.mcp.json
 """
 import json
 import re
@@ -56,12 +56,12 @@ def get_plugin_version():
 
 
 def get_plugin_server_pin():
-    """Get the gns3-mcp version the plugin starts (uvx gns3-mcp@X in plugin/.mcp.json)"""
+    """Get the gns3-mcp version the plugin starts (uvx gns3-mcp==X in plugin/.mcp.json)"""
     mcp_json = Path("plugin/.mcp.json")
     if not mcp_json.exists():
         return None
 
-    match = re.search(r'"gns3-mcp@([^"]+)"', mcp_json.read_text(encoding='utf-8'))
+    match = re.search(r'"gns3-mcp==([^"]+)"', mcp_json.read_text(encoding='utf-8'))
     return match.group(1) if match else None
 
 
@@ -77,7 +77,7 @@ def main():
         "pyproject.toml": get_pyproject_version(),
         "mcp-server/manifest.json": get_manifest_version(),
         "plugin/.claude-plugin/plugin.json": get_plugin_version(),
-        "plugin/.mcp.json (gns3-mcp@)": get_plugin_server_pin(),
+        "plugin/.mcp.json (gns3-mcp==)": get_plugin_server_pin(),
     }
 
     # Display versions

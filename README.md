@@ -78,11 +78,15 @@ uvx gns3-mcp configure --instructions
 The plugin installs the `gns3` MCP server (started locally with `uvx`) together with the `gns3-lab-automation` skill, which teaches Claude the lab workflows. Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) on `PATH`.
 
 ```bash
-# In Claude Code
+# In Claude Code in a terminal
 /plugin marketplace add ChistokhinSV/gns3-mcp
 /plugin install gns3-lab@gns3-mcp
 ```
 
+- **Claude Code in the desktop app**: `/plugin ...` there only opens the plugin browser, which lists plugins from marketplaces you have already added. Run this once in a terminal (the desktop app reads the same settings); it adds the marketplace and installs the plugin:
+  ```bash
+  claude plugin install gns3-lab --marketplace ChistokhinSV/gns3-mcp
+  ```
 - **Claude Code** asks for GNS3 host, port, username and password when the plugin is enabled (the password goes to the system credential store).
 - **Cowork** (desktop app): **Customize > Plugins > Add > Add marketplace** → `ChistokhinSV/gns3-mcp`, add **GNS3 Lab**. Cowork does not ask for settings, so put them in `~/.gns3-mcp/.env`:
   ```bash
@@ -725,6 +729,8 @@ For more details, see [docs/DOCKER_HUB.md](docs/DOCKER_HUB.md).
 ## License
 
 MIT License
+
+GNS3 MCP Server and the GNS3 Lab plugin are a community project, not made or endorsed by the GNS3 project or GNS3 Technologies. GNS3 is a trademark of its owners.
 
 ## Author
 

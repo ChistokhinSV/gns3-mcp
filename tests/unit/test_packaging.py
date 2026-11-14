@@ -142,7 +142,8 @@ def test_plugin_runs_matching_server_version():
     plugin = json.loads((ROOT / "plugin" / ".claude-plugin" / "plugin.json").read_text())
     mcp = (ROOT / "plugin" / ".mcp.json").read_text()
 
-    assert re.search(r'"gns3-mcp@([^"]+)"', mcp).group(1) == plugin["version"]
+    # `uvx gns3-mcp==X`: the exact-pin form the Anthropic directory's checker expects (GM-107)
+    assert re.search(r'"gns3-mcp==([^"]+)"', mcp).group(1) == plugin["version"]
     # Cowork ignores a server whose referenced options have no default
     for name in re.findall(r"\$\{user_config\.(\w+)\}", mcp):
         assert "default" in plugin["userConfig"][name], name
