@@ -391,6 +391,21 @@ class IConsoleManager(ABC):
         """
         pass
 
+    @abstractmethod
+    def is_connected(self, session_id: str) -> bool:
+        """True if the session exists and its telnet connection is open"""
+        pass
+
+    @abstractmethod
+    def pop_notice_by_node(self, node_name: str) -> str | None:
+        """Return and clear the pending notice of a node's session (reopened / lost)"""
+        pass
+
+    @abstractmethod
+    def last_error_by_node(self, node_name: str) -> str | None:
+        """Why the node's console connection was last lost or failed to reopen"""
+        pass
+
     # Node-name based convenience methods
     @abstractmethod
     def get_session_id(self, node_name: str) -> str | None:

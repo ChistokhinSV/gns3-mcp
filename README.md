@@ -39,7 +39,7 @@ The agent follows the [install steps for agents](https://chistokhinsv.github.io/
 ### Or run one command yourself
 
 ```bash
-uvx gns3-mcp configure claude
+uvx gns3-mcp@latest configure claude
 ```
 
 Use your agent's name: `claude` (Claude Code), `claude-desktop`, `cursor`, `vscode` (GitHub Copilot), `windsurf` (Devin Desktop), `cline`, `kiro`, `opencode`, `codex` or `gemini`. Without a name it shows a numbered list; `99` (`manual`) is for any other agent: it saves the settings and prints the setup guide. The command:
@@ -47,14 +47,15 @@ Use your agent's name: `claude` (Claude Code), `claude-desktop`, `cursor`, `vsco
 - asks for the GNS3 host, port, user and password and checks the login;
 - saves them in `~/.gns3-mcp/.env`, so agent configs hold no passwords;
 - adds the `gns3` server to the agent's MCP config (other servers stay; a backup of each file is kept);
-- adds a short instructions file or block to the agent's rules, telling it to use the GNS3 tools.
+- adds a short instructions file or block to the agent's rules, telling it to use the GNS3 tools;
+- asks last whether to update automatically (default yes): the agent then runs `uvx gns3-mcp@latest`, which picks up a new release at each start but needs internet to start. Answer no for offline labs: the config pins the version that ran `configure` (`gns3-mcp@<version>`).
 
 Restart the agent afterwards and ask it to list your GNS3 projects. Running it again updates the same entries.
 
 **Agent not listed, or you prefer to edit the config yourself?** This prints the ready-made config and instructions for every agent, with the file paths for your computer:
 
 ```bash
-uvx gns3-mcp configure --instructions
+uvx gns3-mcp@latest configure --instructions
 ```
 
 | Option | Effect |
@@ -63,6 +64,21 @@ uvx gns3-mcp configure --instructions
 | `--dry-run` | show what would change, write nothing |
 | `--yes` | no prompts: `--host`, `--port`, `--user`, and `GNS3_PASSWORD` from the environment |
 | `--no-instructions` | leave the agent's rules alone |
+| `--auto-update` / `--no-auto-update` | run `gns3-mcp@latest` (default) or pin this version; the choice is saved and kept by later runs |
+
+### Updating
+
+`gns3_connection(action="check")` tells the agent when PyPI has a newer release (`update_available`, with the command for your install). The lookup waits at most 300 ms and stays silent on a slow or broken network; `GNS3_MCP_UPDATE_CHECK=false` turns it off.
+
+| Installed with | Update |
+|---|---|
+| `configure`, auto-update on | restart the agent |
+| `configure`, pinned | `uvx gns3-mcp@latest configure <agent> --yes`, then restart the agent |
+| Claude plugin | `claude plugin update gns3-lab@gns3-mcp` (or turn on auto-update for the marketplace in `/plugin` > Marketplaces) |
+| `.mcpb` extension | install the new `.mcpb` from the [releases](https://github.com/ChistokhinSV/gns3-mcp/releases) |
+| Docker | `docker compose pull && docker compose up -d` |
+
+Run `configure` as `gns3-mcp@latest`: a plain `uvx gns3-mcp ...` keeps using the version uvx cached on its first run.
 
 ### Other ways
 
@@ -404,7 +420,7 @@ claude mcp get gns3-mcp
 - **"Connection refused"**: Verify GNS3 server is running and accessible
 - **"Authentication failed"**: Check credentials in `.env` file
 - **"Socket is closed"**: SSH session expired, reconnect automatically on next command
-- **Stale console sessions after a GNS3 restart**: `gns3_connection(action="reconnect")`
+- **Dropped console connection**: reopened by the next `console` operation (its result has `warnings`); after a GNS3 restart, if tools fail, `gns3_connection(action="reconnect")`
 - **Node change "not applied by GNS3"**: the key is wrong for that node type or misplaced - check `query_resource("nodes://<project_id>/<node_id>")`
 
 **For Claude Desktop issues:**
@@ -668,6 +684,7 @@ docker-compose up -d
 | `MCP_API_KEY` | Yes | - | Key clients send in the `MCP_API_KEY` header; container exits without it |
 | `HTTP_PORT` | No | `8000` | MCP server port |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
+| `GNS3_MCP_UPDATE_CHECK` | No | `true` | `false`: `gns3_connection check` does not look up newer releases on PyPI |
 | `GNS3_USE_HTTPS` | No | `false` | Use HTTPS for GNS3 |
 | `GNS3_VERIFY_SSL` | No | `true` | Verify SSL certs |
 | `GNS3_NODE_CREATE_TIMEOUT` | No | `180` | Seconds `node create` waits for GNS3 (first use of a template with big images is slow) |

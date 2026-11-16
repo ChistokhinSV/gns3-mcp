@@ -5,6 +5,57 @@ All notable changes to the GNS3 MCP Server project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.61.0] - 2026-11-16 - Auto-Update, Console Reconnects, Selected Project Kept
+
+### Added
+- **`configure` asks, as its last question, whether to update automatically** (GM-110; default
+  yes). Yes: agent configs run `uvx gns3-mcp@latest`, which picks up each new release when the
+  agent starts. It needs internet at every start (measured: ~2 s instead of ~0.4 s, and no start
+  at all without network), so the question says so. No: the config pins the version that ran
+  configure, and configure prints the update command
+  (`uvx gns3-mcp@latest configure <agent> --yes`). `--auto-update` / `--no-auto-update` decide
+  without asking; the choice is saved as `GNS3_MCP_AUTO_UPDATE` in `~/.gns3-mcp/.env` and kept
+  by later runs. The manual guide (`--instructions`) shows `gns3-mcp@latest` and how to pin.
+- **`gns3_connection(action="check")` reports a newer release**: `update_available` (installed,
+  latest, how to update for this install) when PyPI has one, plus `version`. The lookup waits at
+  most 300 ms; a slower answer is cached for the next check, and a slow or broken network
+  reports nothing. Answers are cached for 6 hours. `GNS3_MCP_UPDATE_CHECK=false` turns it off.
+
+### Fixed
+- **Re-running `uvx gns3-mcp configure` did not update anything**: uvx reuses the version it
+  cached on its first run, so the old configure wrote the old pin back. README, the install
+  page, the agent rules block and configure's help now use `uvx gns3-mcp@latest configure`.
+- **The selected project no longer switches every 5 minutes** (GM-109). After each background
+  keep-alive (and `gns3_connection` `retry`/`reconnect`) the server set the current project to
+  the first opened one. With several projects open on a shared GNS3 server, node and console
+  calls then went to another user's lab. Now a project is picked only when none is selected
+  (server start, after close/delete). A selected project that GNS3 closed stays selected, so
+  the next tool call reports it instead of acting on a different project.
+- `gns3_connection(action="check")` shows `current_project` (id, name, status); `retry` returns
+  it too.
+- "Project no longer exists" said "Project ID None not found"; it now names the missing id.
+- **A console whose telnet connection dropped is reopened on the next operation** (GM-108).
+  Before, the first `send_and_wait` after the connection closed failed with
+  `CONSOLE_DISCONNECTED` until `gns3_connection(action="reconnect")`, which also cleared every
+  other node's session and its read-first state. Now each operation checks the connection and
+  reopens it once, in place: same session, same buffer, read-first state kept. A send whose
+  write fails is reopened and sent once more. The batch result of that operation carries a
+  `warnings` entry ("Console connection was lost (...) and has been reopened"). Covers a
+  connection reset, a node restart (GNS3 closes its console proxy) and a console port change.
+- **Sends to a closed console are no longer lost silently.** telnetlib3 drops a write to a
+  connection the remote end closed without an error, so a send could "succeed" while nothing
+  reached the device and `send_and_wait` timed out. The connection state is now checked
+  before every write.
+- **Stopped node:** `read` still returns the output captured before the console closed, with a
+  warning that reopening failed; `send`/`send_and_wait`/`keystroke` return `NODE_STOPPED`
+  instead of `CONSOLE_DISCONNECTED`. `CONSOLE_DISCONNECTED` now gives the reason (for example
+  the reopen error).
+- **`sessions://console/` and `sessions://console/{node}` work again**: they failed with
+  "'ConsoleSession' object has no attribute 'connected'". They now list `connected`,
+  `reconnects` and (single session) `last_error`.
+- `disconnect()` drops the session even when closing the socket fails, so a broken session is
+  not reused.
+
 ## [0.60.0] - 2026-11-14 - Skill-Only Plugin
 
 ### Added

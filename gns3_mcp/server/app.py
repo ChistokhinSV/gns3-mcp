@@ -90,12 +90,53 @@ async def periodic_console_cleanup(console: ConsoleManager):
             logger.error(f"Error in cleanup task: {e}")
 
 
+async def refresh_current_project(gns3: GNS3Client, context: IAppContext) -> dict | None:
+    """Pick a current project only when none is selected (GM-109)
+
+    Used after each successful authentication (background keep-alive every 5 min,
+    gns3_connection retry/reconnect). A selected project is never replaced: several
+    clients share one GNS3 server, and switching to the first opened project moved
+    node and console calls into another user's lab. A selected project that GNS3
+    no longer has opened stays selected, so the next tool call reports it
+    (validate_current_project) instead of acting on a different project.
+
+    Returns:
+        The current project as GNS3 lists it (may be closed), or None
+    """
+    projects = await gns3.get_projects()
+
+    if context.current_project_id:
+        current = next(
+            (p for p in projects if p.get("project_id") == context.current_project_id), None
+        )
+        if current is None or current.get("status") != "opened":
+            name = current.get("name") if current else context.current_project_id
+            logger.warning(f"Current project {name} is no longer opened in GNS3; kept selected")
+        return current
+
+    opened = [p for p in projects if p.get("status") == "opened"]
+    if not opened:
+        logger.info("No opened project found")
+        return None
+
+    context.current_project_id = opened[0]["project_id"]
+    if len(opened) > 1:
+        names = ", ".join(p.get("name", "?") for p in opened)
+        logger.warning(
+            f"{len(opened)} projects opened ({names}); auto-selected {opened[0].get('name')}. "
+            'Use project(action="open", name=...) to pick another'
+        )
+    else:
+        logger.info(f"Auto-detected opened project: {opened[0].get('name')}")
+    return opened[0]
+
+
 async def background_authentication(gns3: GNS3Client, context: AppContext):
     """Background task for GNS3 authentication with exponential backoff
 
     v0.38.0: Non-blocking authentication that allows server to start immediately
     Retries with exponential backoff: 5s → 10s → 30s → 60s → 300s (max)
-    Updates connection status and auto-detects opened project on success
+    Updates connection status and auto-detects an opened project when none is selected
     """
     retry_delays = [5, 10, 30, 60, 300]  # Exponential backoff in seconds
     retry_index = 0
@@ -108,15 +149,9 @@ async def background_authentication(gns3: GNS3Client, context: AppContext):
             if success:
                 logger.info("Background authentication succeeded")
 
-                # Auto-detect opened project
+                # Auto-detect an opened project only if none is selected (GM-109)
                 try:
-                    projects = await gns3.get_projects()
-                    opened = [p for p in projects if p.get("status") == "opened"]
-                    if opened:
-                        context.current_project_id = opened[0]["project_id"]
-                        logger.info(f"Auto-detected opened project: {opened[0]['name']}")
-                    else:
-                        logger.info("No opened project found")
+                    await refresh_current_project(gns3, context)
                 except Exception as e:
                     logger.warning(f"Failed to detect opened project: {e}")
 

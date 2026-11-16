@@ -63,27 +63,24 @@ async def list_console_sessions_impl(app: "IAppContext", project_id: str | None 
         else:
             project_node_names = None  # No filtering
 
-        # Build sessions list (filtered or all)
-        sessions = []
-        for node_name, session_info in app.console.sessions.items():
-            # Include session if: no filter OR node is in project
-            if project_node_names is None or node_name in project_node_names:
-                sessions.append(
-                    {
-                        "node_name": node_name,
-                        "connected": session_info.connected,
-                        "host": session_info.host,
-                        "port": session_info.port,
-                        "buffer_size": len(session_info.buffer),
-                        "created_at": (
-                            session_info.created_at.isoformat() if session_info.created_at else None
-                        ),
-                    }
-                )
+        # Build sessions list (filtered or all); list_sessions() is keyed by session_id
+        sessions = [
+            info
+            for info in app.console.list_sessions().values()
+            if project_node_names is None or info["node_name"] in project_node_names
+        ]
 
         return format_table(
             sessions,
-            columns=["node_name", "connected", "host", "port", "buffer_size", "created_at"],
+            columns=[
+                "node_name",
+                "connected",
+                "host",
+                "port",
+                "buffer_size",
+                "reconnects",
+                "created_at",
+            ],
         )
     except Exception as e:
         return f"Error: Failed to list console sessions\nDetails: {str(e)}"
@@ -102,7 +99,8 @@ async def get_console_session_impl(app: "IAppContext", node_name: str) -> str:
         JSON object with console session status
     """
     try:
-        session_info = app.console.sessions.get(node_name)
+        session_id = app.console.get_session_id(node_name)
+        session_info = app.console.list_sessions().get(session_id) if session_id else None
 
         if not session_info:
             return json.dumps(
@@ -118,20 +116,7 @@ async def get_console_session_impl(app: "IAppContext", node_name: str) -> str:
                 indent=2,
             )
 
-        return json.dumps(
-            {
-                "connected": session_info.connected,
-                "node_name": node_name,
-                "session_id": session_info.session_id,
-                "host": session_info.host,
-                "port": session_info.port,
-                "buffer_size": len(session_info.buffer),
-                "created_at": (
-                    session_info.created_at.isoformat() if session_info.created_at else None
-                ),
-            },
-            indent=2,
-        )
+        return json.dumps({"session_id": session_id, **session_info}, indent=2)
     except Exception as e:
         return json.dumps(
             {"error": "Failed to get console session", "node_name": node_name, "details": str(e)},

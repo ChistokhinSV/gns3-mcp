@@ -26,11 +26,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def _auto_connect_console(app: "IAppContext", node_name: str) -> str | None:
-    """Auto-connect to console if not already connected
+async def _auto_connect_console(
+    app: "IAppContext", node_name: str, allow_stale: bool = False
+) -> str | None:
+    """Make sure the node has a usable console session
 
-    Validates node_id to detect stale sessions when nodes are deleted and
-    recreated with the same name (GM-84).
+    ConsoleManager.connect() reuses a live session, replaces a stale one when the
+    node was deleted and recreated with the same name (GM-84) and reopens a closed
+    connection in place, keeping buffer and read-first state (GM-108).
+
+    Args:
+        allow_stale: if reopening fails but a session with captured output exists,
+            carry on with it (reads show what was captured before the console closed;
+            the batch result gets a warning)
 
     Returns:
         JSON error message if connection fails, None if successful
@@ -47,33 +55,6 @@ async def _auto_connect_console(app: "IAppContext", node_name: str) -> str | Non
         return node_not_found_error(
             node_name=node_name, project_id=app.current_project_id, available_nodes=available_nodes
         )
-
-    node_id = node.get("node_id", "")
-
-    # Check if already connected (connect() handles stale session detection via node_id)
-    if app.console.has_session(node_name):
-        # Verify session is not stale by checking node_id
-        session_id = app.console.get_session_id(node_name)
-        if session_id:
-            existing_session = app.console.sessions.get(session_id)
-            if existing_session:
-                if not node_id:
-                    # No node_id from GNS3 — can't validate, reuse existing
-                    return None
-                if existing_session.node_id and node_id == existing_session.node_id:
-                    # node_id matches — session is valid
-                    return None
-                if not existing_session.node_id:
-                    # Session predates GM-84 fix — backfill node_id for future checks
-                    existing_session.node_id = node_id
-                    return None
-                # node_id mismatch — stale session, disconnect and reconnect
-                logger.warning(
-                    f"Stale session for {node_name}: "
-                    f"session node_id={existing_session.node_id}, "
-                    f"current node_id={node_id}"
-                )
-                await app.console.disconnect_by_node(node_name)
 
     # Check console type
     console_type = node["console_type"]
@@ -92,14 +73,35 @@ async def _auto_connect_console(app: "IAppContext", node_name: str) -> str | Non
     host = app.gns3.base_url.split("//")[1].split(":")[0]
     port = node["console"]
 
-    # Connect (handles stale session cleanup internally when node_id mismatches)
     try:
-        await app.console.connect(host, port, node_name, node_id=node_id)
+        await app.console.connect(host, port, node_name, node_id=node.get("node_id", ""))
         return None
     except Exception as e:
+        if allow_stale and app.console.has_session(node_name):
+            return None
+        if node.get("status") == "stopped":
+            return node_stopped_error(node_name=node_name, operation="console access")
         return console_connection_failed_error(
             node_name=node_name, host=host, port=port, details=str(e)
         )
+
+
+def _console_disconnected_error(
+    app: "IAppContext", node_name: str, error: str, context: dict, details: str | None = None
+) -> str:
+    """CONSOLE_DISCONNECTED: the console was lost and reopening it once failed"""
+    reason = app.console.last_error_by_node(node_name)
+    if details is None:
+        details = "Console connection was lost and reopening it failed"
+    if isinstance(reason, str) and reason:
+        details = f"{details}: {reason}"
+    return create_error_response(
+        error=error,
+        error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
+        details=details,
+        suggested_action='Check the node is started (node(action="list")), then retry; the console is reopened automatically',
+        context={"node_name": node_name, **context},
+    )
 
 
 async def send_console_impl(
@@ -173,14 +175,9 @@ async def send_console_impl(
     success = await app.console.send_by_node(node_name, data)
     if success:
         return "Sent successfully"
-    else:
-        return create_error_response(
-            error=f"Failed to send data to console for node '{node_name}'",
-            error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
-            details="Console session may have been disconnected",
-            suggested_action='Check the node is started (node(action="list")), then retry; gns3_connection(action="reconnect") clears stale console sessions',
-            context={"node_name": node_name},
-        )
+    return _console_disconnected_error(
+        app, node_name, f"Failed to send data to console for node '{node_name}'", {}
+    )
 
 
 async def read_console_impl(
@@ -267,8 +264,9 @@ async def read_console_impl(
             valid_values=["diff", "last_page", "num_pages", "all"],
         )
 
-    # Auto-connect if needed
-    error = await _auto_connect_console(app, node_name)
+    # Auto-connect if needed; a closed console that cannot be reopened still shows
+    # what was captured before it closed (the batch result carries a warning)
+    error = await _auto_connect_console(app, node_name, allow_stale=True)
     if error:
         return error
 
@@ -617,15 +615,11 @@ async def send_and_wait_console_impl(
         # Send command
         success = await app.console.send_by_node(node_name, command)
         if not success:
-            return create_error_response(
-                error=f"Failed to send command to console for node '{node_name}'",
-                error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
-                details="Console session may have been disconnected",
-                suggested_action='Check the node is started (node(action="list")), then retry; gns3_connection(action="reconnect") clears stale console sessions',
-                context={
-                    "node_name": node_name,
-                    "command": command[:100],
-                },  # Truncate long commands
+            return _console_disconnected_error(
+                app,
+                node_name,
+                f"Failed to send command to console for node '{node_name}'",
+                {"command": command[:100]},  # Truncate long commands
             )
 
     # Default pagination patterns if not provided
@@ -952,16 +946,11 @@ async def send_keystroke_impl(
             # Send keystroke
             success = await app.console.send_by_node(node_name, keystroke)
             if not success:
-                return create_error_response(
-                    error=f"Failed to send keystroke to console for node '{node_name}'",
-                    error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
-                    details="Console session may have been disconnected",
-                    suggested_action='Check the node is started (node(action="list")); gns3_connection(action="reconnect") clears stale console sessions',
-                    context={
-                        "node_name": node_name,
-                        "key": key,
-                        "keystrokes_sent": keystrokes_sent,
-                    },
+                return _console_disconnected_error(
+                    app,
+                    node_name,
+                    f"Failed to send keystroke to console for node '{node_name}'",
+                    {"key": key, "keystrokes_sent": keystrokes_sent},
                 )
             keystrokes_sent += 1
 
@@ -1003,16 +992,12 @@ async def send_keystroke_impl(
                 if i < repeat - 1:  # Add small delay between keystrokes (except last)
                     await asyncio.sleep(0.1)
             else:
-                return create_error_response(
-                    error=f"Failed to send keystroke to console for node '{node_name}'",
-                    error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
-                    details=f"Console session may have been disconnected after {keystrokes_sent} keystrokes",
-                    suggested_action='Check the node is started (node(action="list")); gns3_connection(action="reconnect") clears stale console sessions',
-                    context={
-                        "node_name": node_name,
-                        "key": key,
-                        "keystrokes_sent": keystrokes_sent,
-                    },
+                return _console_disconnected_error(
+                    app,
+                    node_name,
+                    f"Failed to send keystroke to console for node '{node_name}'",
+                    {"key": key, "keystrokes_sent": keystrokes_sent},
+                    details=f"Console connection was lost after {keystrokes_sent} keystrokes and reopening it failed",
                 )
 
         return json.dumps(
@@ -1029,14 +1014,9 @@ async def send_keystroke_impl(
     success = await app.console.send_by_node(node_name, keystroke)
     if success:
         return "Sent successfully"
-    else:
-        return create_error_response(
-            error=f"Failed to send keystroke to console for node '{node_name}'",
-            error_code=ErrorCode.CONSOLE_DISCONNECTED.value,
-            details="Console session may have been disconnected",
-            suggested_action='Check the node is started (node(action="list")), then retry; gns3_connection(action="reconnect") clears stale console sessions',
-            context={"node_name": node_name, "key": key},
-        )
+    return _console_disconnected_error(
+        app, node_name, f"Failed to send keystroke to console for node '{node_name}'", {"key": key}
+    )
 
 
 async def console_batch_impl(app: "IAppContext", operations: list[dict]) -> str:
@@ -1293,6 +1273,11 @@ async def console_batch_impl(app: "IAppContext", operations: list[dict]) -> str:
                     },
                 }
             )
+
+        # GM-108: say when the console was reopened (or could not be) during this op
+        notice = app.console.pop_notice_by_node(node_name)
+        if isinstance(notice, str) and notice:
+            results[-1].setdefault("warnings", []).append(notice)
 
     execution_time = time.time() - start_time
 

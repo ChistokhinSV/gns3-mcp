@@ -311,6 +311,79 @@ class TestRun:
         for agent in AGENTS.values():
             assert f"(`{agent.key}`)" in guide
         assert "[mcp_servers.gns3]" in guide
+        assert '"gns3-mcp@latest"' in guide  # auto-update is the default
+        assert f'"gns3-mcp@{__version__}"' in configure.manual_guide(env, auto_update=False)
+
+
+class TestAutoUpdate:
+    """GM-110: auto-update (gns3-mcp@latest) by default, or pin this version"""
+
+    @pytest.fixture
+    def setup(self, env, monkeypatch, tmp_path):
+        env_file = tmp_path / "gns3.env"
+        monkeypatch.setenv("GNS3_MCP_ENV_FILE", str(env_file))
+        monkeypatch.setenv("GNS3_PASSWORD", "pw")
+        monkeypatch.delenv("GNS3_MCP_AUTO_UPDATE", raising=False)
+        monkeypatch.setattr(configure.shutil, "which", lambda name: None)
+        return env, env_file
+
+    @staticmethod
+    def _args(env):
+        return json.loads((env.cwd / ".cursor" / "mcp.json").read_text())["mcpServers"]["gns3"][
+            "args"
+        ]
+
+    def test_default_is_latest_and_is_remembered(self, setup, capsys):
+        env, env_file = setup
+        argv = ["cursor", "--project", "--host", "h", "--yes", "--skip-check"]
+
+        assert configure.run(argv, env) == 0
+
+        assert self._args(env) == ["gns3-mcp@latest"]
+        assert "GNS3_MCP_AUTO_UPDATE='true'" in env_file.read_text()
+        assert "Updates: automatic" in capsys.readouterr().out
+
+    def test_no_auto_update_pins_and_prints_the_update_command(self, setup, capsys):
+        env, env_file = setup
+        argv = ["cursor", "--project", "--host", "h", "--yes", "--skip-check", "--no-auto-update"]
+
+        assert configure.run(argv, env) == 0
+
+        assert self._args(env) == [f"gns3-mcp@{__version__}"]
+        assert "GNS3_MCP_AUTO_UPDATE='false'" in env_file.read_text()
+        out = capsys.readouterr().out
+        assert f"pinned to gns3-mcp {__version__}" in out
+        assert "uvx gns3-mcp@latest configure cursor --project --yes" in out
+
+    def test_rerun_keeps_the_saved_choice(self, setup):
+        env, env_file = setup
+        env_file.write_text("GNS3_MCP_AUTO_UPDATE='false'\n")
+        argv = ["cursor", "--project", "--host", "h", "--yes", "--skip-check"]
+
+        assert configure.run(argv, env) == 0
+        assert self._args(env) == [f"gns3-mcp@{__version__}"]
+
+        # a flag overrides the saved choice and is saved in its place
+        assert configure.run([*argv, "--auto-update"], env) == 0
+        assert self._args(env) == ["gns3-mcp@latest"]
+        assert "GNS3_MCP_AUTO_UPDATE='true'" in env_file.read_text()
+
+    @pytest.mark.parametrize("answer, expected", [("", "latest"), ("n", __version__)])
+    def test_interactive_asks_it_last(self, setup, monkeypatch, answer, expected):
+        env, _ = setup
+        monkeypatch.setattr(configure.sys, "stdin", _Tty())
+        asked = []
+
+        def ask(label, default):
+            asked.append(label)
+            return answer if "automatically" in label else ""
+
+        monkeypatch.setattr(configure, "_ask", ask)
+
+        assert configure.run(["cursor", "--project", "--host", "h", "--skip-check"], env) == 0
+
+        assert "automatically" in asked[-1] and "(Y/n)" in asked[-1]
+        assert self._args(env) == [f"gns3-mcp@{expected}"]
 
 
 class TestManual:

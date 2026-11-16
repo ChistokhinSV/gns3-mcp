@@ -26,7 +26,7 @@ import secrets
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Literal
 
-from app import AppContext, app_lifespan
+from app import AppContext, app_lifespan, refresh_current_project
 from context import get_app, validate_current_project
 from export_tools import (
     export_topology_diagram,
@@ -86,6 +86,7 @@ from tools.resource_tools import (
 from tools.tftp_tools import (
     tftp_impl,
 )
+from update_check import update_notice
 
 # Read version from package __init__.py (single source of truth for PyPI package)
 try:
@@ -666,7 +667,7 @@ async def gns3_connection(
     ctx: Context,
     action: Annotated[
         Literal["check", "retry", "reconnect"],
-        "Action: 'check' (status), 'retry' (re-auth only), "
+        "Action: 'check' (status, current project, newer gns3-mcp release), 'retry' (re-auth only), "
         "'reconnect' (re-auth + clear all console/SSH/notification sessions)",
     ],
 ) -> str:
@@ -675,7 +676,9 @@ async def gns3_connection(
     CRUD-style connection management tool.
 
     Actions:
-        - check: Check connection status (connection state, error details, last attempt time)
+        - check: Check connection status (connection state, error details, last attempt time,
+          current project, server version; `update_available` with the update command when
+          PyPI has a newer release - looked up within 300 ms, omitted otherwise)
         - retry: Force immediate re-authentication (bypasses exponential backoff)
         - reconnect: Full reconnect - re-authenticate AND clear all console/SSH/notification sessions.
           Use after GNS3 server restart, project switch, or when sessions are stale.
@@ -705,6 +708,20 @@ async def gns3_connection(
     if action == "check":
         # Check connection status
         console_count = len(app.console.list_sessions())
+        current_project = None
+        if app.current_project_id:
+            current_project = {"id": app.current_project_id}
+            if gns3.is_connected:
+                try:
+                    projects = await gns3.get_projects()
+                    found = next(
+                        (p for p in projects if p.get("project_id") == app.current_project_id),
+                        None,
+                    )
+                    current_project["name"] = found.get("name") if found else None
+                    current_project["status"] = found.get("status") if found else "not found"
+                except Exception as e:
+                    logger.debug(f"Could not look up current project: {e}")
         status = {
             "connected": gns3.is_connected,
             "server": gns3.base_url,
@@ -714,11 +731,17 @@ async def gns3_connection(
                 if gns3.last_auth_attempt
                 else None
             ),
+            "current_project": current_project,
             "active_sessions": {
                 "console": console_count,
                 "notification": app.notification_manager.is_subscribed,
             },
+            "version": VERSION,
         }
+        # GM-110: waits at most 300 ms; slow network or errors = no report
+        notice = await update_notice(VERSION)
+        if notice:
+            status["update_available"] = notice
         return json.dumps(status, indent=2)
 
     elif action == "retry":
@@ -728,12 +751,10 @@ async def gns3_connection(
         success = await gns3.authenticate(retry=False, retry_interval=5, max_retries=1)
 
         if success:
+            current = None
             try:
-                projects = await gns3.get_projects()
-                opened = [p for p in projects if p.get("status") == "opened"]
-                if opened:
-                    app.current_project_id = opened[0]["project_id"]
-                    logger.info(f"Auto-detected opened project: {opened[0]['name']}")
+                # Keeps the selected project; picks one only if none is selected (GM-109)
+                current = await refresh_current_project(gns3, app)
             except Exception as e:
                 logger.warning(f"Failed to detect opened project: {e}")
 
@@ -742,6 +763,7 @@ async def gns3_connection(
                 "message": "Successfully reconnected to GNS3 server",
                 "server": gns3.base_url,
                 "error": None,
+                "current_project": current.get("name") if current else None,
             }
         else:
             result = {
@@ -775,14 +797,9 @@ async def gns3_connection(
         project_name = None
         if success:
             try:
-                projects = await gns3.get_projects()
-                opened = [p for p in projects if p.get("status") == "opened"]
-                if opened:
-                    app.current_project_id = opened[0]["project_id"]
-                    project_name = opened[0]["name"]
-                    logger.info(f"Auto-detected opened project: {project_name}")
-                else:
-                    app.current_project_id = None
+                # Keeps the selected project; picks one only if none is selected (GM-109)
+                current = await refresh_current_project(gns3, app)
+                project_name = current.get("name") if current else None
             except Exception as e:
                 logger.warning(f"Failed to detect opened project: {e}")
 

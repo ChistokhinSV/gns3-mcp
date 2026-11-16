@@ -5,10 +5,11 @@ Automation for GNS3 v3 network labs: projects, nodes, links, device consoles (te
 ## Rules
 
 - **Use these tools only.** The GNS3 API needs JWT auth that the server handles; never call it with curl or httpx.
-- **Current project.** Node, link, console and drawing tools act on the server's current project. GNS3 can have several projects open; after a server restart the first opened one is picked. Call `project(action="open", name=...)` when in doubt.
+- **Current project.** Node, link, console and drawing tools act on the server's current project. GNS3 can have several projects open; after a server restart the first opened one is picked. A project you opened stays current until you open another one, or close or delete it; `gns3_connection(action="check")` shows it. Call `project(action="open", name=...)` when in doubt.
 - **Read before you change.** `project_docs(action="get")` keeps the lab's IP plan and credentials; `query_resource("projects://<id>/topology_report")` shows nodes, links and status in one call.
 - **Nodes boot slowly.** `node(action="set", state_action="start")` waits up to ~60 s for `started`; the device OS needs more time before its console or SSH answers.
 - **Console first access.** The first `console` batch for a node never accessed may contain only `read` operations; other operations are skipped. Read once, then send.
+- **Dropped consoles reopen by themselves.** If a node's console connection closed (node restart, network reset), the next `console` operation reopens it and keeps the read-first state; that result has a `warnings` entry. `CONSOLE_DISCONNECTED` means reopening failed.
 - **Trust what results say.** `unapplied_properties` (create) or `Warning: not applied by GNS3` (set) means GNS3 ignored those keys for that node type. Error `details` carry GNS3's reason (missing image, connected switch, node must be stopped).
 - **Record what you build** with `project_docs(action="update", content=...)`.
 
@@ -112,7 +113,7 @@ Project events: `node.*`, `link.*`, `drawing.*`, `snapshot.restored`, `ping`. Co
 
 ## Connection
 
-The server starts without waiting for GNS3 and authenticates in the background (retry 5 s -> 300 s). `gns3_connection(action="check")` shows the state and last error, `retry` re-authenticates now, `reconnect` also clears console/SSH/notification sessions (use after a GNS3 restart).
+The server starts without waiting for GNS3 and authenticates in the background (retry 5 s -> 300 s). `gns3_connection(action="check")` shows the state and last error, the current project and the server version; when PyPI has a newer gns3-mcp it adds `update_available` with the update command - tell the user. `retry` re-authenticates now, `reconnect` also clears console/SSH/notification sessions (use after a GNS3 restart; a single dropped console needs no reconnect).
 
 ## Troubleshooting
 

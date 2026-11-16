@@ -10,12 +10,14 @@ MCP server providing programmatic access to GNS3 network simulation labs. Includ
 - Console management for device interaction
 - GNS3 v3 API client with JWT authentication
 
-## Current Version: v0.60.0 (MCP Server) / v0.3.0 (SSH Proxy)
+## Current Version: v0.61.0 (MCP Server) / v0.3.0 (SSH Proxy)
 
-**Latest Release:** v0.60.0 - skill-only plugin `skill-plugin/` (gns3-lab-guide) for Anthropic's directory
+**Latest Release:** v0.61.0 - configure auto-update question + update check (GM-110), console reopens dropped connections (GM-108), selected project kept (GM-109)
 **SSH Proxy:** v0.3.0 - Multi-Service Architecture (TFTP server, HTTP reverse proxy, HTTP client)
 
-### Recent Changes (v0.26.0 - v0.60.0)
+### Recent Changes (v0.26.0 - v0.61.0)
+
+**v0.61.0** - Updates (GM-110): `configure` asks last "update automatically?" (default yes) -> agent configs run `uvx gns3-mcp@latest` (needs internet at each start: no start offline, ~2 s vs 0.4 s), else pin `gns3-mcp@<ver>` + print `uvx gns3-mcp@latest configure <agent> --yes`; `--auto-update/--no-auto-update`, choice saved as `GNS3_MCP_AUTO_UPDATE` in `~/.gns3-mcp/.env`. Docs/rules use `uvx gns3-mcp@latest configure` (plain `uvx gns3-mcp` reuses uvx's first cached version). `server/update_check.py`: `gns3_connection check` adds `version` + `update_available` from PyPI JSON, `wait_for(shield(task), 0.3)` (slow answer fills the 6 h cache), reused SSL context (OS store + certifi, built in a thread), `GNS3_MCP_UPDATE_CHECK=false` off. Also (was 0.60.1, unreleased): Console reopens a dropped telnet connection in place (GM-108): `ConsoleManager._is_alive()` (writer closing / reader EOF or exception / reader task done) checked before reuse and before every write, because telnetlib3 4.x drops writes to a closed connection silently and `drain()` raises only after a reset. `_reopen()` keeps session_id, buffer, read_position, read-first state; `send()` reopens at most once and resends only if the write raised. Batch results get `warnings` from `pop_notice_by_node()`. `read` falls back to the captured buffer when reopen fails; sends to a stopped node = `NODE_STOPPED`. `sessions://console/` fixed (used a nonexistent `.connected`). `disconnect()` always drops the session. GM-109: `app.refresh_current_project()` (keep-alive, `gns3_connection` retry/reconnect) picks the first opened project only when none is selected; a selected project is never replaced (closed one stays selected; `validate_current_project` reports it). `check` shows `current_project`
 
 **v0.60.0** - `skill-plugin/` = second plugin `gns3-lab-guide` (GM-107): skill + icon only, version = package (`just bump` + check_version). Directory refused `plugin/`: local MCP server and non-Markdown/JSON/YAML/image files only from Verified orgs. `scripts/sync_skill_plugin.py` copies `skills/` + `assets/icon.png` from `plugin/` (`--check`); test_packaging enforces sync, allowed file types, no server, version. SKILL.md got "If the gns3 tools are missing" (reconnect `/mcp` or `uvx gns3-mcp configure claude`). Also listed in our marketplace (install line; README says install one of the two, else the skill loads twice)
 

@@ -647,3 +647,60 @@ class TestConsoleBatchWaitOnly:
         assert impl.call_args.args[2] is None  # command
         assert impl.call_args.args[3] == "login:"
         assert result["results"][0]["success"] is True
+
+
+# ===== GM-108: console reopened in place =====
+
+
+class TestConsoleReopenNotice:
+    @pytest.mark.asyncio
+    async def test_batch_result_carries_reopen_warning(self, monkeypatch):
+        app = MagicMock()
+        app.console.has_accessed_terminal_by_node.return_value = True
+        notices = {"web-01": "Console connection was lost (x) and has been reopened"}
+        app.console.pop_notice_by_node.side_effect = lambda name: notices.pop(name, None)
+        monkeypatch.setattr(
+            console_tools, "send_console_impl", AsyncMock(return_value="Sent successfully")
+        )
+
+        result = json.loads(
+            await console_tools.console_batch_impl(
+                app,
+                [
+                    {"type": "send", "node_name": "web-01", "data": "\\n"},
+                    {"type": "send", "node_name": "web-01", "data": "\\n"},
+                ],
+            )
+        )
+
+        first, second = result["results"]
+        assert first["success"] is True
+        assert first["warnings"] == ["Console connection was lost (x) and has been reopened"]
+        assert "warnings" not in second
+
+    @pytest.mark.asyncio
+    async def test_read_shows_captured_output_when_reopen_fails(self):
+        app = MagicMock()
+        app.current_project_id = "p1"
+        app.gns3.base_url = "http://gns3:80"
+        app.gns3.get_nodes = AsyncMock(
+            return_value=[
+                {
+                    "node_id": "n1",
+                    "name": "web-01",
+                    "status": "stopped",
+                    "console_type": "telnet",
+                    "console": 5004,
+                }
+            ]
+        )
+        app.console.connect = AsyncMock(side_effect=ConnectionRefusedError("refused"))
+        app.console.has_session.return_value = True
+        app.console.get_diff_by_node.return_value = "Kernel panic\n"
+
+        # a read still shows what was captured before the console closed
+        assert await console_tools.read_console_impl(app, "web-01") == "Kernel panic\n"
+
+        # a send is an error that says the node is stopped
+        error = json.loads(await console_tools.send_console_impl(app, "web-01", "\\n"))
+        assert error["error_code"] == "NODE_STOPPED"

@@ -53,7 +53,7 @@ handles authentication.
 `project_docs(action="get")` for the lab's IP plan and credentials.
 - `node(action="delete")` with a pattern and `project(action="delete")` only preview until \
 called again with `confirm=True`.
-- GNS3 settings are in `~/.gns3-mcp/.env`; `uvx gns3-mcp configure <agent>` changes them.
+- GNS3 settings are in `~/.gns3-mcp/.env`; `uvx gns3-mcp@latest configure <agent>` changes them.
 """
 
 
@@ -113,15 +113,24 @@ class Launch:
     args: tuple[str, ...]
 
 
-def launch_for(project: bool) -> Launch:
-    """uvx with the version that ran configure.
+def package_spec(auto_update: bool) -> str:
+    """What uvx runs: `gns3-mcp@latest` or the version that ran configure (GM-110).
+
+    `@latest` makes uvx look for a newer release at every start. A plain `gns3-mcp` would not:
+    uvx keeps using the version it cached on the first run.
+    """
+    return f"{PACKAGE}@latest" if auto_update else f"{PACKAGE}@{__version__}"
+
+
+def launch_for(project: bool, auto_update: bool = True) -> Launch:
+    """uvx with `gns3-mcp@latest` (auto-update) or pinned to the version that ran configure.
 
     User-wide configs get uvx's full path: desktop apps started from a menu often have a
     shorter PATH than the terminal (no ~/.local/bin). Project files keep plain `uvx` so they
     work on other machines.
     """
     found = None if project else shutil.which("uvx")
-    return Launch(found or "uvx", (f"{PACKAGE}@{__version__}",))
+    return Launch(found or "uvx", (package_spec(auto_update),))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -641,8 +650,10 @@ def plan_rules(path: Path, agent: Agent) -> Step:
     return Step("instructions", str(path), action, apply=lambda: _write_text(path, new))
 
 
-def plan_agent(agent: Agent, env: Env, project: bool, instructions: bool) -> list[Step]:
-    launch = launch_for(project)
+def plan_agent(
+    agent: Agent, env: Env, project: bool, instructions: bool, auto_update: bool = True
+) -> list[Step]:
+    launch = launch_for(project, auto_update)
     steps: list[Step] = []
     if agent.kind == "claude" and not project:
         steps.append(plan_claude_user(env, launch))
@@ -758,6 +769,56 @@ def resolve_settings(
     )
 
 
+AUTO_UPDATE_KEY = "GNS3_MCP_AUTO_UPDATE"
+
+
+def resolve_auto_update(
+    args: argparse.Namespace,
+    saved: Mapping[str, str | None],
+    environ: Mapping[str, str],
+    ask: Callable[[str, str], str] | None,
+) -> bool:
+    """--auto-update / --no-auto-update > GNS3_MCP_AUTO_UPDATE (environment, saved .env) > on.
+
+    Interactive runs ask (the last question) unless a flag decided it; Enter keeps the
+    saved choice, or auto-update on the first run.
+    """
+    if args.auto_update is not None:
+        return bool(args.auto_update)
+    found = environ.get(AUTO_UPDATE_KEY) or saved.get(AUTO_UPDATE_KEY)
+    default = True if not found else _truthy(found)
+    if ask:
+        hint = "Y/n" if default else "y/N"
+        answer = ask(
+            "Update gns3-mcp automatically? The agent runs the newest release; this needs "
+            f"internet at each start - answer n for offline labs ({hint})",
+            "",
+        ).lower()
+        if answer in ("y", "yes"):
+            return True
+        if answer in ("n", "no"):
+            return False
+    return default
+
+
+def update_note(auto_update: bool, agents: list[str], project: bool) -> str:
+    """What configure prints about updates, with the command for a pinned install"""
+    if auto_update:
+        return (
+            f"Updates: automatic - the agent runs `uvx {PACKAGE}@latest`, which checks PyPI at "
+            "each start; restart the agent to get a new release.\n"
+            "  without internet the server does not start: for offline labs run configure "
+            "again with --no-auto-update"
+        )
+    command = " ".join(
+        ["uvx", f"{PACKAGE}@latest", "configure", *agents, *(["--project"] if project else [])]
+    )
+    return (
+        f"Updates: off - pinned to {PACKAGE} {__version__}.\n"
+        f"  update by hand: {command} --yes   (keeps your settings, writes the new version)"
+    )
+
+
 def check_login(settings: Settings, timeout: float = 10.0) -> str | None:
     """None when GNS3 accepts the login, else what went wrong (never the password)"""
     import httpx
@@ -779,14 +840,17 @@ def check_login(settings: Settings, timeout: float = 10.0) -> str | None:
     return f"GNS3 at {settings.url} answered HTTP {response.status_code} (a GNS3 3.x server?)"
 
 
-def save_settings(path: Path, settings: Settings) -> None:
+def save_settings(path: Path, settings: Settings, auto_update: bool | None = None) -> None:
     """Update the GNS3 keys of the user .env; other keys (MCP_API_KEY, ...) stay"""
     from dotenv import set_key
 
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.touch(mode=0o600)
-    for key, value in settings.env_values().items():
+    values = settings.env_values()
+    if auto_update is not None:
+        values[AUTO_UPDATE_KEY] = "true" if auto_update else "false"
+    for key, value in values.items():
         set_key(str(path), key, value)
     if os.name == "posix":
         path.chmod(0o600)
@@ -797,9 +861,9 @@ def save_settings(path: Path, settings: Settings) -> None:
 # ---------------------------------------------------------------------------------------------
 
 
-def manual_guide(env: Env, settings_done: str | None = None) -> str:
+def manual_guide(env: Env, settings_done: str | None = None, auto_update: bool = True) -> str:
     """The manual setup guide; `settings_done` replaces step 1 when configure saved them"""
-    launch = Launch("uvx", (f"{PACKAGE}@{__version__}",))
+    launch = Launch("uvx", (package_spec(auto_update),))
     fence = "```"
 
     def rel(path: Path) -> str:
@@ -831,7 +895,12 @@ def manual_guide(env: Env, settings_done: str | None = None) -> str:
         *settings,
         "## 2. Register the server",
         "",
-        "A stdio MCP server named `gns3` started with `uvx gns3-mcp@<version>`. Most agents take:",
+        f"A stdio MCP server named `gns3` started with `uvx {launch.args[0]}`. "
+        f"`{PACKAGE}@latest` updates itself: uvx looks for a newer release at each start "
+        "(so it needs internet to start). "
+        f"To pin a version (offline labs) write `{PACKAGE}@{__version__}`; update it by changing "
+        "the version. "
+        "Most agents take:",
         "",
         f"{fence}json",
         json.dumps({"mcpServers": {SERVER_NAME: _std_entry(launch)}}, indent=2),
@@ -905,8 +974,12 @@ Examples:
   uvx gns3-mcp configure manual                 # settings + manual guide for other agents
   uvx gns3-mcp configure --instructions         # only the manual guide, no questions
   GNS3_PASSWORD=... uvx gns3-mcp configure claude --host 192.168.1.20 --yes
+  uvx gns3-mcp@latest configure claude --yes    # update a pinned install, keep the settings
 
 Settings go to ~/.gns3-mcp/.env (GNS3_MCP_ENV_FILE to change); agent configs hold no secrets.
+Auto-update (default): agent configs run gns3-mcp@latest, which uvx checks at each start;
+without internet that start fails - use --no-auto-update (pin) for offline labs.
+Run configure as gns3-mcp@latest: a plain `uvx gns3-mcp` reuses the version uvx cached first.
 Guide: {SITE_URL}
 """,
     )
@@ -939,6 +1012,21 @@ Guide: {SITE_URL}
     parser.add_argument(
         "--dry-run", action="store_true", help="show what would change; write nothing"
     )
+    updates = parser.add_mutually_exclusive_group()
+    updates.add_argument(
+        "--auto-update",
+        dest="auto_update",
+        action="store_true",
+        help=f"agent configs run {PACKAGE}@latest: the newest release at each start; needs "
+        "internet to start (default)",
+    )
+    updates.add_argument(
+        "--no-auto-update",
+        dest="auto_update",
+        action="store_false",
+        help=f"pin this version ({PACKAGE}@{__version__}) in agent configs",
+    )
+    parser.set_defaults(auto_update=None)
     return parser
 
 
@@ -1054,10 +1142,13 @@ def _configure(args: argparse.Namespace, env: Env, written: list[str]) -> int:
                 return 1
         else:
             print("  login check: OK")
+
+    # The last question (GM-110)
+    auto_update = resolve_auto_update(args, saved, os.environ, _ask if interactive else None)
     if args.dry_run:
         print(f"  settings: would save {env_file}")
     else:
-        save_settings(env_file, settings)
+        save_settings(env_file, settings, auto_update)
         written.append(str(env_file))
         print(f"  settings: saved {env_file}")
 
@@ -1066,11 +1157,15 @@ def _configure(args: argparse.Namespace, env: Env, written: list[str]) -> int:
         if key == MANUAL:
             done = "would save" if args.dry_run else "saved"
             print()
-            print(manual_guide(env, f"Done: `gns3-mcp configure` {done} them in `{env_file}`."))
+            print(
+                manual_guide(
+                    env, f"Done: `gns3-mcp configure` {done} them in `{env_file}`.", auto_update
+                )
+            )
             continue
         agent = AGENTS[key]
         print(f"{agent.title} ({'project ' + str(env.cwd) if args.project else 'user-wide'})")
-        for step in plan_agent(agent, env, args.project, not args.no_instructions):
+        for step in plan_agent(agent, env, args.project, not args.no_instructions, auto_update):
             if step.apply and not args.dry_run:
                 try:
                     step.apply()
@@ -1082,6 +1177,9 @@ def _configure(args: argparse.Namespace, env: Env, written: list[str]) -> int:
         for note in agent.notes:
             print(f"  note: {note}")
         print(f"  next: {agent.restart}")
+    configured = [key for key in agents if key != MANUAL]
+    if configured:
+        print(update_note(auto_update, configured, args.project))
     if args.dry_run:
         print("Dry run: nothing was written.")
     return 1 if failed else 0

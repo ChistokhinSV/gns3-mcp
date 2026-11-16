@@ -16,6 +16,15 @@ from console_manager import (
     strip_ansi,
 )
 
+
+def _live_reader() -> MagicMock:
+    """Reader mock of an open telnetlib3 connection (no EOF, no error)"""
+    reader = MagicMock()
+    reader.at_eof.return_value = False
+    reader.exception.return_value = None
+    return reader
+
+
 # ===== Helper Functions Tests =====
 
 
@@ -503,12 +512,14 @@ class TestDataProcessing:
         mock_writer = MagicMock()
         mock_writer.write = MagicMock()
         mock_writer.drain = AsyncMock()
+        mock_writer.is_closing.return_value = False
 
         session = ConsoleSession(
             session_id="test-id",
             host="localhost",
             port=5000,
             node_name="Router1",
+            reader=_live_reader(),
             writer=mock_writer,
         )
         manager.sessions["test-id"] = session
@@ -533,12 +544,14 @@ class TestDataProcessing:
         mock_writer = MagicMock()
         mock_writer.write = MagicMock()
         mock_writer.drain = AsyncMock()
+        mock_writer.is_closing.return_value = False
 
         session = ConsoleSession(
             session_id="test-id",
             host="localhost",
             port=5000,
             node_name="Router1",
+            reader=_live_reader(),
             writer=mock_writer,
         )
         original_activity = session.last_activity
@@ -558,12 +571,14 @@ class TestDataProcessing:
         mock_writer = MagicMock()
         mock_writer.write = MagicMock()
         mock_writer.drain = AsyncMock()
+        mock_writer.is_closing.return_value = False
 
         session = ConsoleSession(
             session_id="test-id",
             host="localhost",
             port=5000,
             node_name="Router1",
+            reader=_live_reader(),
             writer=mock_writer,
         )
         manager.sessions["test-id"] = session
@@ -687,3 +702,219 @@ class TestConcurrentAccess:
 
         # The actual race condition protection is tested implicitly
         # in test_connect_race_condition_handled above
+
+
+# ===== GM-108: closed telnet connections are reopened in place =====
+
+
+class FakeTelnetReader:
+    """Stand-in for the telnetlib3 reader: EOF and errors as telnetlib3 reports them"""
+
+    def __init__(self):
+        self._queue: asyncio.Queue[str] = asyncio.Queue()
+        self._eof = False
+        self._exc: Exception | None = None
+
+    def at_eof(self):
+        return self._eof and self._queue.empty()
+
+    def exception(self):
+        return self._exc
+
+    async def read(self, n):
+        data = await self._queue.get()
+        if self._exc:
+            raise self._exc
+        return data
+
+    def feed(self, text):
+        self._queue.put_nowait(text)
+
+    def feed_eof(self):
+        self._eof = True
+        self._queue.put_nowait("")
+
+
+class FakeTelnetWriter:
+    """Stand-in for the telnetlib3 writer: a write after close is dropped without an error"""
+
+    def __init__(self):
+        self.written: list[str] = []
+        self.closed = False
+        self.drain_error: Exception | None = None
+        self.reader: FakeTelnetReader | None = None
+
+    def write(self, text):
+        if not self.closed:
+            self.written.append(text)
+
+    async def drain(self):
+        if self.drain_error:
+            # telnetlib3 raises the reader's exception from drain() after a reset
+            if self.reader:
+                self.reader._exc = self.drain_error
+            raise self.drain_error
+
+    def is_closing(self):
+        return self.closed
+
+    def close(self):
+        self.closed = True
+
+    async def wait_closed(self):
+        pass
+
+
+def _fake_connection():
+    reader, writer = FakeTelnetReader(), FakeTelnetWriter()
+    writer.reader = reader
+    return reader, writer
+
+
+def _remote_close(conn):
+    """The remote end closed the connection: EOF on the reader, transport closing"""
+    reader, writer = conn
+    reader.feed_eof()
+    writer.closed = True
+
+
+class TestReopenClosedConsole:
+    @pytest.mark.asyncio
+    async def test_send_reopens_closed_connection_and_keeps_state(self):
+        manager = ConsoleManager()
+        first, second = _fake_connection(), _fake_connection()
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            side_effect=[first, second],
+        ) as open_conn:
+            session_id = await manager.connect("gns3", 5004, "web-01")
+            first[0].feed("booting\n")
+            await asyncio.sleep(0.05)
+            assert manager.get_diff_by_node("web-01") == "booting\n"  # read first
+
+            _remote_close(first)
+            await asyncio.sleep(0.05)
+            assert manager.is_connected(session_id) is False
+
+            assert await manager.send(session_id, "\n") is True
+
+            assert open_conn.await_count == 2
+            assert first[1].written == []  # would have been dropped silently
+            assert second[1].written == ["\n"]
+            session = manager.sessions[session_id]
+            assert manager.get_session_id("web-01") == session_id
+            assert manager.has_accessed_terminal_by_node("web-01") is True
+            assert session.buffer == "booting\n"
+            assert session.reconnects == 1
+            assert manager.is_connected(session_id) is True
+            notice = manager.pop_notice_by_node("web-01")
+            assert "reopened" in notice and "closed by the remote end" in notice
+            assert manager.pop_notice_by_node("web-01") is None
+
+            # output of the new connection lands in the same buffer
+            second[0].feed("alpine:~# ")
+            await asyncio.sleep(0.05)
+            assert manager.get_diff_by_node("web-01") == "alpine:~# "
+            await manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_send_retries_once_after_reset_during_write(self):
+        manager = ConsoleManager()
+        first, second = _fake_connection(), _fake_connection()
+        first[1].drain_error = ConnectionResetError("Connection reset by peer")
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            side_effect=[first, second],
+        ):
+            session_id = await manager.connect("gns3", 5004, "web-01")
+            assert await manager.send(session_id, "ls\n") is True
+            assert second[1].written == ["ls\n"]
+            assert manager.sessions[session_id].reconnects == 1
+            await manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_reopen_failure_reports_reason_and_keeps_session(self):
+        manager = ConsoleManager()
+        first = _fake_connection()
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            side_effect=[first, ConnectionRefusedError("Connection refused")],
+        ) as open_conn:
+            session_id = await manager.connect("gns3", 5004, "web-01")
+            first[0].feed("last words\n")
+            await asyncio.sleep(0.05)
+            _remote_close(first)
+            await asyncio.sleep(0.05)
+
+            assert await manager.send(session_id, "\n") is False
+
+            assert open_conn.await_count == 2  # one reopen attempt, no loop
+            assert "Connection refused" in manager.last_error_by_node("web-01")
+            assert "reopening it failed" in manager.pop_notice_by_node("web-01")
+            assert manager.has_session("web-01") is True
+            assert manager.get_output_by_node("web-01") == "last words\n"
+            await manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_connect_reuses_live_and_reopens_dead_or_moved_session(self):
+        manager = ConsoleManager()
+        first, second, third = _fake_connection(), _fake_connection(), _fake_connection()
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            side_effect=[first, second, third],
+        ) as open_conn:
+            session_id = await manager.connect("gns3", 5004, "web-01", node_id="n1")
+            assert await manager.connect("gns3", 5004, "web-01", node_id="n1") == session_id
+            assert open_conn.await_count == 1
+
+            _remote_close(first)
+            await asyncio.sleep(0.05)
+            assert await manager.connect("gns3", 5004, "web-01", node_id="n1") == session_id
+            assert open_conn.await_count == 2
+
+            # console port changed: reopen there, same session
+            assert await manager.connect("gns3", 5099, "web-01", node_id="n1") == session_id
+            assert open_conn.await_args.args[:2] == ("gns3", 5099)
+            assert manager.sessions[session_id].port == 5099
+            assert second[1].closed is True
+            await manager.close_all()
+
+    @pytest.mark.asyncio
+    async def test_disconnect_removes_session_even_if_close_fails(self):
+        manager = ConsoleManager()
+        reader, writer = _fake_connection()
+
+        async def broken_wait_closed():
+            raise OSError("socket already gone")
+
+        writer.wait_closed = broken_wait_closed
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=(reader, writer),
+        ):
+            session_id = await manager.connect("gns3", 5004, "web-01")
+            assert await manager.disconnect(session_id) is True
+            assert manager.has_session("web-01") is False
+
+    @pytest.mark.asyncio
+    async def test_list_sessions_reports_connection_state(self):
+        manager = ConsoleManager()
+        conn = _fake_connection()
+        with patch(
+            "console_manager.telnetlib3.open_connection",
+            new_callable=AsyncMock,
+            return_value=conn,
+        ):
+            session_id = await manager.connect("gns3", 5004, "web-01")
+            assert manager.list_sessions()[session_id]["connected"] is True
+            _remote_close(conn)
+            await asyncio.sleep(0.05)
+            info = manager.list_sessions()[session_id]
+            assert info["connected"] is False
+            assert info["last_error"] == "closed by the remote end"
+            await manager.close_all()

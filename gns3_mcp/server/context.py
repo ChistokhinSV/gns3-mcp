@@ -169,11 +169,12 @@ async def validate_current_project(app: "IAppContext") -> str | None:
         project = next((p for p in projects if p["project_id"] == app.current_project_id), None)
 
         if not project:
+            missing_id = app.current_project_id
             app.current_project_id = None
             return json.dumps(
                 ErrorResponse(
                     error="Project no longer exists",
-                    details=f'Project ID {app.current_project_id} not found. Use project(action="list") and project(action="open")',
+                    details=f'Project ID {missing_id} not found. Use project(action="list") and project(action="open")',
                     suggested_action='Call project(action="list") to see current projects, then project(action="open", name=...)',
                 ).model_dump(),
                 indent=2,

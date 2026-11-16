@@ -285,17 +285,17 @@ Errors related to network/service connectivity.
 ---
 
 #### `CONSOLE_DISCONNECTED`
-**When**: Console session lost or failed to send
+**When**: The console connection was lost and reopening it once failed (since 0.60.1 a dropped connection is reopened automatically; a stopped node gives `NODE_STOPPED` instead)
 **Example**:
 ```json
 {
   "error": "Failed to send data to console for node 'Router1'",
   "error_code": "CONSOLE_DISCONNECTED",
-  "details": "Console session may have been disconnected",
-  "suggested_action": "Check console connection with get_console_status(), or use disconnect_console() and retry"
+  "details": "Console connection was lost and reopening it failed: closed by the remote end; reopening 192.168.0.21:5004 failed: Connection refused",
+  "suggested_action": "Check the node is started (node(action=\"list\")), then retry; the console is reopened automatically"
 }
 ```
-**How to fix**: Disconnect and reconnect console session, verify node is still running
+**How to fix**: Check the node is started and its console port is reachable, then retry
 
 ---
 

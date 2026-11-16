@@ -36,16 +36,16 @@ The tools come from the `gns3` MCP server (PyPI package `gns3-mcp`), which runs 
 | `export_topology_diagram` | SVG/PNG of the canvas |
 | `notification` | live GNS3 events: `subscribe`, `read`, `unsubscribe`, `status` |
 | `query_resource` | read any resource URI (see below) |
-| `gns3_connection` | `check`, `retry`, `reconnect` (after a GNS3 restart) |
+| `gns3_connection` | `check` (also current project, version, `update_available` - tell the user), `retry`, `reconnect` (after a GNS3 restart) |
 | `tftp`, `http_client` | lab services on the SSH proxy |
 | `search_tools` | find a tool by category or capability |
 
 ## Ground rules
 
-1. **Know the current project.** Node, link, console and drawing tools act on the server's current project. After a server restart it picks the first *opened* project - with several open, call `project(action="open", name=...)` first.
+1. **Know the current project.** Node, link, console and drawing tools act on the server's current project. After a server restart it picks the first *opened* project - with several open, call `project(action="open", name=...)` first. The project you opened stays current; `gns3_connection(action="check")` shows it.
 2. **Read before you write.** `project_docs(action="get")` holds IP plans and credentials. `query_resource("projects://<id>/topology_report")` gives nodes, links and status in one call.
 3. **Nodes boot slowly.** `node(action="set", state_action="start")` waits up to ~60 s for `started`; consoles and SSH need the OS to finish booting after that.
-4. **Console first-access rule.** The first batch for a node that was never accessed may only contain `read` ops; other ops are skipped. Read once, then send.
+4. **Console first-access rule.** The first batch for a node that was never accessed may only contain `read` ops; other ops are skipped. Read once, then send. A console that dropped (node restart, network reset) is reopened by the next op with the read-first state kept; that result carries `warnings`.
 5. **Trust the reports.** A `node` result with `unapplied_properties` or `Warning: not applied by GNS3` means GNS3 ignored those keys - fix the key name for that node type instead of retrying. Error `details` carry GNS3's reason (missing image, connected switch, node must be stopped).
 6. **Record what you build** (IPs, logins, purpose) with `project_docs(action="update")`.
 
@@ -189,7 +189,8 @@ notification(action="read", mode="diff", filter_action="node.updated")   # or 'l
 
 | Symptom | Do this |
 |---|---|
-| Tools fail after GNS3 restart, stale consoles | `gns3_connection(action="reconnect")` |
+| Tools fail after GNS3 restart | `gns3_connection(action="reconnect")` |
+| `CONSOLE_DISCONNECTED` | the console dropped and reopening failed: node `started`? (`node(action="list")`), then retry |
 | "No project opened" / wrong project | `project(action="list")`, then `open` |
 | Console times out | node `started`? read `last_page` to see the real prompt; boot may still run - wait-only `send_and_wait` |
 | `unapplied_properties` / "not applied by GNS3" | key unknown for that node type; check `nodes://<pid>/<nid>` |
